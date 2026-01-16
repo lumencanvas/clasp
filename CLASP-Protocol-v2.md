@@ -35,7 +35,7 @@ CLASP is like giving all your toys a universal translator. But it's even better 
 
 ---
 
-# Part 0: Self-Critique of SignalFlow v1 and Research Findings
+# Part 0: Self-Critique of CLASP v1 and Research Findings
 
 Before presenting the improved specification, here's honest analysis of what I got wrong in v1 and what the research revealed:
 
@@ -138,7 +138,7 @@ A protocol without a good API is just a spec document that collects dust. MIDI 2
 
 ## 1.2 Non-Goals
 
-- **Not a media transport**: SignalFlow carries control signals, not audio/video streams
+- **Not a media transport**: CLASP carries control signals, not audio/video streams
 - **Not a file format**: Show files and presets are application-level concerns
 - **Not a UI specification**: How controls are displayed is up to applications
 
@@ -146,24 +146,37 @@ A protocol without a good API is just a spec document that collects dust. MIDI 2
 
 # Part 2: Transport Layer
 
-## 2.1 Transport Hierarchy
+## 2.1 Transport Agnosticism
 
-SignalFlow supports multiple transports with a clear priority:
+CLASP is designed to be **transport-agnostic**. The protocol defines a binary frame format that can be carried over any byte-oriented transport. The frame format makes no assumptions about:
+- Packet ordering (handled by frame sequencing)
+- Reliability (handled by QoS levels)
+- Connection semantics (stateless frames)
+- MTU size (length-prefixed, max 65KB)
 
-| Priority | Transport | Required? | Latency | Use Case |
-|----------|-----------|-----------|---------|----------|
-| 1 | **WebSocket (WSS)** | **MUST** | 5-50ms | Primary. Universal. |
-| 2 | **WebRTC DataChannel** | SHOULD | 1-10ms | P2P, low-latency |
-| 3 | **QUIC/HTTP3** | MAY | 2-20ms | Modern native apps |
-| 4 | **UDP** | MAY | 1-5ms | LAN embedded devices |
-| 5 | **BLE** | MAY | 20-100ms | Wireless controllers |
-| 6 | **Serial** | MAY | <1ms | Direct hardware |
+### 2.1.1 Supported Transports
 
-**Rule**: A conforming SignalFlow implementation MUST support WebSocket. A browser-only implementation need not support anything else.
+| Transport | Characteristics | Best For |
+|-----------|-----------------|----------|
+| **WebSocket** | Stream-based, universal browser support | Web apps, cross-platform baseline |
+| **WebRTC DataChannel** | P2P, configurable reliability, NAT traversal | Low-latency P2P, gaming |
+| **QUIC** | Multiplexed streams, connection migration | Mobile apps, unreliable networks |
+| **UDP** | Minimal overhead, broadcast capable | LAN devices, embedded systems |
+| **BLE** | Wireless, low power | Battery-powered controllers |
+| **Serial** | Direct hardware, lowest latency | Hardware integration, DMX |
+
+### 2.1.2 Interoperability Recommendation
+
+For maximum interoperability, implementations SHOULD support WebSocket as a common denominator. This enables:
+- Browser clients to connect
+- Any two CLASP devices to communicate
+- Easy debugging with standard tools
+
+However, **WebSocket is NOT architecturally required**. An embedded device speaking only UDP is a valid CLASP implementation. A BLE controller is a valid CLASP implementation. The protocol doesn't care how bytes arrive—only that they're valid CLASP frames.
 
 ## 2.2 Frame Format (Revised for Simplicity)
 
-SignalFlow uses a minimal binary frame format optimized for parsing efficiency:
+CLASP uses a minimal binary frame format optimized for parsing efficiency:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -202,17 +215,17 @@ For severely constrained devices (< 8KB RAM), a "Lite" profile exists:
 - No encryption
 - UDP only
 
-Lite devices can communicate with full SignalFlow via a bridge.
+Lite devices can communicate with full CLASP via a bridge.
 
 ## 2.3 WebSocket Specifics
 
-- URI: `wss://host:port/signalflow` or `ws://host:port/signalflow` (dev only)
-- Subprotocol: `signalflow.v2`
+- URI: `wss://host:port/clasp` or `ws://host:port/clasp` (dev only)
+- Subprotocol: `clasp.v2`
 - Binary mode only (no text frames)
 - Ping/Pong: Use WebSocket native ping/pong for keepalive
 
 ```javascript
-const ws = new WebSocket('wss://localhost:7330/signalflow', 'signalflow.v2');
+const ws = new WebSocket('wss://localhost:7330/clasp', 'clasp.v2');
 ws.binaryType = 'arraybuffer';
 ```
 
@@ -234,7 +247,7 @@ const dcReliable = peerConnection.createDataChannel('signalflow-reliable', {
 });
 ```
 
-**ICE/STUN/TURN**: Use standard WebRTC infrastructure. SignalFlow doesn't define signaling - use whatever works (WebSocket signaling server, manual SDP exchange, etc.)
+**ICE/STUN/TURN**: Use standard WebRTC infrastructure. CLASP doesn't define signaling - use whatever works (WebSocket signaling server, manual SDP exchange, etc.)
 
 ---
 
@@ -242,11 +255,11 @@ const dcReliable = peerConnection.createDataChannel('signalflow-reliable', {
 
 ## 3.1 Discovery Mechanisms
 
-SignalFlow defines three discovery mechanisms in priority order:
+CLASP defines three discovery mechanisms in priority order:
 
 ### 3.1.1 mDNS (LAN Auto-Discovery)
 
-Service type: `_signalflow._tcp.local`
+Service type: `_clasp._tcp.local`
 
 TXT records:
 ```
@@ -258,7 +271,7 @@ ws=7330             (WebSocket port)
 
 Example using avahi/Bonjour:
 ```
-LumenCanvas._signalflow._tcp.local. 
+LumenCanvas._clasp._tcp.local. 
   TXT "version=2" "name=LumenCanvas Studio" "features=psetg" "ws=7330"
   SRV 0 0 7330 studio.local.
   A 192.168.1.42
@@ -285,7 +298,7 @@ POST /api/v1/register
   "publicKey": "base64...",
   "features": ["param", "stream", "event"],
   "endpoints": {
-    "ws": "wss://studio.example.com:7330/signalflow"
+    "ws": "wss://studio.example.com:7330/clasp"
   }
 }
 
@@ -315,7 +328,7 @@ Browsers cannot:
 ```
 ┌──────────────┐     mDNS Query     ┌──────────────┐
 │   Browser    │ ────────────────X  │              │ (browsers can't mDNS)
-│   Client     │                    │   SignalFlow │
+│   Client     │                    │   CLASP │
 │              │     WebSocket      │    Device    │
 │              │ ◄─────────────────►│              │
 └──────────────┘                    └──────────────┘
@@ -338,7 +351,7 @@ Browsers cannot:
 
 ## 4.1 Signal Type Overview
 
-SignalFlow distinguishes signal types at the protocol level. This isn't metadata - it affects routing, storage, reliability, and UI behavior.
+CLASP distinguishes signal types at the protocol level. This isn't metadata - it affects routing, storage, reliability, and UI behavior.
 
 | Type | Purpose | Default QoS | State? | Coalesce? |
 |------|---------|-------------|--------|-----------|
@@ -741,7 +754,7 @@ For native QUIC: TLS 1.3 is mandatory.
 
 ## 7.3 Capability Tokens
 
-JSON Web Tokens (JWT) with SignalFlow claims:
+JSON Web Tokens (JWT) with CLASP claims:
 
 ```javascript
 {
@@ -777,11 +790,11 @@ For local/studio setups without PKI:
 
 ## 8.1 Bridge Architecture
 
-Bridges are SignalFlow nodes that translate legacy protocols:
+Bridges are CLASP nodes that translate legacy protocols:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    SignalFlow Router                        │
+│                    CLASP Router                        │
 │                                                             │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
 │  │  MIDI    │  │   OSC    │  │   DMX    │  │ Art-Net  │   │
@@ -799,7 +812,7 @@ Bridges are SignalFlow nodes that translate legacy protocols:
 ## 8.2 MIDI Bridge Mapping
 
 ```
-MIDI → SignalFlow
+MIDI → CLASP
 ─────────────────
 Note On/Off     → /midi/{device}/note      Event { note, velocity, channel }
 CC              → /midi/{device}/cc/{num}  Param u8
@@ -815,30 +828,30 @@ Direct path mapping:
 
 ```
 OSC /synth/osc1/cutoff ,f 0.5
-  → SignalFlow SET /osc/synth/osc1/cutoff 0.5
+  → CLASP SET /osc/synth/osc1/cutoff 0.5
 
 OSC Bundle [timetag]
-  → SignalFlow BUNDLE { timestamp: timetag, messages: [...] }
+  → CLASP BUNDLE { timestamp: timetag, messages: [...] }
 ```
 
 Type mapping:
-- OSC int32 → SignalFlow i32
-- OSC float32 → SignalFlow f32
-- OSC string → SignalFlow str
-- OSC blob → SignalFlow bin
-- OSC timetag → SignalFlow timestamp
+- OSC int32 → CLASP i32
+- OSC float32 → CLASP f32
+- OSC string → CLASP str
+- OSC blob → CLASP bin
+- OSC timetag → CLASP timestamp
 
 ## 8.4 DMX/Art-Net/sACN Bridge Mapping
 
 ```
 DMX Universe 1, Channel 47 = 255
-  → SignalFlow SET /dmx/1/47 255
+  → CLASP SET /dmx/1/47 255
 
 Art-Net Universe 0:1:2, Channel 1-512
-  → SignalFlow /artnet/0/1/2/{channel} Param u8
+  → CLASP /artnet/0/1/2/{channel} Param u8
 
 sACN Universe 100, Priority 200
-  → SignalFlow /sacn/100/{channel} Param u8
+  → CLASP /sacn/100/{channel} Param u8
      (priority in metadata)
 ```
 
@@ -925,7 +938,7 @@ The API should make simple things trivial:
 
 ```javascript
 // This should work in 3 lines
-const sf = new SignalFlow('wss://localhost:7330');
+const sf = new CLASP('wss://localhost:7330');
 sf.on('/lumen/scene/*/layer/*/opacity', (value, address) => console.log(address, value));
 sf.set('/lumen/scene/0/layer/0/opacity', 0.5);
 ```
@@ -935,13 +948,13 @@ sf.set('/lumen/scene/0/layer/0/opacity', 0.5);
 ### Connection
 
 ```javascript
-import { SignalFlow } from 'signalflow';
+import { CLASP } from 'signalflow';
 
 // Simple connection
-const sf = new SignalFlow('wss://localhost:7330');
+const sf = new CLASP('wss://localhost:7330');
 
 // With options
-const sf = new SignalFlow({
+const sf = new CLASP({
   url: 'wss://localhost:7330',
   name: 'My Controller',
   token: 'bearer:...',
@@ -1031,10 +1044,10 @@ const signals = await sf.query('/lumen/**');
 ## 10.3 Python API
 
 ```python
-from signalflow import SignalFlow
+from signalflow import CLASP
 
 # Connect
-sf = SignalFlow('wss://localhost:7330')
+sf = CLASP('wss://localhost:7330')
 
 # Subscribe
 @sf.on('/lumen/scene/*/layer/*/opacity')
@@ -1086,7 +1099,7 @@ sf_free(sf);
 
 ## 11.2 Minimal Implementation (~200 LOC)
 
-A minimal SignalFlow client needs:
+A minimal CLASP client needs:
 
 1. WebSocket connection
 2. MessagePack encode/decode
@@ -1256,8 +1269,8 @@ Breakdown:
 | **Gesture** | Phased input (touch/pen/motion) |
 | **Timeline** | Time-indexed automation |
 | **Signal** | Any Param, Event, Stream, Gesture, or Timeline |
-| **Node** | A SignalFlow client or server |
-| **Router** | A SignalFlow server with routing capabilities |
+| **Node** | A CLASP client or server |
+| **Router** | A CLASP server with routing capabilities |
 | **Bridge** | A node that translates legacy protocols |
 | **Session** | A connection with identity and state |
 | **Bundle** | An atomic group of messages |
@@ -1275,7 +1288,7 @@ Breakdown:
 
 # Appendix E: Acknowledgments
 
-SignalFlow builds on the shoulders of giants:
+CLASP builds on the shoulders of giants:
 - OSC (Matt Wright, Adrian Freed)
 - MIDI 2.0 (MMA, AMEI)
 - WebRTC (W3C, IETF)
@@ -1285,4 +1298,4 @@ SignalFlow builds on the shoulders of giants:
 
 ---
 
-*SignalFlow: The universal language for creative tools.*
+*CLASP: The universal language for creative tools.*

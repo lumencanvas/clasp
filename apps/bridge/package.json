@@ -1,7 +1,7 @@
 {
-  "name": "signalflow-bridge",
+  "name": "clasp-bridge",
   "version": "0.1.0",
-  "description": "SignalFlow Bridge - Universal Creative Protocol Bridge",
+  "description": "CLASP Bridge - Universal Creative Protocol Bridge",
   "main": "electron/main.js",
   "scripts": {
     "dev": "concurrently \"vite\" \"electron .\"",
@@ -10,7 +10,7 @@
     "lint": "eslint src electron"
   },
   "dependencies": {
-    "@signalflow/core": "file:../../bindings/js/packages/signalflow-core"
+    "@clasp/core": "file:../../bindings/js/packages/clasp-core"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
@@ -21,8 +21,8 @@
     "vite": "^5.0.0"
   },
   "build": {
-    "appId": "com.lumencanvas.signalflow-bridge",
-    "productName": "SignalFlow Bridge",
+    "appId": "com.lumencanvas.clasp-bridge",
+    "productName": "CLASP Bridge",
     "directories": {
       "output": "release"
     },

@@ -13,7 +13,7 @@ let requestId = 0;
 const getBridgeServicePath = () => {
   // In development, use the cargo build output
   // In production, it would be bundled with the app
-  const devPath = path.join(__dirname, '..', '..', '..', 'target', 'release', 'sf-bridge-service');
+  const devPath = path.join(__dirname, '..', '..', '..', 'target', 'release', 'clasp-service');
   return devPath;
 };
 
@@ -313,7 +313,7 @@ ipcMain.handle('add-server', async (event, address) => {
     id: Date.now().toString(),
     name: `Server @ ${address}`,
     address,
-    protocol: 'signalflow',
+    protocol: 'clasp',
     status: 'connecting',
   };
   state.devices.push(server);

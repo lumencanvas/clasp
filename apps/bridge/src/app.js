@@ -1,5 +1,5 @@
 /**
- * SignalFlow Bridge - Main Application v2
+ * CLASP Bridge - Main Application v2
  * Full-featured protocol mapping and bridging
  */
 
@@ -43,7 +43,7 @@ const protocolNames = {
   midi: 'MIDI',
   artnet: 'Art-Net',
   dmx: 'DMX',
-  signalflow: 'SignalFlow',
+  clasp: 'CLASP',
 };
 
 // Default addresses for protocols
@@ -52,12 +52,12 @@ const defaultAddresses = {
   midi: 'default',
   artnet: '0.0.0.0:6454',
   dmx: '/dev/ttyUSB0',
-  signalflow: 'localhost:7330',
+  clasp: 'localhost:7330',
 };
 
 // Initialize application
 async function init() {
-  console.log('SignalFlow Bridge v2 initializing...');
+  console.log('CLASP Bridge v2 initializing...');
 
   // Load saved data
   loadMappingsFromStorage();
@@ -83,7 +83,7 @@ async function init() {
   // Start rate counter
   setInterval(updateSignalRate, 1000);
 
-  console.log('SignalFlow Bridge initialized');
+  console.log('CLASP Bridge initialized');
 }
 
 // ============================================
@@ -92,8 +92,8 @@ async function init() {
 
 async function loadDevices() {
   try {
-    if (window.signalflow) {
-      state.devices = await window.signalflow.getDevices();
+    if (window.clasp) {
+      state.devices = await window.clasp.getDevices();
     }
   } catch (e) {
     console.error('Failed to load devices:', e);
@@ -102,8 +102,8 @@ async function loadDevices() {
 
 async function loadBridges() {
   try {
-    if (window.signalflow) {
-      state.bridges = await window.signalflow.getBridges();
+    if (window.clasp) {
+      state.bridges = await window.clasp.getBridges();
     }
   } catch (e) {
     console.error('Failed to load bridges:', e);
@@ -112,7 +112,7 @@ async function loadBridges() {
 
 function loadMappingsFromStorage() {
   try {
-    const saved = localStorage.getItem('signalflow-mappings');
+    const saved = localStorage.getItem('clasp-mappings');
     if (saved) {
       state.mappings = JSON.parse(saved);
     }
@@ -123,7 +123,7 @@ function loadMappingsFromStorage() {
 
 function saveMappingsToStorage() {
   try {
-    localStorage.setItem('signalflow-mappings', JSON.stringify(state.mappings));
+    localStorage.setItem('clasp-mappings', JSON.stringify(state.mappings));
   } catch (e) {
     console.error('Failed to save mappings:', e);
   }
@@ -388,26 +388,26 @@ function setupEventListeners() {
   });
 
   // IPC events
-  if (window.signalflow) {
-    window.signalflow.onDeviceFound?.((device) => {
+  if (window.clasp) {
+    window.clasp.onDeviceFound?.((device) => {
       upsertDevice(device);
       renderDevices();
       updateStatus();
     });
 
-    window.signalflow.onDeviceUpdated?.((device) => {
+    window.clasp.onDeviceUpdated?.((device) => {
       upsertDevice(device);
       renderDevices();
       updateStatus();
     });
 
-    window.signalflow.onDeviceLost?.((deviceId) => {
+    window.clasp.onDeviceLost?.((deviceId) => {
       state.devices = state.devices.filter(d => d.id !== deviceId);
       renderDevices();
       updateStatus();
     });
 
-    window.signalflow.onSignal?.((signal) => {
+    window.clasp.onSignal?.((signal) => {
       // Check learn mode first
       if (handleLearnedSignal(signal)) return;
 
@@ -418,12 +418,12 @@ function setupEventListeners() {
       }
     });
 
-    window.signalflow.onScanStarted?.(() => {
+    window.clasp.onScanStarted?.(() => {
       state.scanning = true;
       updateScanButton();
     });
 
-    window.signalflow.onScanComplete?.(() => {
+    window.clasp.onScanComplete?.(() => {
       state.scanning = false;
       updateScanButton();
       loadDevices().then(renderDevices);
@@ -451,8 +451,8 @@ async function handleScan() {
   updateScanButton();
 
   try {
-    if (window.signalflow) {
-      await window.signalflow.scanNetwork();
+    if (window.clasp) {
+      await window.clasp.scanNetwork();
     } else {
       await new Promise(r => setTimeout(r, 1500));
     }
@@ -485,14 +485,14 @@ async function handleAddServer(e) {
   if (!addr) return;
 
   try {
-    if (window.signalflow) {
-      await window.signalflow.addServer(addr);
+    if (window.clasp) {
+      await window.clasp.addServer(addr);
     } else {
       state.devices.push({
         id: Date.now().toString(),
         name: `Server @ ${addr}`,
         address: addr,
-        protocol: 'signalflow',
+        protocol: 'clasp',
         status: 'connected'
       });
     }
@@ -519,8 +519,8 @@ async function handleCreateBridge(e) {
 
   try {
     let bridge;
-    if (window.signalflow) {
-      bridge = await window.signalflow.createBridge(config);
+    if (window.clasp) {
+      bridge = await window.clasp.createBridge(config);
     } else {
       bridge = { id: Date.now().toString(), ...config, active: true };
     }
@@ -611,8 +611,8 @@ function deleteMapping(id) {
 
 async function deleteBridge(id) {
   try {
-    if (window.signalflow) {
-      await window.signalflow.deleteBridge(id);
+    if (window.clasp) {
+      await window.clasp.deleteBridge(id);
     }
     state.bridges = state.bridges.filter(b => b.id !== id);
     renderBridges();

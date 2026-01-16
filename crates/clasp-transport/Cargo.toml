@@ -9,8 +9,10 @@ description = "Transport layer implementations for CLASP"
 default = ["websocket", "udp"]
 websocket = ["tokio-tungstenite", "futures-util"]
 udp = []
-quic = ["quinn"]
+quic = ["quinn", "rustls"]
 serial = ["tokio-serial"]
+ble = ["btleplug", "uuid"]
+webrtc = ["webrtc-rs", "serde_json"]
 
 [dependencies]
 clasp-core = { workspace = true }
@@ -37,9 +39,18 @@ futures-util = { version = "0.3", optional = true }
 
 # QUIC (optional)
 quinn = { workspace = true, optional = true }
+rustls = { version = "0.23", optional = true, default-features = false, features = ["ring", "std"] }
 
 # Serial (optional)
 tokio-serial = { version = "5.4", optional = true }
+
+# BLE (optional)
+btleplug = { version = "0.11", optional = true }
+uuid = { version = "1.0", optional = true }
+
+# WebRTC (optional)
+webrtc-rs = { package = "webrtc", version = "0.10", optional = true }
+serde_json = { version = "1.0", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

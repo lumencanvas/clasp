@@ -37,6 +37,13 @@ artnet_protocol = { workspace = true, optional = true }
 # Utils
 bytes = { workspace = true }
 parking_lot = { workspace = true }
+serde = { workspace = true }
+
+# Expression evaluation
+evalexpr = "11.3"
+
+# JSON path
+jsonpath_lib = "0.3"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

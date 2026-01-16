@@ -1,6 +1,6 @@
-//! SignalFlow Protocol Bridges
+//! CLASP Protocol Bridges
 //!
-//! Provides bidirectional bridges between SignalFlow and legacy protocols:
+//! Provides bidirectional bridges between CLASP and legacy protocols:
 //! - OSC (Open Sound Control)
 //! - MIDI (Musical Instrument Digital Interface)
 //! - Art-Net (Ethernet DMX)
@@ -10,6 +10,7 @@
 pub mod error;
 pub mod traits;
 pub mod mapping;
+pub mod transform;
 
 #[cfg(feature = "osc")]
 pub mod osc;
@@ -26,6 +27,7 @@ pub mod dmx;
 pub use error::{BridgeError, Result};
 pub use traits::{Bridge, BridgeEvent, BridgeConfig};
 pub use mapping::{AddressMapping, ValueTransform};
+pub use transform::{Transform, TransformState, CurveType, Condition, Aggregator, AggregatorState};
 
 #[cfg(feature = "osc")]
 pub use osc::{OscBridge, OscBridgeConfig};

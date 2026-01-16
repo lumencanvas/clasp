@@ -1,10 +1,15 @@
-//! SignalFlow Transport Layer
+//! CLASP Transport Layer
 //!
-//! This crate provides transport implementations for SignalFlow:
-//! - WebSocket (primary, required)
-//! - UDP (for LAN, low-latency)
-//! - QUIC (optional, for modern native apps)
-//! - Serial (optional, for hardware)
+//! This crate provides transport implementations for CLASP.
+//! The protocol is transport-agnostic - any byte transport works.
+//!
+//! Available transports:
+//! - WebSocket (recommended baseline for interoperability)
+//! - UDP (LAN, low-latency, broadcast)
+//! - QUIC (modern native apps, connection migration)
+//! - Serial (direct hardware, lowest latency)
+//! - BLE (Bluetooth Low Energy, wireless controllers)
+//! - WebRTC (P2P, NAT traversal, low-latency)
 
 pub mod error;
 pub mod traits;
@@ -21,6 +26,12 @@ pub mod quic;
 #[cfg(feature = "serial")]
 pub mod serial;
 
+#[cfg(feature = "ble")]
+pub mod ble;
+
+#[cfg(feature = "webrtc")]
+pub mod webrtc;
+
 pub use error::{TransportError, Result};
 pub use traits::{Transport, TransportEvent, TransportSender, TransportReceiver, TransportServer};
 
@@ -29,3 +40,15 @@ pub use websocket::{WebSocketTransport, WebSocketConfig, WebSocketServer};
 
 #[cfg(feature = "udp")]
 pub use udp::{UdpTransport, UdpConfig};
+
+#[cfg(feature = "ble")]
+pub use ble::{BleTransport, BleConfig};
+
+#[cfg(feature = "webrtc")]
+pub use webrtc::{WebRtcTransport, WebRtcConfig};
+
+#[cfg(feature = "quic")]
+pub use quic::{QuicTransport, QuicConfig, QuicConnection};
+
+#[cfg(feature = "serial")]
+pub use serial::{SerialTransport, SerialConfig};

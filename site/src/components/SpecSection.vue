@@ -36,18 +36,18 @@ function scrollToSection(id) {
 }
 
 // Code examples - accurate to actual implementation
-const transportCode = `// WebSocket (MUST support)
+const transportCode = `// WebSocket (recommended baseline for interop)
 const ws = new WebSocket('wss://localhost:7330/clasp', 'clasp.v2');
 ws.binaryType = 'arraybuffer';
 
-// WebRTC DataChannel (SHOULD support for P2P)
+// WebRTC DataChannel (P2P, lower latency)
 const dc = pc.createDataChannel('clasp', {
   ordered: false,
   maxRetransmits: 0
 });
 
-// UDP (MAY support for LAN low-latency)
-// QUIC (MAY support via quinn library)`
+// Also supported: UDP, QUIC, BLE, Serial
+// Protocol is transport-agnostic - any byte transport works`
 
 const frameCode = `Byte 0:     Magic 0x53 ('S')
 Byte 1:     Flags
@@ -231,7 +231,7 @@ const conformanceLevels = [
           <h3 @click="toggleSection(specSections[1])">1. Design Principles</h3>
           <div class="spec-content">
             <ul>
-              <li><b>Browser-native:</b> WebSocket MUST work. (WebRTC SHOULD; everything else optional.)</li>
+              <li><b>Transport-agnostic:</b> Works over WebSocket, WebRTC, QUIC, UDP, BLE, or Serial. WebSocket recommended for interoperability.</li>
               <li><b>Progressive enhancement:</b> Hello → send signal → done, in a few lines.</li>
               <li><b>Semantic signals:</b> Param/Event/Stream/Gesture/Timeline are protocol primitives, not conventions.</li>
               <li><b>Discovery first-class:</b> mDNS auto-discovery; UDP broadcast fallback; manual/QR when needed.</li>
@@ -251,7 +251,7 @@ const conformanceLevels = [
         >
           <h3 @click="toggleSection(specSections[2])">2. Transport Layer</h3>
           <div class="spec-content">
-            <p><b>Priority order:</b> WebSocket (MUST) · WebRTC DataChannel (SHOULD) · QUIC/HTTP3 (MAY) · UDP (MAY) · BLE (MAY) · Serial (MAY).</p>
+            <p><b>Transport-agnostic:</b> WebSocket · WebRTC DataChannel · QUIC · UDP · BLE · Serial. Use what fits your device and use case.</p>
             <p><b>Default ports:</b> WebSocket 7330 · Discovery UDP 7331</p>
             <p><b>Subprotocol:</b> <code>clasp.v2</code></p>
             <CodeBlock :code="transportCode" language="javascript" />

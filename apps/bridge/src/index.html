@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:">
-  <title>SignalFlow Bridge</title>
+  <title>CLASP Bridge</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -16,10 +16,16 @@
     <header class="titlebar">
       <div class="titlebar-drag"></div>
       <div class="titlebar-content">
-        <svg class="titlebar-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8 0L14.9 4v8L8 16L1.1 12V4L8 0z"/>
+        <svg class="titlebar-icon" width="16" height="16" viewBox="0 0 32 32">
+          <path d="M 4 16 L 4 6 Q 4 2, 8 2 L 13 2 L 13 5 L 9 5 Q 7 5, 7 8 L 7 16 L 7 24 Q 7 27, 9 27 L 13 27 L 13 30 L 8 30 Q 4 30, 4 26 Z" fill="currentColor"/>
+          <path d="M 28 16 L 28 6 Q 28 2, 24 2 L 19 2 L 19 5 L 23 5 Q 25 5, 25 8 L 25 16 L 25 24 Q 25 27, 23 27 L 19 27 L 19 30 L 24 30 Q 28 30, 28 26 Z" fill="currentColor"/>
+          <line x1="7" y1="11" x2="25" y2="11" stroke="currentColor" stroke-width="2"/>
+          <line x1="7" y1="16" x2="25" y2="16" stroke="currentColor" stroke-width="2"/>
+          <line x1="7" y1="21" x2="25" y2="21" stroke="currentColor" stroke-width="2"/>
+          <circle cx="16" cy="16" r="3" fill="none" stroke="currentColor" stroke-width="2"/>
+          <circle cx="16" cy="16" r="1" fill="#FF5F1F"/>
         </svg>
-        <h1 class="titlebar-title">SIGNALFLOW BRIDGE</h1>
+        <h1 class="titlebar-title">CLASP BRIDGE</h1>
       </div>
       <div class="titlebar-actions">
         <span class="titlebar-version">v0.2.0</span>
@@ -138,7 +144,7 @@
       </div>
       <div class="status-spacer"></div>
       <div class="status-group">
-        <span class="status-text">SignalFlow Protocol v2</span>
+        <span class="status-text">CLASP Protocol v2</span>
       </div>
     </footer>
 
@@ -177,7 +183,7 @@
               <div class="form-group">
                 <label class="form-label">Protocol</label>
                 <select name="target" class="select" id="bridge-target">
-                  <option value="signalflow">SignalFlow</option>
+                  <option value="clasp">CLASP</option>
                   <option value="osc">OSC</option>
                   <option value="midi">MIDI</option>
                   <option value="artnet">Art-Net</option>
