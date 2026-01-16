@@ -1,0 +1,27 @@
+# Ensure consistent line endings
+* text=auto eol=lf
+
+# Rust files
+*.rs text eol=lf
+*.toml text eol=lf
+
+# Web files
+*.js text eol=lf
+*.ts text eol=lf
+*.vue text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+
+# Documentation
+*.md text eol=lf
+*.txt text eol=lf
+
+# Scripts
+*.sh text eol=lf
+
+# Keep binaries as-is
+*.png binary
+*.jpg binary
+*.ico binary
+*.wasm binary
