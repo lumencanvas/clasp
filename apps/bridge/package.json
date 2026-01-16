@@ -1,0 +1,50 @@
+{
+  "name": "signalflow-bridge",
+  "version": "0.1.0",
+  "description": "SignalFlow Bridge - Universal Creative Protocol Bridge",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"electron .\"",
+    "build": "vite build && electron-builder",
+    "start": "electron .",
+    "lint": "eslint src electron"
+  },
+  "dependencies": {
+    "@signalflow/core": "file:../../bindings/js/packages/signalflow-core"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "concurrently": "^8.2.0",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.0",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0"
+  },
+  "build": {
+    "appId": "com.lumencanvas.signalflow-bridge",
+    "productName": "SignalFlow Bridge",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "linux": {
+      "target": ["AppImage", "deb"]
+    }
+  },
+  "author": "LumenCanvas",
+  "license": "MIT"
+}

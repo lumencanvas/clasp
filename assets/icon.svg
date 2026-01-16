@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <filter id="rough" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="5" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="1"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="128" height="128" rx="24" fill="#F5F0E6"/>
+
+  <!-- Main logo -->
+  <g filter="url(#rough)">
+    <!-- Left bracket -->
+    <path d="M 22 64
+             L 22 32
+             Q 22 19, 35 19
+             L 53 19
+             L 53 28
+             L 40 28
+             Q 32 28, 32 37
+             L 32 64
+             L 32 91
+             Q 32 100, 40 100
+             L 53 100
+             L 53 109
+             L 35 109
+             Q 22 109, 22 96
+             Z"
+          fill="#1a1a1a"/>
+
+    <!-- Right bracket -->
+    <path d="M 106 64
+             L 106 32
+             Q 106 19, 93 19
+             L 75 19
+             L 75 28
+             L 88 28
+             Q 96 28, 96 37
+             L 96 64
+             L 96 91
+             Q 96 100, 88 100
+             L 75 100
+             L 75 109
+             L 93 109
+             Q 106 109, 106 96
+             Z"
+          fill="#1a1a1a"/>
+  </g>
+
+  <!-- Connection lines -->
+  <g stroke="#1a1a1a" stroke-width="3" stroke-linecap="round" filter="url(#rough)">
+    <line x1="32" y1="48" x2="96" y2="49"/>
+    <line x1="32" y1="64" x2="96" y2="63"/>
+    <line x1="32" y1="80" x2="96" y2="81"/>
+  </g>
+
+  <!-- Center node -->
+  <g filter="url(#rough)">
+    <circle cx="64" cy="64" r="10" fill="#F5F0E6" stroke="#1a1a1a" stroke-width="3"/>
+    <circle cx="64" cy="64" r="4" fill="#1a1a1a"/>
+  </g>
+
+  <!-- Accent -->
+  <g opacity="0.85">
+    <circle cx="64" cy="64" r="4" fill="#FF5F1F"/>
+    <rect x="30" y="62" width="8" height="4" fill="#FF5F1F" filter="url(#rough)"/>
+    <rect x="90" y="62" width="8" height="4" fill="#FF5F1F" filter="url(#rough)"/>
+  </g>
+</svg>

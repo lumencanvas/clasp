@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:">
+  <title>SignalFlow Bridge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles/global.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Title Bar -->
+    <header class="titlebar">
+      <div class="titlebar-drag"></div>
+      <div class="titlebar-content">
+        <svg class="titlebar-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0L14.9 4v8L8 16L1.1 12V4L8 0z"/>
+        </svg>
+        <h1 class="titlebar-title">SIGNALFLOW BRIDGE</h1>
+      </div>
+      <div class="titlebar-actions">
+        <span class="titlebar-version">v0.2.0</span>
+      </div>
+    </header>
+
+    <!-- Main Layout -->
+    <div class="app-layout">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <section class="sidebar-section">
+          <div class="section-header">
+            <h2 class="section-title">DEVICES</h2>
+            <span class="section-badge" id="device-badge">0</span>
+          </div>
+          <div id="device-list" class="device-list"></div>
+          <div class="sidebar-buttons">
+            <button class="btn btn-sm btn-secondary" id="scan-btn">
+              <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+              SCAN
+            </button>
+            <button class="btn btn-sm btn-secondary" id="add-server-btn">
+              <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              ADD
+            </button>
+          </div>
+        </section>
+
+        <section class="sidebar-section sidebar-stats">
+          <div class="stat-row">
+            <span class="stat-label">THROUGHPUT</span>
+            <span class="stat-value" id="rate-stat">0/s</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">MAPPINGS</span>
+            <span class="stat-value" id="mapping-count">0</span>
+          </div>
+        </section>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <!-- Tabs -->
+        <nav class="tabs">
+          <button class="tab active" data-tab="bridges">BRIDGES</button>
+          <button class="tab" data-tab="mappings">MAPPINGS</button>
+          <button class="tab" data-tab="monitor">MONITOR</button>
+        </nav>
+
+        <!-- Tab Panels -->
+        <div class="tab-panels">
+          <!-- Bridges Panel -->
+          <div class="tab-panel active" id="panel-bridges">
+            <div class="panel-toolbar">
+              <h2 class="panel-title">Protocol Bridges</h2>
+              <button class="btn btn-primary" id="add-bridge-btn">
+                <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                NEW BRIDGE
+              </button>
+            </div>
+            <div class="panel-content">
+              <div id="bridge-list" class="bridge-grid"></div>
+            </div>
+          </div>
+
+          <!-- Mappings Panel -->
+          <div class="tab-panel" id="panel-mappings">
+            <div class="panel-toolbar">
+              <h2 class="panel-title">Signal Mappings</h2>
+              <div class="toolbar-group">
+                <button class="btn btn-secondary" id="learn-btn">
+                  <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+                  LEARN
+                </button>
+                <button class="btn btn-primary" id="add-mapping-btn">
+                  <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  NEW MAPPING
+                </button>
+              </div>
+            </div>
+            <div class="panel-content">
+              <div id="mapping-list" class="mapping-list"></div>
+            </div>
+          </div>
+
+          <!-- Monitor Panel -->
+          <div class="tab-panel" id="panel-monitor">
+            <div class="panel-toolbar">
+              <h2 class="panel-title">Signal Monitor</h2>
+              <div class="toolbar-group">
+                <input type="text" class="input input-sm" id="monitor-filter" placeholder="Filter addresses...">
+                <button class="btn btn-icon" id="pause-btn" title="Pause">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                </button>
+                <button class="btn btn-icon" id="clear-btn" title="Clear">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="panel-content panel-monitor-content">
+              <div id="signal-monitor" class="signal-monitor"></div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Status Bar -->
+    <footer class="statusbar">
+      <div class="status-group">
+        <span class="status-indicator" id="status-indicator"></span>
+        <span class="status-text"><strong id="device-count">0</strong> devices</span>
+      </div>
+      <div class="status-group">
+        <span class="status-text"><strong id="signal-rate">0</strong>/s</span>
+      </div>
+      <div class="status-spacer"></div>
+      <div class="status-group">
+        <span class="status-text">SignalFlow Protocol v2</span>
+      </div>
+    </footer>
+
+    <!-- Bridge Modal -->
+    <dialog id="bridge-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 class="modal-title">CREATE BRIDGE</h2>
+          <button type="button" class="modal-close" data-close-modal>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <form id="bridge-form">
+          <div class="form-grid">
+            <div class="form-section">
+              <h3 class="form-section-title">SOURCE</h3>
+              <div class="form-group">
+                <label class="form-label">Protocol</label>
+                <select name="source" class="select" id="bridge-source">
+                  <option value="osc">OSC</option>
+                  <option value="midi">MIDI</option>
+                  <option value="artnet">Art-Net</option>
+                  <option value="dmx">DMX</option>
+                </select>
+              </div>
+              <div class="form-group" id="source-addr-group">
+                <label class="form-label">Address</label>
+                <input type="text" name="sourceAddr" class="input" id="bridge-source-addr" placeholder="0.0.0.0:8000">
+              </div>
+            </div>
+            <div class="form-arrow">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </div>
+            <div class="form-section">
+              <h3 class="form-section-title">TARGET</h3>
+              <div class="form-group">
+                <label class="form-label">Protocol</label>
+                <select name="target" class="select" id="bridge-target">
+                  <option value="signalflow">SignalFlow</option>
+                  <option value="osc">OSC</option>
+                  <option value="midi">MIDI</option>
+                  <option value="artnet">Art-Net</option>
+                  <option value="dmx">DMX</option>
+                </select>
+              </div>
+              <div class="form-group" id="target-addr-group">
+                <label class="form-label">Address</label>
+                <input type="text" name="targetAddr" class="input" id="bridge-target-addr" placeholder="localhost:7330">
+              </div>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" data-close-modal>CANCEL</button>
+            <button type="submit" class="btn btn-primary">CREATE</button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+
+    <!-- Mapping Modal -->
+    <dialog id="mapping-modal" class="modal modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 class="modal-title">CREATE MAPPING</h2>
+          <button type="button" class="modal-close" data-close-modal>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <form id="mapping-form">
+          <div class="mapping-editor">
+            <!-- Source -->
+            <div class="mapping-side">
+              <h3 class="mapping-side-title">SOURCE</h3>
+              <div class="form-group">
+                <label class="form-label">Protocol</label>
+                <select name="sourceProtocol" class="select" id="mapping-source-protocol">
+                  <option value="osc">OSC</option>
+                  <option value="midi">MIDI</option>
+                  <option value="artnet">Art-Net</option>
+                  <option value="dmx">DMX</option>
+                </select>
+              </div>
+              <div class="form-group" id="source-osc-fields">
+                <label class="form-label">Address Pattern</label>
+                <div class="input-with-btn">
+                  <input type="text" name="sourceAddress" class="input" placeholder="/my/address/*">
+                  <button type="button" class="btn btn-sm btn-secondary" id="learn-source-btn" title="Learn from incoming">
+                    <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="form-group hidden" id="source-midi-fields">
+                <label class="form-label">MIDI Input</label>
+                <select name="sourceMidiType" class="select">
+                  <option value="note">Note On/Off</option>
+                  <option value="cc">Control Change</option>
+                  <option value="pc">Program Change</option>
+                  <option value="pb">Pitch Bend</option>
+                  <option value="at">Aftertouch</option>
+                </select>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Channel</label>
+                    <input type="number" name="sourceMidiChannel" class="input" min="1" max="16" value="1">
+                  </div>
+                  <div class="form-group" id="source-midi-note-group">
+                    <label class="form-label">Note/CC #</label>
+                    <input type="number" name="sourceMidiNumber" class="input" min="0" max="127" placeholder="Any">
+                  </div>
+                </div>
+              </div>
+              <div class="form-group hidden" id="source-dmx-fields">
+                <label class="form-label">DMX Channel</label>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Universe</label>
+                    <input type="number" name="sourceDmxUniverse" class="input" min="0" value="0">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Channel</label>
+                    <input type="number" name="sourceDmxChannel" class="input" min="1" max="512" value="1">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Transform -->
+            <div class="mapping-transform">
+              <svg class="transform-arrow" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              <div class="transform-options">
+                <label class="form-label">TRANSFORM</label>
+                <select name="transform" class="select" id="mapping-transform">
+                  <option value="direct">Direct (no change)</option>
+                  <option value="scale">Scale Range</option>
+                  <option value="invert">Invert</option>
+                  <option value="toggle">Toggle (on/off)</option>
+                  <option value="threshold">Threshold</option>
+                </select>
+                <div class="transform-params hidden" id="scale-params">
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label class="form-label">In Min</label>
+                      <input type="number" name="scaleInMin" class="input" step="0.01" value="0">
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">In Max</label>
+                      <input type="number" name="scaleInMax" class="input" step="0.01" value="1">
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label class="form-label">Out Min</label>
+                      <input type="number" name="scaleOutMin" class="input" step="0.01" value="0">
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Out Max</label>
+                      <input type="number" name="scaleOutMax" class="input" step="0.01" value="127">
+                    </div>
+                  </div>
+                </div>
+                <div class="transform-params hidden" id="threshold-params">
+                  <div class="form-group">
+                    <label class="form-label">Threshold</label>
+                    <input type="number" name="threshold" class="input" step="0.01" value="0.5">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Target -->
+            <div class="mapping-side">
+              <h3 class="mapping-side-title">TARGET</h3>
+              <div class="form-group">
+                <label class="form-label">Protocol</label>
+                <select name="targetProtocol" class="select" id="mapping-target-protocol">
+                  <option value="midi">MIDI</option>
+                  <option value="osc">OSC</option>
+                  <option value="artnet">Art-Net</option>
+                  <option value="dmx">DMX</option>
+                </select>
+              </div>
+              <div class="form-group hidden" id="target-osc-fields">
+                <label class="form-label">Address</label>
+                <input type="text" name="targetAddress" class="input" placeholder="/target/address">
+              </div>
+              <div class="form-group" id="target-midi-fields">
+                <label class="form-label">MIDI Output</label>
+                <select name="targetMidiType" class="select">
+                  <option value="note">Note On/Off</option>
+                  <option value="cc">Control Change</option>
+                  <option value="pc">Program Change</option>
+                  <option value="pb">Pitch Bend</option>
+                </select>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Channel</label>
+                    <input type="number" name="targetMidiChannel" class="input" min="1" max="16" value="1">
+                  </div>
+                  <div class="form-group" id="target-midi-note-group">
+                    <label class="form-label">Note/CC #</label>
+                    <input type="number" name="targetMidiNumber" class="input" min="0" max="127" value="60">
+                  </div>
+                </div>
+              </div>
+              <div class="form-group hidden" id="target-dmx-fields">
+                <label class="form-label">DMX Channel</label>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Universe</label>
+                    <input type="number" name="targetDmxUniverse" class="input" min="0" value="0">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Channel</label>
+                    <input type="number" name="targetDmxChannel" class="input" min="1" max="512" value="1">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" data-close-modal>CANCEL</button>
+            <button type="submit" class="btn btn-primary">CREATE MAPPING</button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+
+    <!-- Server Modal -->
+    <dialog id="server-modal" class="modal">
+      <div class="modal-content modal-sm">
+        <div class="modal-header">
+          <h2 class="modal-title">ADD SERVER</h2>
+          <button type="button" class="modal-close" data-close-modal>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <form id="server-form">
+          <div class="form-group">
+            <label class="form-label">Server Address</label>
+            <input type="text" name="address" class="input" placeholder="localhost:7330" value="localhost:7330" required>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" data-close-modal>CANCEL</button>
+            <button type="submit" class="btn btn-primary">CONNECT</button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
