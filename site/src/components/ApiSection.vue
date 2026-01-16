@@ -11,103 +11,116 @@ const tabs = [
   { id: 'c', label: 'C (Embedded)' }
 ]
 
-// Accurate SDK examples based on actual codebase implementation
-const jsCode = `// Install
-npm i clasp
+// SDK examples matching actual implementation
+const jsCode = `// Install: npm install @clasp-to/core
 
-// Connect via WebSocket
-import { Clasp } from 'clasp';
-const clasp = new Clasp('wss://localhost:7330');
+import { Clasp } from '@clasp-to/core';
 
-// Subscribe with wildcards
-clasp.subscribe('/lumen/scene/*/layer/*/opacity', (value, addr, meta) => {
-  console.log(addr, value);
+// Connect to a CLASP router
+const clasp = new Clasp('ws://localhost:7330');
+await clasp.connect();
+
+// Subscribe to addresses (wildcards supported)
+const unsubscribe = clasp.on('/lights/*/brightness', (value, address, meta) => {
+  console.log(\`\${address} = \${value}\`);
 });
 
-// Set a Param (stateful, revisioned)
-clasp.set('/lumen/scene/0/layer/0/opacity', 0.5);
+// Set a Param (stateful, syncs to all subscribers)
+clasp.set('/lights/kitchen/brightness', 0.75);
 
-// Emit an Event (ephemeral)
-clasp.emit('/lumen/cue/fire', { cue: 'intro' });
+// Get current value (from cache or server)
+const brightness = await clasp.get('/lights/kitchen/brightness');
 
-// Send high-rate Stream data
-clasp.stream('/controller/fader/1', 0.75);
+// Emit an Event (one-shot, no state)
+clasp.emit('/cue/fire', { cueId: 'intro', fadeTime: 2.0 });
 
-// Schedule a Bundle for synchronized execution
+// Send Stream data (high-rate, fire-and-forget)
+clasp.stream('/sensors/accelerometer/x', 0.342);
+
+// Atomic bundle with optional scheduling
 clasp.bundle([
   { set: ['/light/1/intensity', 1.0] },
   { set: ['/light/2/intensity', 0.5] },
   { emit: ['/cue/fire', { id: 'intro' }] }
 ], { at: clasp.time() + 100000 }); // 100ms in the future
 
-// Get current state snapshot
-const state = await clasp.snapshot('/lumen/**');`
+// Cleanup
+unsubscribe();
+clasp.close();`
 
-const pyCode = `# Install
-pip install clasp
+const pyCode = `# Install: pip install clasp-to
 
-from clasp import Clasp, SignalType
 import asyncio
+from clasp import ClaspBuilder
 
 async def main():
-    clasp = Clasp('wss://localhost:7330')
-    await clasp.connect()
+    # Connect using builder pattern
+    client = await (
+        ClaspBuilder('ws://localhost:7330')
+        .with_name('Python Controller')
+        .connect()
+    )
 
-    # Subscribe with callback
-    @clasp.on('/lumen/scene/*/layer/*/opacity')
-    def on_opacity(value, address, meta=None):
+    # Subscribe with decorator
+    @client.on('/lights/*/brightness')
+    def on_brightness(value, address, meta=None):
         print(f"{address} = {value}")
 
     # Set a Param
-    await clasp.set('/lumen/scene/0/layer/0/opacity', 0.5)
+    await client.set('/lights/kitchen/brightness', 0.75)
 
     # Emit an Event
-    await clasp.emit('/lumen/cue/fire', {'cue': 'intro'})
+    await client.emit('/cue/fire', {'cueId': 'intro'})
 
-    # Scheduled bundle
-    await clasp.bundle([
-        ('set', '/light/1/intensity', 1.0),
-        ('emit', '/cue/fire', {'id': 'intro'})
-    ], at=clasp.time() + 100_000)
+    # Get current value
+    brightness = await client.get('/lights/kitchen/brightness')
+    print(f"Current: {brightness}")
 
-    await clasp.run()
+    # Keep running (processes incoming messages)
+    await client.run()
 
 asyncio.run(main())`
 
-const rsCode = `// Cargo.toml
-// clasp-client = "0.2"
+const rsCode = `// Cargo.toml: clasp-client = "0.1"
 
-use clasp_client::{Client, Message, Value};
-use tokio;
+use clasp_client::{Clasp, ClaspBuilder};
+use clasp_core::Value;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Connect to CLASP router
-    let mut client = Client::connect("wss://localhost:7330").await?;
+async fn main() -> anyhow::Result<()> {
+    // Connect using builder
+    let client = ClaspBuilder::new("ws://localhost:7330")
+        .name("Rust Controller")
+        .connect()
+        .await?;
 
     // Subscribe with pattern matching
-    client.subscribe("/lumen/scene/*/layer/*/opacity", |addr, val, meta| {
-        println!("{} = {:?}", addr, val);
+    let _unsub = client.subscribe("/lights/**", |value, address| {
+        println!("{} = {:?}", address, value);
     }).await?;
 
     // Set a Param
-    client.set("/lumen/scene/0/layer/0/opacity", Value::Float(0.5)).await?;
+    client.set("/lights/kitchen/brightness", Value::Float(0.75)).await?;
 
     // Publish an Event
-    client.publish("/lumen/cue/fire", Value::Map(vec![
-        ("cue".into(), Value::String("intro".into()))
-    ].into_iter().collect())).await?;
+    client.publish("/cue/fire", Value::Map(
+        [("cueId".into(), Value::String("intro".into()))].into()
+    )).await?;
 
     // Scheduled bundle
     let now = client.time();
     client.bundle(vec![
-        Message::Set {
+        clasp_core::Message::Set(clasp_core::SetMessage {
             address: "/light/1/intensity".into(),
             value: Value::Float(1.0),
-        },
+            ..Default::default()
+        }),
     ], Some(now + 100_000)).await?;
 
-    client.run().await
+    // Run until Ctrl-C
+    tokio::signal::ctrl_c().await?;
+    client.close().await?;
+    Ok(())
 }`
 
 const cCode = `// CLASP Embedded SDK (no_std compatible)
