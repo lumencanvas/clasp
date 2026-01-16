@@ -3,7 +3,10 @@ name = "clasp-transport"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Transport layer implementations for CLASP"
+readme = "README.md"
 
 [features]
 default = ["websocket", "udp"]

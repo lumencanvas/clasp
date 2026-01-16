@@ -3,7 +3,10 @@ name = "clasp-discovery"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Device discovery for CLASP (mDNS, UDP broadcast)"
+readme = "README.md"
 
 [features]
 default = ["mdns", "broadcast"]

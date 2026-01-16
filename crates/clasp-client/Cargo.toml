@@ -3,7 +3,10 @@ name = "clasp-client"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "CLASP client library"
+readme = "README.md"
 
 [dependencies]
 clasp-core = { workspace = true }
