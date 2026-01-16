@@ -1,7 +1,7 @@
 # CLASP Project Handoff
 
 **Last Updated:** 2026-01-16
-**Current Version:** v0.1.1 (released)
+**Current Version:** v0.1.2 (released)
 
 ---
 
@@ -106,10 +106,10 @@ These were removed from the website after audit:
 
 ## Release Status
 
-### v0.1.1 Release
+### v0.1.2 Release
 **Status:** Released (2026-01-16)
 
-**View:** https://github.com/lumencanvas/clasp/releases/tag/v0.1.1
+**View:** https://github.com/lumencanvas/clasp/releases/tag/v0.1.2
 
 ### Build Targets
 | Platform | Target | Status |
@@ -263,11 +263,13 @@ git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z
 11. **Added macOS dual-architecture builds** - Both ARM and Intel DMGs will now be built
 12. **Updated download URLs** - Windows portable now `.exe` instead of `.zip`
 13. **v0.1.1 released successfully** - All artifacts now have version-less filenames
+14. **v0.1.2 released successfully** - New risograph-style CLASP logo as app icon
 
 ### Release History
 - v0.1.0 attempt 1: Failed (OpenSSL cross-compile for aarch64-linux)
 - v0.1.0 attempt 2: **Success** (aarch64-linux disabled)
 - v0.1.1: **Success** (correct version-less artifact filenames)
+- v0.1.2: **Success** (new CLASP logo app icon)
 
 ---
 
