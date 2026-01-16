@@ -1,11 +1,23 @@
-# CLASP
+<p align="center">
+  <img src="assets/logo.svg" alt="CLASP Logo" width="120" />
+</p>
 
-**Creative Low-Latency Application Streaming Protocol**
+<h1 align="center">CLASP</h1>
 
-[![CI](https://github.com/lumencanvas/clasp/actions/workflows/ci.yml/badge.svg)](https://github.com/lumencanvas/clasp/actions/workflows/ci.yml)
-[![Release](https://github.com/lumencanvas/clasp/actions/workflows/release.yml/badge.svg)](https://github.com/lumencanvas/clasp/releases)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
-[![Website](https://img.shields.io/badge/website-clasp.to-teal)](https://clasp.to)
+<p align="center">
+  <strong>Creative Low-Latency Application Streaming Protocol</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/lumencanvas/clasp/actions/workflows/ci.yml"><img src="https://github.com/lumencanvas/clasp/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://crates.io/crates/clasp-cli"><img src="https://img.shields.io/crates/v/clasp-cli.svg" alt="crates.io"></a>
+  <a href="https://www.npmjs.com/package/@clasp-to/core"><img src="https://img.shields.io/npm/v/@clasp-to/core.svg" alt="npm"></a>
+  <a href="https://pypi.org/project/clasp-to/"><img src="https://img.shields.io/pypi/v/clasp-to.svg" alt="PyPI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg" alt="License"></a>
+  <a href="https://clasp.to"><img src="https://img.shields.io/badge/website-clasp.to-teal" alt="Website"></a>
+</p>
+
+---
 
 CLASP is a universal protocol bridge and signal router for creative applications. It unifies disparate protocols—OSC, MIDI, DMX, Art-Net, MQTT, WebSocket, HTTP—into a single, routable message system optimized for real-time performance.
 
@@ -41,16 +53,23 @@ CLASP acts as the universal translator, letting everything talk to everything el
 └─────────────┘     └─────────────┘     └─────────────┘
 ```
 
-## Features
+## Install
 
-- **Protocol Bridges**: OSC, MIDI, Art-Net, DMX, MQTT, WebSocket, Socket.IO, HTTP/REST
-- **Signal Routing**: Wildcard patterns, transforms, aggregation
-- **Low Latency**: QUIC-based transport with sub-millisecond overhead
-- **Desktop App**: Visual bridge configuration and signal monitoring
-- **CLI Tool**: Start servers and bridges from the command line
-- **Embeddable**: Rust crates, WASM module, C FFI
+### CLI
 
-## Quick Start
+```bash
+cargo install clasp-cli
+```
+
+### Libraries
+
+| Platform | Package | Install |
+|----------|---------|---------|
+| **Rust** | [clasp-core](https://crates.io/crates/clasp-core) | `cargo add clasp-core` |
+| **Rust** | [clasp-client](https://crates.io/crates/clasp-client) | `cargo add clasp-client` |
+| **Rust** | [clasp-bridge](https://crates.io/crates/clasp-bridge) | `cargo add clasp-bridge` |
+| **JavaScript** | [@clasp-to/core](https://www.npmjs.com/package/@clasp-to/core) | `npm install @clasp-to/core` |
+| **Python** | [clasp-to](https://pypi.org/project/clasp-to/) | `pip install clasp-to` |
 
 ### Desktop App
 
@@ -60,12 +79,11 @@ Download the latest release for your platform:
 - **Windows**: [CLASP Bridge Setup.exe](https://github.com/lumencanvas/clasp/releases/latest)
 - **Linux**: [clasp-bridge.AppImage](https://github.com/lumencanvas/clasp/releases/latest)
 
-### CLI
+## Quick Start
+
+### CLI Usage
 
 ```bash
-# Install from source
-cargo install --path crates/clasp-cli
-
 # Start an OSC server on port 9000
 clasp osc --port 9000
 
@@ -79,46 +97,193 @@ clasp http --bind 0.0.0.0:3000
 clasp --help
 ```
 
-### As a Library
+## CLASP-to-CLASP Examples
 
-**Rust:**
-```toml
-# Cargo.toml
-[dependencies]
-clasp-core = "0.1"
-clasp-bridge = { version = "0.1", features = ["osc", "mqtt"] }
+CLASP clients can communicate directly with each other through a CLASP router. Here are examples in each supported language:
+
+### JavaScript/TypeScript
+
+**Server (Node.js):**
+```typescript
+import { ClaspBuilder } from '@clasp-to/core';
+
+// Connect to router
+const server = await new ClaspBuilder('ws://localhost:7330')
+  .withName('LED Controller')
+  .connect();
+
+// Listen for brightness changes
+server.on('/lights/*/brightness', (value, address) => {
+  console.log(`Setting ${address} to ${value}`);
+  // Control actual LED hardware here
+});
+
+// Publish current state
+await server.set('/lights/strip1/brightness', 0.8);
 ```
 
-**JavaScript/TypeScript:**
-```bash
-npm install @clasp-to/core
+**Client (Browser or Node.js):**
+```typescript
+import { ClaspBuilder } from '@clasp-to/core';
+
+const client = await new ClaspBuilder('ws://localhost:7330')
+  .withName('Control Panel')
+  .connect();
+
+// Control the lights
+await client.set('/lights/strip1/brightness', 0.5);
+
+// Read current value
+const brightness = await client.get('/lights/strip1/brightness');
+console.log(`Current brightness: ${brightness}`);
+
+// Subscribe to changes from other clients
+client.on('/lights/**', (value, address) => {
+  console.log(`${address} changed to ${value}`);
+});
 ```
 
-**Python:**
-```bash
-pip install clasp-to
+### Python
+
+**Publisher:**
+```python
+import asyncio
+from clasp import ClaspBuilder
+
+async def main():
+    client = await (
+        ClaspBuilder('ws://localhost:7330')
+        .with_name('Sensor Node')
+        .connect()
+    )
+
+    # Publish sensor data
+    while True:
+        temperature = read_sensor()  # Your sensor code
+        await client.set('/sensors/room1/temperature', temperature)
+        await asyncio.sleep(1)
+
+asyncio.run(main())
 ```
 
-### Rust Example
+**Subscriber:**
+```python
+import asyncio
+from clasp import ClaspBuilder
 
+async def main():
+    client = await (
+        ClaspBuilder('ws://localhost:7330')
+        .with_name('Dashboard')
+        .connect()
+    )
+
+    # React to sensor updates
+    @client.on('/sensors/*/temperature')
+    def on_temperature(value, address):
+        print(f'{address}: {value}°C')
+
+    # Keep running
+    await client.run()
+
+asyncio.run(main())
+```
+
+### Rust
+
+**Publisher:**
 ```rust
-use clasp_bridge::{OscBridge, OscBridgeConfig, Bridge};
+use clasp_client::{Clasp, ClaspBuilder};
+use clasp_core::Value;
 
 #[tokio::main]
-async fn main() {
-    let config = OscBridgeConfig {
-        bind_addr: "0.0.0.0:9000".to_string(),
-        ..Default::default()
-    };
+async fn main() -> anyhow::Result<()> {
+    let client = ClaspBuilder::new("ws://localhost:7330")
+        .name("Rust Publisher")
+        .connect()
+        .await?;
 
-    let mut bridge = OscBridge::new(config);
-    let mut events = bridge.start().await.unwrap();
+    // Set values that other clients can subscribe to
+    client.set("/app/status", Value::String("running".into())).await?;
+    client.set("/app/counter", Value::Int(42)).await?;
 
-    while let Some(event) = events.recv().await {
-        println!("Received: {:?}", event);
+    // Stream high-frequency data
+    for i in 0..100 {
+        client.set("/app/position", Value::Float(i as f64 * 0.1)).await?;
+        tokio::time::sleep(std::time::Duration::from_millis(16)).await;
     }
+
+    client.close().await?;
+    Ok(())
 }
 ```
+
+**Subscriber:**
+```rust
+use clasp_client::{Clasp, ClaspBuilder};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let client = ClaspBuilder::new("ws://localhost:7330")
+        .name("Rust Subscriber")
+        .connect()
+        .await?;
+
+    // Subscribe to all app signals
+    let _unsub = client.subscribe("/app/**", |value, address| {
+        println!("{} = {:?}", address, value);
+    }).await?;
+
+    // Keep running
+    tokio::signal::ctrl_c().await?;
+    client.close().await?;
+    Ok(())
+}
+```
+
+### Cross-Language Example
+
+CLASP clients in different languages can seamlessly communicate:
+
+```
+┌────────────────────┐     ┌─────────────────┐     ┌────────────────────┐
+│   Python Sensor    │     │  CLASP Router   │     │  JS Web Dashboard  │
+│                    │────▶│  (port 7330)    │◀────│                    │
+│ set('/temp', 23.5) │     │                 │     │ on('/temp', ...)   │
+└────────────────────┘     └─────────────────┘     └────────────────────┘
+                                   ▲
+                                   │
+                           ┌───────┴───────┐
+                           │ Rust Actuator │
+                           │               │
+                           │ on('/temp',   │
+                           │   adjust_hvac)│
+                           └───────────────┘
+```
+
+## Features
+
+- **Protocol Bridges**: OSC, MIDI, Art-Net, DMX, MQTT, WebSocket, Socket.IO, HTTP/REST
+- **Signal Routing**: Wildcard patterns (`*`, `**`), transforms, aggregation
+- **Low Latency**: WebSocket transport with sub-millisecond overhead
+- **State Sync**: Automatic state synchronization between clients
+- **Desktop App**: Visual bridge configuration and signal monitoring
+- **CLI Tool**: Start servers and bridges from the command line
+- **Embeddable**: Rust crates, WASM module, Python, JavaScript
+
+## Supported Protocols
+
+| Protocol | Direction | Features |
+|----------|-----------|----------|
+| **CLASP** | Bidirectional | Native protocol, WebSocket transport, sub-ms latency |
+| **OSC** | Bidirectional | UDP, bundles, all argument types |
+| **MIDI** | Bidirectional | Notes, CC, program change, sysex |
+| **Art-Net** | Bidirectional | DMX over Ethernet, multiple universes |
+| **DMX** | Output | USB interfaces (FTDI, ENTTEC) |
+| **MQTT** | Bidirectional | v3.1.1/v5, TLS, wildcards |
+| **WebSocket** | Bidirectional | Client/server, JSON/binary |
+| **Socket.IO** | Bidirectional | v4, rooms, namespaces |
+| **HTTP** | Bidirectional | REST API, CORS, client/server |
 
 ## Documentation
 
@@ -129,37 +294,17 @@ Visit **[clasp.to](https://clasp.to)** for full documentation.
 - [API Reference](https://clasp.to/docs/api)
 - [Examples](https://clasp.to/docs/examples)
 
-## Project Structure
+## Crates
 
-```
-clasp/
-├── crates/
-│   ├── clasp-core/       # Core types, codec, state management
-│   ├── clasp-transport/  # QUIC, TCP, WebSocket transports
-│   ├── clasp-bridge/     # Protocol bridges (OSC, MIDI, MQTT, etc.)
-│   ├── clasp-router/     # Message routing and pattern matching
-│   ├── clasp-cli/        # Command-line interface
-│   └── clasp-wasm/       # WebAssembly bindings
-├── apps/
-│   └── bridge/           # Electron desktop application
-├── site/                 # Documentation website (Vue)
-├── docs/                 # Markdown documentation
-└── test-suite/           # Integration tests
-```
-
-## Supported Protocols
-
-| Protocol | Direction | Features |
-|----------|-----------|----------|
-| **CLASP** | Bidirectional | Native protocol, QUIC transport, sub-ms latency |
-| **OSC** | Bidirectional | UDP, bundles, all argument types |
-| **MIDI** | Bidirectional | Notes, CC, program change, sysex |
-| **Art-Net** | Bidirectional | DMX over Ethernet, multiple universes |
-| **DMX** | Output | USB interfaces (FTDI, ENTTEC) |
-| **MQTT** | Bidirectional | v3.1.1/v5, TLS, wildcards |
-| **WebSocket** | Bidirectional | Client/server, JSON/binary |
-| **Socket.IO** | Bidirectional | v4, rooms, namespaces |
-| **HTTP** | Bidirectional | REST API, CORS, client/server |
+| Crate | Description |
+|-------|-------------|
+| [clasp-core](https://crates.io/crates/clasp-core) | Core types, codec, state management |
+| [clasp-transport](https://crates.io/crates/clasp-transport) | WebSocket, QUIC, TCP transports |
+| [clasp-client](https://crates.io/crates/clasp-client) | High-level async client |
+| [clasp-router](https://crates.io/crates/clasp-router) | Message routing and pattern matching |
+| [clasp-bridge](https://crates.io/crates/clasp-bridge) | Protocol bridges (OSC, MIDI, MQTT, etc.) |
+| [clasp-discovery](https://crates.io/crates/clasp-discovery) | mDNS/DNS-SD device discovery |
+| [clasp-cli](https://crates.io/crates/clasp-cli) | Command-line interface |
 
 ## Building from Source
 
@@ -216,4 +361,6 @@ CLASP builds on the shoulders of giants:
 
 ---
 
-Maintained by [LumenCanvas](https://lumencanvas.studio) | 2026
+<p align="center">
+  Maintained by <a href="https://lumencanvas.studio">LumenCanvas</a> | 2026
+</p>
