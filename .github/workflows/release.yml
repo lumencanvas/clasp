@@ -115,15 +115,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: apps/bridge/package-lock.json
 
       - name: Build Rust service
         run: cargo build --release -p clasp-service
 
       - name: Install dependencies
         working-directory: apps/bridge
-        run: npm ci
+        run: npm install
 
       - name: Build Electron app
         working-directory: apps/bridge
