@@ -133,6 +133,22 @@ path = "src/bin/session_tests.rs"
 name = "e2e-protocol-tests"
 path = "src/bin/e2e_protocol_tests.rs"
 
+[[bin]]
+name = "hardware-tests"
+path = "src/bin/hardware_tests.rs"
+
+[[bin]]
+name = "network-tests"
+path = "src/bin/network_tests.rs"
+
+[[bin]]
+name = "broker-tests"
+path = "src/bin/broker_tests.rs"
+
+[[bin]]
+name = "soak-tests"
+path = "src/bin/soak_tests.rs"
+
 [[bench]]
 name = "throughput"
 harness = false

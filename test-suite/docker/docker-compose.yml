@@ -1,0 +1,70 @@
+# Docker Compose for CLASP Integration Testing
+#
+# Provides real broker infrastructure for integration tests:
+# - MQTT broker (Mosquitto)
+# - Redis (for future caching tests)
+# - Toxiproxy (network simulation)
+#
+# Usage:
+#   docker-compose up -d
+#   cargo run -p clasp-test-suite --bin broker-tests
+#   docker-compose down
+
+version: '3.8'
+
+services:
+  # MQTT Broker for MQTT bridge testing
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: clasp-test-mqtt
+    ports:
+      - "1883:1883"
+      - "9883:9001"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-i", "healthcheck", "-W", "3"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Redis for state/cache testing (future)
+  redis:
+    image: redis:7-alpine
+    container_name: clasp-test-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Toxiproxy for network simulation
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.7.0
+    container_name: clasp-test-toxiproxy
+    ports:
+      - "8474:8474"    # API
+      - "19000:19000"  # Proxy for MQTT
+      - "19001:19001"  # Proxy for Redis
+      - "19002:19002"  # Proxy for WebSocket
+    healthcheck:
+      test: ["CMD", "/toxiproxy-cli", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # OSC echo server for testing
+  osc-echo:
+    build:
+      context: .
+      dockerfile: Dockerfile.osc-echo
+    container_name: clasp-test-osc
+    ports:
+      - "8000:8000/udp"
+      - "9000:9000/udp"
+
+networks:
+  default:
+    name: clasp-test-network

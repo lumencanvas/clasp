@@ -1,0 +1,10 @@
+# Simple OSC Echo Server for testing
+FROM python:3.11-slim
+
+RUN pip install python-osc
+
+COPY osc_echo.py /app/osc_echo.py
+
+EXPOSE 8000/udp 9000/udp
+
+CMD ["python", "/app/osc_echo.py"]
