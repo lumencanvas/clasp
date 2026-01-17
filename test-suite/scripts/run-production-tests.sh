@@ -158,6 +158,7 @@ run_test "Embedded Tests" "cargo run -p clasp-test-suite --bin embedded-tests"
 run_test "UDP Tests" "cargo run -p clasp-test-suite --bin udp-tests"
 run_test "Session Tests" "cargo run -p clasp-test-suite --bin session-tests"
 run_test "E2E Protocol Tests" "cargo run -p clasp-test-suite --bin e2e-protocol-tests"
+run_test "Protocol Tests" "cargo run -p clasp-test-suite --bin protocol-tests"
 
 # ============================================================================
 # Phase 2: Network Simulation Tests

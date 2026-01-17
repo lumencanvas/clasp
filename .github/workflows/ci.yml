@@ -54,8 +54,17 @@ jobs:
       - name: Build
         run: cargo build --workspace
 
-      - name: Run tests
+      - name: Run unit tests
         run: cargo test --workspace --lib
+
+      - name: Run integration tests
+        run: |
+          cargo run -p clasp-test-suite --bin run-all-tests
+          cargo run -p clasp-test-suite --bin client-tests
+          cargo run -p clasp-test-suite --bin discovery-tests
+          cargo run -p clasp-test-suite --bin bridge-tests
+          cargo run -p clasp-test-suite --bin embedded-tests
+          cargo run -p clasp-test-suite --bin protocol-tests
 
   build-electron:
     name: Build Electron (${{ matrix.os }})

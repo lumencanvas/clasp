@@ -149,6 +149,10 @@ path = "src/bin/broker_tests.rs"
 name = "soak-tests"
 path = "src/bin/soak_tests.rs"
 
+[[bin]]
+name = "protocol-tests"
+path = "src/bin/protocol_tests.rs"
+
 [[bench]]
 name = "throughput"
 harness = false
