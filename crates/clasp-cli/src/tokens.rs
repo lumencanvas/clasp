@@ -143,8 +143,8 @@ impl TokenStore {
                 .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
         }
 
-        let content = serde_json::to_string_pretty(self)
-            .context("Failed to serialize token store")?;
+        let content =
+            serde_json::to_string_pretty(self).context("Failed to serialize token store")?;
 
         std::fs::write(path, content)
             .with_context(|| format!("Failed to write token file: {}", path.display()))
@@ -280,20 +280,14 @@ mod tests {
 
     #[test]
     fn test_token_record_creation() {
-        let record = TokenRecord::new(
-            "cpsk_test".to_string(),
-            vec!["read:/**".to_string()],
-        );
+        let record = TokenRecord::new("cpsk_test".to_string(), vec!["read:/**".to_string()]);
         assert_eq!(record.token, "cpsk_test");
         assert!(!record.is_expired());
     }
 
     #[test]
     fn test_token_record_expiry() {
-        let mut record = TokenRecord::new(
-            "cpsk_test".to_string(),
-            vec!["read:/**".to_string()],
-        );
+        let mut record = TokenRecord::new("cpsk_test".to_string(), vec!["read:/**".to_string()]);
 
         // Set expiration to the past
         record.expires_at = Some(0);
@@ -309,10 +303,7 @@ mod tests {
         let mut store = TokenStore::new();
         assert!(store.is_empty());
 
-        let record = TokenRecord::new(
-            "cpsk_test".to_string(),
-            vec!["read:/**".to_string()],
-        );
+        let record = TokenRecord::new("cpsk_test".to_string(), vec!["read:/**".to_string()]);
         store.add(record);
 
         assert_eq!(store.len(), 1);
@@ -324,8 +315,12 @@ mod tests {
 
     #[test]
     fn test_create_token() {
-        let record = create_token("read:/**, write:/lights/**", Some("7d"), Some("test-device"))
-            .expect("Failed to create token");
+        let record = create_token(
+            "read:/**, write:/lights/**",
+            Some("7d"),
+            Some("test-device"),
+        )
+        .expect("Failed to create token");
 
         assert!(record.token.starts_with("cpsk_"));
         assert_eq!(record.scopes.len(), 2);

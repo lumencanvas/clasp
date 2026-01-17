@@ -203,7 +203,9 @@ impl TokenInfo {
 
     /// Check if the token allows the given action on the given address
     pub fn has_scope(&self, action: Action, address: &str) -> bool {
-        self.scopes.iter().any(|scope| scope.allows(action, address))
+        self.scopes
+            .iter()
+            .any(|scope| scope.allows(action, address))
     }
 
     /// Set the subject
@@ -454,9 +456,7 @@ impl FromStr for SecurityMode {
 
 /// Parse multiple scopes from a comma-separated string
 pub fn parse_scopes(s: &str) -> Result<Vec<Scope>> {
-    s.split(',')
-        .map(|part| Scope::parse(part.trim()))
-        .collect()
+    s.split(',').map(|part| Scope::parse(part.trim())).collect()
 }
 
 /// Parse a duration string like "7d", "24h", "30m", "60s"
@@ -662,8 +662,14 @@ mod tests {
 
     #[test]
     fn test_parse_duration() {
-        assert_eq!(parse_duration("7d").unwrap(), Duration::from_secs(7 * 86400));
-        assert_eq!(parse_duration("24h").unwrap(), Duration::from_secs(24 * 3600));
+        assert_eq!(
+            parse_duration("7d").unwrap(),
+            Duration::from_secs(7 * 86400)
+        );
+        assert_eq!(
+            parse_duration("24h").unwrap(),
+            Duration::from_secs(24 * 3600)
+        );
         assert_eq!(parse_duration("30m").unwrap(), Duration::from_secs(30 * 60));
         assert_eq!(parse_duration("60s").unwrap(), Duration::from_secs(60));
         assert_eq!(parse_duration("120").unwrap(), Duration::from_secs(120));
@@ -678,6 +684,9 @@ mod tests {
             SecurityMode::from_str("authenticated").unwrap(),
             SecurityMode::Authenticated
         );
-        assert_eq!(SecurityMode::from_str("auth").unwrap(), SecurityMode::Authenticated);
+        assert_eq!(
+            SecurityMode::from_str("auth").unwrap(),
+            SecurityMode::Authenticated
+        );
     }
 }

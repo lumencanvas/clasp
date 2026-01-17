@@ -39,16 +39,6 @@
       "electron/**/*",
       "package.json"
     ],
-    "extraResources": [
-      {
-        "from": "../../target/release/clasp-service${ext}",
-        "to": "bin/clasp-service${ext}"
-      },
-      {
-        "from": "../../target/release/clasp-router${ext}",
-        "to": "bin/clasp-router${ext}"
-      }
-    ],
     "extraMetadata": {
       "main": "electron/main.js"
     },
@@ -75,14 +65,34 @@
           ]
         }
       ],
-      "artifactName": "CLASP.Bridge-${arch}.${ext}"
+      "artifactName": "CLASP.Bridge-${arch}.${ext}",
+      "extraResources": [
+        {
+          "from": "../../target/release/clasp-service",
+          "to": "bin/clasp-service"
+        },
+        {
+          "from": "../../target/release/clasp-router",
+          "to": "bin/clasp-router"
+        }
+      ]
     },
     "win": {
       "target": [
         "nsis",
         "portable"
       ],
-      "artifactName": "CLASP.Bridge-Setup.${ext}"
+      "artifactName": "CLASP.Bridge-Setup.${ext}",
+      "extraResources": [
+        {
+          "from": "../../target/release/clasp-service.exe",
+          "to": "bin/clasp-service.exe"
+        },
+        {
+          "from": "../../target/release/clasp-router.exe",
+          "to": "bin/clasp-router.exe"
+        }
+      ]
     },
     "nsis": {
       "artifactName": "CLASP.Bridge-Setup.${ext}"
@@ -95,7 +105,17 @@
         "AppImage",
         "deb"
       ],
-      "artifactName": "CLASP.Bridge.${ext}"
+      "artifactName": "CLASP.Bridge.${ext}",
+      "extraResources": [
+        {
+          "from": "../../target/release/clasp-service",
+          "to": "bin/clasp-service"
+        },
+        {
+          "from": "../../target/release/clasp-router",
+          "to": "bin/clasp-router"
+        }
+      ]
     },
     "deb": {
       "artifactName": "clasp-bridge.${ext}"

@@ -9,8 +9,8 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use std::path::PathBuf;
-use tokio::sync::mpsc;
 use tokens::{create_token, default_token_file, format_timestamp, TokenStore};
+use tokio::sync::mpsc;
 use tracing::{info, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
@@ -308,17 +308,15 @@ async fn main() -> Result<()> {
         }
 
         Commands::Token { file, action } => {
-            let token_path = file
-                .map(PathBuf::from)
-                .unwrap_or_else(default_token_file);
+            let token_path = file.map(PathBuf::from).unwrap_or_else(default_token_file);
 
             match action {
-                TokenAction::Create { scopes, expires, subject } => {
-                    let record = create_token(
-                        &scopes,
-                        expires.as_deref(),
-                        subject.as_deref(),
-                    )?;
+                TokenAction::Create {
+                    scopes,
+                    expires,
+                    subject,
+                } => {
+                    let record = create_token(&scopes, expires.as_deref(), subject.as_deref())?;
 
                     // Load existing store, add token, save
                     let mut store = TokenStore::load(&token_path)?;
@@ -327,7 +325,11 @@ async fn main() -> Result<()> {
                     store.save(&token_path)?;
 
                     println!("{}", token);
-                    eprintln!("{} Token saved to: {}", "OK".green().bold(), token_path.display());
+                    eprintln!(
+                        "{} Token saved to: {}",
+                        "OK".green().bold(),
+                        token_path.display()
+                    );
                 }
 
                 TokenAction::List { show_expired } => {
@@ -338,7 +340,11 @@ async fn main() -> Result<()> {
                         return Ok(());
                     }
 
-                    println!("{} Tokens in {}:\n", "CLASP".cyan().bold(), token_path.display());
+                    println!(
+                        "{} Tokens in {}:\n",
+                        "CLASP".cyan().bold(),
+                        token_path.display()
+                    );
 
                     for record in store.list() {
                         let is_expired = record.is_expired();
@@ -354,7 +360,11 @@ async fn main() -> Result<()> {
 
                         // Show truncated token for security
                         let display_token = if record.token.len() > 20 {
-                            format!("{}...{}", &record.token[..12], &record.token[record.token.len()-4..])
+                            format!(
+                                "{}...{}",
+                                &record.token[..12],
+                                &record.token[record.token.len() - 4..]
+                            )
                         } else {
                             record.token.clone()
                         };
@@ -404,11 +414,14 @@ async fn main() -> Result<()> {
                     } else {
                         println!("{}: never", "Expires".cyan());
                     }
-                    println!("{}: {} seconds ago", "Created".cyan(),
+                    println!(
+                        "{}: {} seconds ago",
+                        "Created".cyan(),
                         std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap()
-                            .as_secs() - record.created_at
+                            .as_secs()
+                            - record.created_at
                     );
                 }
 

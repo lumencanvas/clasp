@@ -58,7 +58,12 @@ impl Session {
     }
 
     /// Set authentication info from a validated token
-    pub fn set_authenticated(&mut self, token: String, subject: Option<String>, scopes: Vec<Scope>) {
+    pub fn set_authenticated(
+        &mut self,
+        token: String,
+        subject: Option<String>,
+        scopes: Vec<Scope>,
+    ) {
         self.authenticated = true;
         self.token = Some(token);
         self.subject = subject;
@@ -72,7 +77,9 @@ impl Session {
         if self.scopes.is_empty() && !self.authenticated {
             return true;
         }
-        self.scopes.iter().any(|scope| scope.allows(action, address))
+        self.scopes
+            .iter()
+            .any(|scope| scope.allows(action, address))
     }
 
     /// Get the scopes for this session

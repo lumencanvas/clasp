@@ -405,7 +405,9 @@ mod state_tests {
 mod p2p_tests {
     use super::*;
     use clasp_core::{signal_address, PublishMessage, SignalType, P2P_SIGNAL_PREFIX};
-    use clasp_transport::{Transport, TransportEvent, TransportReceiver, TransportSender, WebSocketTransport};
+    use clasp_transport::{
+        Transport, TransportEvent, TransportReceiver, TransportSender, WebSocketTransport,
+    };
     use tokio::net::TcpListener;
 
     async fn find_available_port() -> u16 {
@@ -578,10 +580,7 @@ mod p2p_tests {
             timestamp: None,
         });
 
-        sender
-            .send(codec::encode(&publish).unwrap())
-            .await
-            .unwrap();
+        sender.send(codec::encode(&publish).unwrap()).await.unwrap();
 
         // Should receive error
         let error = timeout(Duration::from_secs(2), async {
@@ -596,7 +595,10 @@ mod p2p_tests {
         })
         .await;
 
-        assert!(error.is_ok(), "Should receive error for nonexistent session");
+        assert!(
+            error.is_ok(),
+            "Should receive error for nonexistent session"
+        );
         let err = error.unwrap().unwrap();
         assert_eq!(err.code, 404);
 

@@ -169,7 +169,9 @@ async fn main() -> Result<()> {
         let register_token = |token: &str, scope_strs: Vec<&str>| -> Result<()> {
             let scopes: Vec<Scope> = scope_strs
                 .iter()
-                .map(|s| Scope::parse(s).map_err(|e| anyhow::anyhow!("Invalid scope '{}': {}", s, e)))
+                .map(|s| {
+                    Scope::parse(s).map_err(|e| anyhow::anyhow!("Invalid scope '{}': {}", s, e))
+                })
                 .collect::<Result<Vec<_>>>()?;
             let info = TokenInfo::new(token.to_string(), scopes);
             validator.register(token.to_string(), info);
@@ -212,10 +214,15 @@ async fn main() -> Result<()> {
         }
 
         if validator.is_empty() {
-            anyhow::bail!("Authenticated mode requires at least one token (use --token or --token-file)");
+            anyhow::bail!(
+                "Authenticated mode requires at least one token (use --token or --token-file)"
+            );
         }
 
-        tracing::info!("Security mode: Authenticated with {} token(s)", validator.len());
+        tracing::info!(
+            "Security mode: Authenticated with {} token(s)",
+            validator.len()
+        );
         Router::new(config).with_validator(validator)
     } else {
         tracing::info!("Security mode: Open (no authentication)");
