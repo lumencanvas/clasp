@@ -2713,3 +2713,183 @@ html, body {
     padding: 0;
   }
 }
+
+/* ============================================
+   Token Management
+   ============================================ */
+.token-management {
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  border: var(--border-width) solid var(--color-border);
+  background: var(--stone-100);
+}
+
+.token-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md);
+}
+
+.token-header .form-label {
+  margin: 0;
+}
+
+.token-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.token-empty {
+  padding: var(--space-lg);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-style: italic;
+  background: var(--stone-50);
+  border: 1px dashed var(--color-border);
+}
+
+.token-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+}
+
+.token-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.token-name {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.token-scopes {
+  display: flex;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
+  flex-wrap: wrap;
+}
+
+.token-scope {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: var(--teal-100);
+  color: var(--teal-800);
+  border-radius: 2px;
+}
+
+.token-scope.admin {
+  background: var(--pink-600);
+  color: white;
+}
+
+.token-scope.write {
+  background: var(--orange-500);
+  color: white;
+}
+
+.token-scope.read {
+  background: var(--teal-500);
+  color: white;
+}
+
+.token-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: var(--space-xs);
+  word-break: break-all;
+}
+
+.token-actions {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.token-actions .btn {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 11px;
+}
+
+/* Create Token Dialog */
+.create-token-dialog {
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  border: var(--border-width) solid var(--teal-500);
+  background: var(--teal-50);
+}
+
+.scope-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.scope-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  cursor: pointer;
+}
+
+.scope-option input[type="checkbox"] {
+  margin: 0;
+}
+
+.scope-label {
+  font-weight: 600;
+  min-width: 60px;
+}
+
+.scope-desc {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+/* Token Created Success */
+.token-created {
+  padding: var(--space-md);
+  background: var(--teal-100);
+  border: var(--border-width) solid var(--teal-500);
+  margin-top: var(--space-md);
+}
+
+.token-created-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-weight: 600;
+  color: var(--teal-800);
+  margin-bottom: var(--space-sm);
+}
+
+.token-created-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: var(--space-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  word-break: break-all;
+  user-select: all;
+}
+
+.token-created-warning {
+  font-size: 11px;
+  color: var(--color-warning);
+  margin-top: var(--space-sm);
+}

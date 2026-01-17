@@ -38,6 +38,8 @@ const state = {
   serverStats: new Map(), // id -> stats object
   // Continuous test mode
   continuousTestInterval: null,
+  // Token management for CLASP server auth
+  tokens: [],  // { id, name, token, scopes: ['read:/**', 'write:/**'] }
 };
 
 // Signal rate counter (at module level for hoisting)
@@ -106,6 +108,7 @@ async function init() {
   setupEventListeners();
   setupProtocolFieldSwitching();
   setupServerTypeFieldSwitching();
+  setupTokenManagement();
   setupHardwareDiscovery();
   setupTransformParams();
   setupLearnMode();
@@ -455,6 +458,221 @@ function updateServerTypeFields(serverType) {
   } else if (serverType === 'osc' || serverType === 'artnet' || serverType === 'http') {
     refreshNetworkInterfaces();
   }
+}
+
+// ============================================
+// Token Management (CLASP Server Auth)
+// ============================================
+
+function setupTokenManagement() {
+  // Toggle token management visibility when auth checkbox changes
+  const authCheckbox = $('clasp-auth-enabled');
+  const tokenManagement = $('clasp-token-management');
+
+  authCheckbox?.addEventListener('change', (e) => {
+    if (tokenManagement) {
+      tokenManagement.classList.toggle('hidden', !e.target.checked);
+    }
+  });
+
+  // Create token button
+  $('create-token-btn')?.addEventListener('click', () => {
+    const dialog = $('create-token-dialog');
+    if (dialog) {
+      dialog.classList.remove('hidden');
+      $('new-token-name')?.focus();
+    }
+  });
+
+  // Cancel token creation
+  $('cancel-token-btn')?.addEventListener('click', () => {
+    $('create-token-dialog')?.classList.add('hidden');
+    resetTokenDialog();
+  });
+
+  // Confirm token creation
+  $('confirm-token-btn')?.addEventListener('click', () => {
+    createNewToken();
+  });
+
+  // Load tokens from localStorage
+  loadTokens();
+  renderTokenList();
+}
+
+function generateCpskToken() {
+  // Generate a CPSK token: cpsk_<32 base62 chars>
+  const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+  let random = '';
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  for (let i = 0; i < 32; i++) {
+    random += chars[array[i] % chars.length];
+  }
+  return `cpsk_${random}`;
+}
+
+function createNewToken() {
+  const name = $('new-token-name')?.value?.trim() || 'Unnamed Token';
+  const pattern = $('new-token-pattern')?.value?.trim() || '/**';
+
+  // Get selected permissions
+  const readChecked = document.querySelector('[name="scope-read"]')?.checked;
+  const writeChecked = document.querySelector('[name="scope-write"]')?.checked;
+  const adminChecked = document.querySelector('[name="scope-admin"]')?.checked;
+
+  // Build scopes
+  const scopes = [];
+  if (adminChecked) {
+    scopes.push(`admin:${pattern}`);
+  } else {
+    if (readChecked) scopes.push(`read:${pattern}`);
+    if (writeChecked) scopes.push(`write:${pattern}`);
+  }
+
+  if (scopes.length === 0) {
+    alert('Please select at least one permission');
+    return;
+  }
+
+  // Generate token
+  const token = generateCpskToken();
+
+  // Add to state
+  const tokenEntry = {
+    id: Date.now().toString(),
+    name,
+    token,
+    scopes,
+    created: new Date().toISOString(),
+  };
+  state.tokens.push(tokenEntry);
+  saveTokens();
+  renderTokenList();
+
+  // Hide dialog and show token (only shown once!)
+  $('create-token-dialog')?.classList.add('hidden');
+  resetTokenDialog();
+
+  // Show the token to the user (they need to copy it)
+  showCreatedToken(tokenEntry);
+}
+
+function showCreatedToken(tokenEntry) {
+  // Create a temporary success message with the token
+  const tokenList = $('token-list');
+  if (!tokenList) return;
+
+  // Remove any existing success message
+  tokenList.querySelector('.token-created')?.remove();
+
+  const successEl = document.createElement('div');
+  successEl.className = 'token-created';
+  successEl.innerHTML = `
+    <div class="token-created-header">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20 6L9 17l-5-5"/>
+      </svg>
+      Token Created: ${escapeHtml(tokenEntry.name)}
+    </div>
+    <div class="token-created-value" onclick="navigator.clipboard.writeText(this.textContent).then(() => this.style.background='#d1fae5')">${tokenEntry.token}</div>
+    <div class="token-created-warning">Copy this token now! It won't be shown again.</div>
+  `;
+  tokenList.insertBefore(successEl, tokenList.firstChild);
+
+  // Auto-remove after 30 seconds
+  setTimeout(() => successEl.remove(), 30000);
+}
+
+function deleteToken(id) {
+  if (!confirm('Delete this token? Any clients using it will be disconnected.')) return;
+  state.tokens = state.tokens.filter(t => t.id !== id);
+  saveTokens();
+  renderTokenList();
+}
+
+function copyToken(token) {
+  navigator.clipboard.writeText(token).then(() => {
+    // Brief visual feedback
+    const btn = document.querySelector(`[data-copy-token="${token}"]`);
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = orig, 1500);
+    }
+  });
+}
+
+function renderTokenList() {
+  const tokenList = $('token-list');
+  if (!tokenList) return;
+
+  // Keep any success messages
+  const successMsg = tokenList.querySelector('.token-created');
+
+  if (state.tokens.length === 0) {
+    tokenList.innerHTML = '<div class="token-empty">No tokens yet. Create one to allow clients to connect.</div>';
+    if (successMsg) tokenList.insertBefore(successMsg, tokenList.firstChild);
+    return;
+  }
+
+  tokenList.innerHTML = state.tokens.map(t => `
+    <div class="token-item" data-token-id="${t.id}">
+      <div class="token-info">
+        <div class="token-name">${escapeHtml(t.name)}</div>
+        <div class="token-scopes">
+          ${t.scopes.map(s => {
+            const [action] = s.split(':');
+            return `<span class="token-scope ${action}">${escapeHtml(s)}</span>`;
+          }).join('')}
+        </div>
+        <div class="token-value">${t.token.substring(0, 20)}...</div>
+      </div>
+      <div class="token-actions">
+        <button class="btn btn-secondary" data-copy-token="${t.token}" onclick="copyToken('${t.token}')">Copy</button>
+        <button class="btn btn-secondary" onclick="deleteToken('${t.id}')">Delete</button>
+      </div>
+    </div>
+  `).join('');
+
+  if (successMsg) tokenList.insertBefore(successMsg, tokenList.firstChild);
+}
+
+function resetTokenDialog() {
+  const nameInput = $('new-token-name');
+  const patternInput = $('new-token-pattern');
+  if (nameInput) nameInput.value = '';
+  if (patternInput) patternInput.value = '/**';
+
+  // Reset checkboxes
+  document.querySelector('[name="scope-read"]').checked = true;
+  document.querySelector('[name="scope-write"]').checked = true;
+  document.querySelector('[name="scope-admin"]').checked = false;
+}
+
+function saveTokens() {
+  try {
+    localStorage.setItem('clasp-tokens', JSON.stringify(state.tokens));
+  } catch (e) {
+    console.error('Failed to save tokens:', e);
+  }
+}
+
+function loadTokens() {
+  try {
+    const saved = localStorage.getItem('clasp-tokens');
+    if (saved) {
+      state.tokens = JSON.parse(saved);
+    }
+  } catch (e) {
+    console.error('Failed to load tokens:', e);
+    state.tokens = [];
+  }
+}
+
+// Get tokens formatted for the router (token + scopes per line)
+function getTokenFileContent() {
+  return state.tokens.map(t => `${t.token} ${t.scopes.join(',')}`).join('\n');
 }
 
 // ============================================
@@ -1322,10 +1540,20 @@ async function handleAddServer(e) {
   switch (serverType) {
     case 'clasp':
       serverConfig.address = data.get('claspAddress') || 'localhost:7330';
-      serverConfig.token = data.get('claspToken') || '';
       serverConfig.serverName = data.get('claspName') || 'CLASP Bridge Server';
       serverConfig.announce = data.get('claspAnnounce') === 'on';
       serverConfig.name = data.get('claspName') || `CLASP Server @ ${serverConfig.address}`;
+      // Authentication
+      serverConfig.authEnabled = data.get('claspAuthEnabled') === 'on';
+      if (serverConfig.authEnabled && state.tokens.length > 0) {
+        // Pass token file content to the backend
+        serverConfig.tokenFileContent = getTokenFileContent();
+        // Also pass first token for the monitor connection
+        serverConfig.token = state.tokens[0].token;
+      } else {
+        serverConfig.authEnabled = false;
+        serverConfig.token = '';
+      }
       break;
 
     case 'osc':
@@ -3861,6 +4089,12 @@ function formatUptimeClient(ms) {
   if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
   return `${seconds}s`;
 }
+
+// ============================================
+// Global exports (for inline onclick handlers)
+// ============================================
+window.deleteToken = deleteToken;
+window.copyToken = copyToken;
 
 // ============================================
 // Initialize

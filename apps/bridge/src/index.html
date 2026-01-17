@@ -808,9 +808,60 @@ function transform(input) {
               <span class="form-hint">Broadcast server on local network so clients can find it automatically</span>
             </div>
             <div class="form-group">
-              <label class="form-label">Authentication Token (optional)</label>
-              <input type="text" name="claspToken" class="input" placeholder="cpsk_...">
-              <span class="form-hint">CPSK (Capability Pre-Shared Key) token - clients must provide this to connect</span>
+              <label class="form-label">
+                <input type="checkbox" name="claspAuthEnabled" id="clasp-auth-enabled"> Require Authentication
+              </label>
+              <span class="form-hint">When enabled, clients must provide a valid token to connect</span>
+            </div>
+
+            <!-- Token Management (shown when auth enabled) -->
+            <div id="clasp-token-management" class="token-management hidden">
+              <div class="token-header">
+                <label class="form-label">Access Tokens</label>
+                <button type="button" class="btn btn-sm btn-primary" id="create-token-btn">+ Create Token</button>
+              </div>
+
+              <div id="token-list" class="token-list">
+                <div class="token-empty">No tokens yet. Create one to allow clients to connect.</div>
+              </div>
+
+              <!-- Create Token Dialog (inline) -->
+              <div id="create-token-dialog" class="create-token-dialog hidden">
+                <div class="form-group">
+                  <label class="form-label">Token Name</label>
+                  <input type="text" id="new-token-name" class="input" placeholder="e.g., TouchOSC iPad, VJ Laptop">
+                  <span class="form-hint">A friendly name to identify this token</span>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Permissions</label>
+                  <div class="scope-checkboxes">
+                    <label class="scope-option">
+                      <input type="checkbox" name="scope-read" checked>
+                      <span class="scope-label">Read</span>
+                      <span class="scope-desc">Subscribe and receive values</span>
+                    </label>
+                    <label class="scope-option">
+                      <input type="checkbox" name="scope-write" checked>
+                      <span class="scope-label">Write</span>
+                      <span class="scope-desc">Set parameter values, emit events</span>
+                    </label>
+                    <label class="scope-option">
+                      <input type="checkbox" name="scope-admin">
+                      <span class="scope-label">Admin</span>
+                      <span class="scope-desc">Full access including system operations</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Address Pattern (optional)</label>
+                  <input type="text" id="new-token-pattern" class="input" placeholder="/** (all addresses)" value="/**">
+                  <span class="form-hint">Restrict access to specific paths, e.g., /lights/** or /user/alice/**</span>
+                </div>
+                <div class="dialog-buttons">
+                  <button type="button" class="btn btn-secondary" id="cancel-token-btn">Cancel</button>
+                  <button type="button" class="btn btn-primary" id="confirm-token-btn">Create Token</button>
+                </div>
+              </div>
             </div>
           </div>
 

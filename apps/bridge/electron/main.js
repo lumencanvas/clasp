@@ -197,7 +197,20 @@ async function startClaspServer(config) {
   }
 
   // Add security configuration
-  if (config.token) {
+  let tokenFilePath = null;
+  if (config.authEnabled && config.tokenFileContent) {
+    // Write token file content to a temp file
+    const tokensDir = path.join(app.getPath('userData'), 'tokens');
+    if (!fs.existsSync(tokensDir)) {
+      fs.mkdirSync(tokensDir, { recursive: true });
+    }
+    tokenFilePath = path.join(tokensDir, `tokens-${config.id}.txt`);
+    fs.writeFileSync(tokenFilePath, config.tokenFileContent, 'utf8');
+
+    args.push('--auth-mode', 'authenticated');
+    args.push('--token-file', tokenFilePath);
+  } else if (config.token) {
+    // Fallback to single token (backwards compatibility)
     args.push('--auth-mode', 'authenticated');
     args.push('--token', config.token);
   }
@@ -215,6 +228,7 @@ async function startClaspServer(config) {
         logs: [],
         port: parseInt(port),
         stats: createServerStats(),
+        tokenFilePath, // Store for cleanup
       };
 
       const addLog = (message, type = 'info') => {
@@ -751,6 +765,15 @@ async function stopServer(id) {
     await new Promise(resolve => setTimeout(resolve, 500));
     if (server.process && server.process.exitCode === null) {
       server.process.kill('SIGKILL');
+    }
+
+    // Clean up token file if it exists
+    if (server.tokenFilePath) {
+      try {
+        fs.unlinkSync(server.tokenFilePath);
+      } catch (e) {
+        // Ignore cleanup errors
+      }
     }
   } else {
     // For bridge-based servers
