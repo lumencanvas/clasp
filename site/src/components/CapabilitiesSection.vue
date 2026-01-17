@@ -18,7 +18,7 @@ const capabilities = [
   },
   {
     title: 'P2P',
-    desc: 'WebRTC DataChannels with ICE/NAT traversal for direct peer-to-peer connections.'
+    desc: 'WebRTC DataChannels with ICE/NAT traversal, dual channels (reliable + unreliable), automatic fallback to server relay.'
   },
   {
     title: 'EMBEDDED',

@@ -6,7 +6,7 @@
 //! - Message routing
 //! - Subscription handling
 
-use clasp_core::{codec, HelloMessage, Message, SetMessage, SubscribeMessage, Value, SecurityMode};
+use clasp_core::{codec, HelloMessage, Message, SecurityMode, SetMessage, SubscribeMessage, Value};
 use clasp_router::{Router, RouterConfig};
 use std::time::Duration;
 use tokio::time::timeout;
@@ -397,5 +397,236 @@ mod state_tests {
         let router = Router::default();
         let state = router.state();
         assert!(state.get_state("/any/path").is_none());
+    }
+}
+
+/// Tests for P2P signaling
+#[cfg(feature = "websocket")]
+mod p2p_tests {
+    use super::*;
+    use clasp_core::{signal_address, PublishMessage, SignalType, P2P_SIGNAL_PREFIX};
+    use clasp_transport::{Transport, TransportEvent, TransportReceiver, TransportSender, WebSocketTransport};
+    use tokio::net::TcpListener;
+
+    async fn find_available_port() -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        listener.local_addr().unwrap().port()
+    }
+
+    async fn complete_handshake<S: TransportSender, R: TransportReceiver>(
+        sender: &S,
+        receiver: &mut R,
+        name: &str,
+    ) -> String {
+        let hello = Message::Hello(HelloMessage {
+            version: 2,
+            name: name.to_string(),
+            features: vec!["param".to_string()],
+            capabilities: None,
+            token: None,
+        });
+        sender.send(codec::encode(&hello).unwrap()).await.unwrap();
+
+        let mut session_id = String::new();
+        let mut got_welcome = false;
+        let mut got_snapshot = false;
+
+        while !got_welcome || !got_snapshot {
+            if let Some(TransportEvent::Data(data)) = receiver.recv().await {
+                let (msg, _) = codec::decode(&data).unwrap();
+                match msg {
+                    Message::Welcome(w) => {
+                        session_id = w.session.clone();
+                        got_welcome = true;
+                    }
+                    Message::Snapshot(_) => got_snapshot = true,
+                    _ => {}
+                }
+            }
+        }
+
+        session_id
+    }
+
+    /// Test P2P signal routing between two clients
+    #[tokio::test]
+    async fn test_p2p_signal_routing() {
+        let port = find_available_port().await;
+        let addr = format!("127.0.0.1:{}", port);
+
+        let router = Router::default();
+
+        let router_handle = {
+            let addr = addr.clone();
+            tokio::spawn(async move {
+                let _ = router.serve_websocket(&addr).await;
+            })
+        };
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let url = format!("ws://{}", addr);
+
+        // Connect two clients
+        let (sender_a, mut receiver_a) = WebSocketTransport::connect(&url).await.unwrap();
+        let (sender_b, mut receiver_b) = WebSocketTransport::connect(&url).await.unwrap();
+
+        // Complete handshakes and get session IDs
+        let session_a = complete_handshake(&sender_a, &mut receiver_a, "Client A").await;
+        let session_b = complete_handshake(&sender_b, &mut receiver_b, "Client B").await;
+
+        // Client B subscribes to its P2P signal address
+        let subscribe = Message::Subscribe(SubscribeMessage {
+            id: 1,
+            pattern: format!("{}{}", P2P_SIGNAL_PREFIX, session_b),
+            types: vec![],
+            options: None,
+        });
+        sender_b
+            .send(codec::encode(&subscribe).unwrap())
+            .await
+            .unwrap();
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Client A sends a P2P signal to Client B
+        let signal_payload = serde_json::json!({
+            "type": "offer",
+            "from": session_a,
+            "sdp": "v=0\r\n...",
+            "correlation_id": "test-123"
+        });
+
+        let signal_value = json_to_value(signal_payload);
+        let publish = Message::Publish(PublishMessage {
+            address: signal_address(&session_b),
+            signal: Some(SignalType::Event),
+            value: None,
+            payload: Some(signal_value),
+            samples: None,
+            rate: None,
+            id: None,
+            phase: None,
+            timestamp: None,
+        });
+
+        sender_a
+            .send(codec::encode(&publish).unwrap())
+            .await
+            .unwrap();
+
+        // Client B should receive the signal
+        let received = timeout(Duration::from_secs(2), async {
+            loop {
+                if let Some(TransportEvent::Data(data)) = receiver_b.recv().await {
+                    let (msg, _) = codec::decode(&data).unwrap();
+                    if let Message::Publish(pub_msg) = msg {
+                        if pub_msg.address.starts_with(P2P_SIGNAL_PREFIX) {
+                            return Some(pub_msg);
+                        }
+                    }
+                }
+            }
+        })
+        .await;
+
+        assert!(received.is_ok(), "Client B should receive P2P signal");
+        let pub_msg = received.unwrap().unwrap();
+        assert_eq!(pub_msg.address, signal_address(&session_b));
+
+        router_handle.abort();
+    }
+
+    /// Test P2P signal to non-existent session returns error
+    #[tokio::test]
+    async fn test_p2p_signal_to_nonexistent_session() {
+        let port = find_available_port().await;
+        let addr = format!("127.0.0.1:{}", port);
+
+        let router = Router::default();
+
+        let router_handle = {
+            let addr = addr.clone();
+            tokio::spawn(async move {
+                let _ = router.serve_websocket(&addr).await;
+            })
+        };
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let url = format!("ws://{}", addr);
+        let (sender, mut receiver) = WebSocketTransport::connect(&url).await.unwrap();
+        let session_id = complete_handshake(&sender, &mut receiver, "Client").await;
+
+        // Send signal to non-existent session
+        let signal_payload = serde_json::json!({
+            "type": "offer",
+            "from": session_id,
+            "sdp": "v=0\r\n...",
+            "correlation_id": "test-123"
+        });
+
+        let publish = Message::Publish(PublishMessage {
+            address: signal_address("nonexistent-session-id"),
+            signal: Some(SignalType::Event),
+            value: None,
+            payload: Some(json_to_value(signal_payload)),
+            samples: None,
+            rate: None,
+            id: None,
+            phase: None,
+            timestamp: None,
+        });
+
+        sender
+            .send(codec::encode(&publish).unwrap())
+            .await
+            .unwrap();
+
+        // Should receive error
+        let error = timeout(Duration::from_secs(2), async {
+            loop {
+                if let Some(TransportEvent::Data(data)) = receiver.recv().await {
+                    let (msg, _) = codec::decode(&data).unwrap();
+                    if let Message::Error(err) = msg {
+                        return Some(err);
+                    }
+                }
+            }
+        })
+        .await;
+
+        assert!(error.is_ok(), "Should receive error for nonexistent session");
+        let err = error.unwrap().unwrap();
+        assert_eq!(err.code, 404);
+
+        router_handle.abort();
+    }
+
+    fn json_to_value(json: serde_json::Value) -> Value {
+        match json {
+            serde_json::Value::Null => Value::Null,
+            serde_json::Value::Bool(b) => Value::Bool(b),
+            serde_json::Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    Value::Int(i)
+                } else if let Some(f) = n.as_f64() {
+                    Value::Float(f)
+                } else {
+                    Value::Null
+                }
+            }
+            serde_json::Value::String(s) => Value::String(s),
+            serde_json::Value::Array(arr) => {
+                Value::Array(arr.into_iter().map(json_to_value).collect())
+            }
+            serde_json::Value::Object(obj) => {
+                let map: std::collections::HashMap<String, Value> = obj
+                    .into_iter()
+                    .map(|(k, v)| (k, json_to_value(v)))
+                    .collect();
+                Value::Map(map)
+            }
+        }
     }
 }

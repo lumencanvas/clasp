@@ -8,9 +8,17 @@ homepage.workspace = true
 description = "CLASP client library"
 readme = "README.md"
 
+[features]
+default = []
+p2p = ["clasp-transport/webrtc", "uuid", "serde_json"]
+
 [dependencies]
 clasp-core = { workspace = true }
 clasp-transport = { workspace = true }
+
+# P2P (optional)
+uuid = { version = "1.0", features = ["v4"], optional = true }
+serde_json = { version = "1.0", optional = true }
 
 # Async
 tokio = { workspace = true }

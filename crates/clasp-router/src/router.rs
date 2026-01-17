@@ -28,7 +28,7 @@
 
 use bytes::Bytes;
 use clasp_core::{
-    codec, Action, AckMessage, CpskValidator, ErrorMessage, Frame, Message, SecurityMode,
+    codec, AckMessage, Action, CpskValidator, ErrorMessage, Frame, Message, SecurityMode,
     SignalType, TokenValidator, ValidationResult, PROTOCOL_VERSION,
 };
 use clasp_transport::{TransportEvent, TransportReceiver, TransportSender, TransportServer};
@@ -46,6 +46,7 @@ use clasp_transport::{QuicConfig, QuicTransport};
 
 use crate::{
     error::{Result, RouterError},
+    p2p::{analyze_address, P2PAddressType, P2PCapabilities},
     session::{Session, SessionId},
     state::RouterState,
     subscription::{Subscription, SubscriptionManager},
@@ -123,6 +124,8 @@ pub struct Router {
     running: Arc<RwLock<bool>>,
     /// Token validator (None = always reject in authenticated mode)
     token_validator: Option<Arc<dyn TokenValidator>>,
+    /// P2P capabilities tracker
+    p2p_capabilities: Arc<P2PCapabilities>,
 }
 
 impl Router {
@@ -135,6 +138,7 @@ impl Router {
             state: Arc::new(RouterState::new()),
             running: Arc::new(RwLock::new(false)),
             token_validator: None,
+            p2p_capabilities: Arc::new(P2PCapabilities::new()),
         }
     }
 
@@ -374,6 +378,7 @@ impl Router {
             state: Arc::clone(&self.state),
             running: Arc::clone(&self.running),
             token_validator: self.token_validator.clone(),
+            p2p_capabilities: Arc::clone(&self.p2p_capabilities),
         }
     }
 
@@ -391,6 +396,7 @@ impl Router {
         let running = Arc::clone(&self.running);
         let token_validator = self.token_validator.clone();
         let security_mode = self.config.security_mode;
+        let p2p_capabilities = Arc::clone(&self.p2p_capabilities);
 
         tokio::spawn(async move {
             let mut session: Option<Arc<Session>> = None;
@@ -413,6 +419,7 @@ impl Router {
                                     &config,
                                     security_mode,
                                     &token_validator,
+                                    &p2p_capabilities,
                                 )
                                 .await
                                 {
@@ -431,7 +438,10 @@ impl Router {
                                                 .await;
                                         }
                                         MessageResult::Disconnect => {
-                                            info!("Disconnecting client {} due to auth failure", addr);
+                                            info!(
+                                                "Disconnecting client {} due to auth failure",
+                                                addr
+                                            );
                                             break;
                                         }
                                         MessageResult::None => {}
@@ -463,6 +473,7 @@ impl Router {
                 info!("Removing session {}", s.id);
                 sessions.remove(&s.id);
                 subscriptions.remove_session(&s.id);
+                p2p_capabilities.unregister(&s.id);
             }
         });
     }
@@ -515,6 +526,7 @@ async fn handle_message(
     config: &RouterConfig,
     security_mode: SecurityMode,
     token_validator: &Option<Arc<dyn TokenValidator>>,
+    p2p_capabilities: &Arc<P2PCapabilities>,
 ) -> Option<MessageResult> {
     match msg {
         Message::Hello(hello) => {
@@ -609,11 +621,8 @@ async fn handle_message(
             };
 
             // Create new session
-            let mut new_session = Session::new(
-                sender.clone(),
-                hello.name.clone(),
-                hello.features.clone(),
-            );
+            let mut new_session =
+                Session::new(sender.clone(), hello.name.clone(), hello.features.clone());
 
             // Set authentication state
             if authenticated {
@@ -652,7 +661,9 @@ async fn handle_message(
             let session = session.as_ref()?;
 
             // Check scope for read access (in authenticated mode)
-            if security_mode == SecurityMode::Authenticated && !session.has_scope(Action::Read, &sub.pattern) {
+            if security_mode == SecurityMode::Authenticated
+                && !session.has_scope(Action::Read, &sub.pattern)
+            {
                 warn!(
                     "Session {} denied SUBSCRIBE to {} - insufficient scope",
                     session.id, sub.pattern
@@ -716,7 +727,9 @@ async fn handle_message(
             let session = session.as_ref()?;
 
             // Check scope for write access (in authenticated mode)
-            if security_mode == SecurityMode::Authenticated && !session.has_scope(Action::Write, &set.address) {
+            if security_mode == SecurityMode::Authenticated
+                && !session.has_scope(Action::Write, &set.address)
+            {
                 warn!(
                     "Session {} denied SET to {} - insufficient scope",
                     session.id, set.address
@@ -780,7 +793,9 @@ async fn handle_message(
             let session = session.as_ref()?;
 
             // Check scope for read access (in authenticated mode)
-            if security_mode == SecurityMode::Authenticated && !session.has_scope(Action::Read, &get.address) {
+            if security_mode == SecurityMode::Authenticated
+                && !session.has_scope(Action::Read, &get.address)
+            {
                 warn!(
                     "Session {} denied GET to {} - insufficient scope",
                     session.id, get.address
@@ -816,7 +831,9 @@ async fn handle_message(
             let session = session.as_ref()?;
 
             // Check scope for write access (in authenticated mode)
-            if security_mode == SecurityMode::Authenticated && !session.has_scope(Action::Write, &pub_msg.address) {
+            if security_mode == SecurityMode::Authenticated
+                && !session.has_scope(Action::Write, &pub_msg.address)
+            {
                 warn!(
                     "Session {} denied PUBLISH to {} - insufficient scope",
                     session.id, pub_msg.address
@@ -831,7 +848,58 @@ async fn handle_message(
                 return Some(MessageResult::Send(bytes));
             }
 
-            // Determine signal type
+            // Check for P2P signaling addresses
+            match analyze_address(&pub_msg.address) {
+                P2PAddressType::Signal { target_session } => {
+                    // Route P2P signal directly to target session
+                    debug!("P2P signal from {} to {}", session.id, target_session);
+
+                    if let Ok(bytes) = codec::encode(msg) {
+                        if let Some(target) = sessions.get(&target_session) {
+                            let _ = target.send(bytes).await;
+                        } else {
+                            // Target session not found
+                            warn!("P2P signal target session not found: {}", target_session);
+                            let error = Message::Error(ErrorMessage {
+                                code: 404,
+                                message: format!("Target session not found: {}", target_session),
+                                address: Some(pub_msg.address.clone()),
+                                correlation_id: None,
+                            });
+                            let bytes = codec::encode(&error).ok()?;
+                            return Some(MessageResult::Send(bytes));
+                        }
+                    }
+
+                    return Some(MessageResult::None);
+                }
+                P2PAddressType::Announce => {
+                    // P2P capability announcement - register and broadcast
+                    debug!("P2P announce from session {}", session.id);
+
+                    // Register the session as P2P capable
+                    p2p_capabilities.register(&session.id);
+
+                    // Broadcast to subscribers of the announce address
+                    let subscribers = subscriptions.find_subscribers(&pub_msg.address, None);
+                    if let Ok(bytes) = codec::encode(msg) {
+                        for sub_session_id in subscribers {
+                            if sub_session_id != session.id {
+                                if let Some(sub_session) = sessions.get(&sub_session_id) {
+                                    let _ = sub_session.send(bytes.clone()).await;
+                                }
+                            }
+                        }
+                    }
+
+                    return Some(MessageResult::None);
+                }
+                P2PAddressType::NotP2P => {
+                    // Normal PUBLISH - fall through to standard handling
+                }
+            }
+
+            // Standard PUBLISH handling for non-P2P addresses
             let signal_type = pub_msg.signal;
 
             // Find subscribers

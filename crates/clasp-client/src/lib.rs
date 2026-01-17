@@ -26,15 +26,21 @@
 pub mod builder;
 pub mod client;
 pub mod error;
+#[cfg(feature = "p2p")]
+pub mod p2p;
 
 pub use builder::ClaspBuilder;
 pub use client::Clasp;
 pub use error::{ClientError, Result};
+#[cfg(feature = "p2p")]
+pub use p2p::{P2PEvent, P2PManager};
 
 /// Prelude for convenient imports
 pub mod prelude {
     pub use crate::builder::ClaspBuilder;
     pub use crate::client::Clasp;
     pub use crate::error::{ClientError, Result};
+    #[cfg(feature = "p2p")]
+    pub use crate::p2p::{P2PEvent, P2PManager};
     pub use clasp_core::{Message, SignalType, Value};
 }

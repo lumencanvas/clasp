@@ -29,12 +29,14 @@
 //! ```
 
 pub mod error;
+pub mod p2p;
 pub mod router;
 pub mod session;
 pub mod state;
 pub mod subscription;
 
 pub use error::{Result, RouterError};
+pub use p2p::{analyze_address, P2PAddressType, P2PCapabilities};
 pub use router::{Router, RouterConfig, TransportConfig};
 pub use session::{Session, SessionId};
 pub use state::RouterState;

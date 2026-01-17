@@ -3,6 +3,9 @@
 //! This crate provides WebAssembly bindings for Clasp,
 //! enabling browser-based clients.
 
+#[cfg(feature = "p2p")]
+pub mod p2p;
+
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -10,8 +13,8 @@ use wasm_bindgen::prelude::*;
 use web_sys::{CloseEvent, ErrorEvent, MessageEvent, WebSocket};
 
 use clasp_core::{
-    codec, HelloMessage, Message, SetMessage, SubscribeMessage, SubscribeOptions,
-    Value, PROTOCOL_VERSION, WS_SUBPROTOCOL,
+    codec, HelloMessage, Message, SetMessage, SubscribeMessage, SubscribeOptions, Value,
+    PROTOCOL_VERSION, WS_SUBPROTOCOL,
 };
 
 #[cfg(feature = "console_error_panic_hook")]

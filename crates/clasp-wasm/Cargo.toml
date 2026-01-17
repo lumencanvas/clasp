@@ -11,13 +11,30 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = ["console_error_panic_hook"]
 console_error_panic_hook = ["dep:console_error_panic_hook"]
+p2p = ["wasm-bindgen-futures"]
 
 [dependencies]
 clasp-core = { workspace = true }
 
 wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
 js-sys = { workspace = true }
-web-sys = { workspace = true }
+web-sys = { workspace = true, features = [
+    "RtcConfiguration",
+    "RtcDataChannel",
+    "RtcDataChannelInit",
+    "RtcDataChannelState",
+    "RtcDataChannelType",
+    "RtcDataChannelEvent",
+    "RtcIceCandidate",
+    "RtcIceCandidateInit",
+    "RtcIceServer",
+    "RtcPeerConnection",
+    "RtcPeerConnectionIceEvent",
+    "RtcSdpType",
+    "RtcSessionDescription",
+    "RtcSessionDescriptionInit",
+] }
 
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -20,6 +20,8 @@ pub mod codec;
 pub mod error;
 pub mod frame;
 #[cfg(feature = "std")]
+pub mod p2p;
+#[cfg(feature = "std")]
 pub mod security;
 pub mod state;
 pub mod time;
@@ -30,9 +32,15 @@ pub use codec::{decode, encode};
 pub use error::{Error, Result};
 pub use frame::Frame;
 #[cfg(feature = "std")]
+pub use p2p::{
+    extract_target_session, is_p2p_address, is_p2p_signal_address, signal_address, P2PAnnounce,
+    P2PConfig, P2PConnectionState, P2PSignal, RoutingMode, TurnServer, P2P_ANNOUNCE, P2P_NAMESPACE,
+    P2P_SIGNAL_PREFIX,
+};
+#[cfg(feature = "std")]
 pub use security::{
-    Action, CpskValidator, Scope, SecurityMode, TokenInfo, TokenValidator, ValidatorChain,
-    ValidationResult,
+    Action, CpskValidator, Scope, SecurityMode, TokenInfo, TokenValidator, ValidationResult,
+    ValidatorChain,
 };
 pub use state::ParamState;
 pub use time::Timestamp;
