@@ -125,11 +125,35 @@ impl SubscriptionManager {
     ) -> Vec<SessionId> {
         let mut subscribers = HashSet::new();
 
-        // Check all subscriptions (could be optimized with better indexing)
-        for entry in self.subscriptions.iter() {
-            let sub = entry.value();
-            if sub.matches(address, signal_type) {
-                subscribers.insert(sub.session_id.clone());
+        // Extract prefix from address (first segment)
+        let address_prefix = address
+            .split('/')
+            .nth(1)
+            .map(|s| format!("/{}", s))
+            .unwrap_or_else(|| "/".to_string());
+
+        // Collect candidate subscription keys from prefix index
+        let mut candidate_keys: Vec<(SessionId, u32)> = Vec::new();
+
+        // Check subscriptions indexed under the address's prefix
+        if let Some(keys) = self.by_prefix.get(&address_prefix) {
+            candidate_keys.extend(keys.iter().cloned());
+        }
+
+        // Also check subscriptions indexed under "/" (wildcard patterns like "/**")
+        if address_prefix != "/" {
+            if let Some(keys) = self.by_prefix.get("/") {
+                candidate_keys.extend(keys.iter().cloned());
+            }
+        }
+
+        // Check only the candidate subscriptions
+        for key in candidate_keys {
+            if let Some(entry) = self.subscriptions.get(&key) {
+                let sub = entry.value();
+                if sub.matches(address, signal_type) {
+                    subscribers.insert(sub.session_id.clone());
+                }
             }
         }
 

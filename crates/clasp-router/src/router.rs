@@ -925,11 +925,134 @@ async fn handle_message(
             Some(MessageResult::Send(bytes))
         }
 
-        Message::Query(_query) => {
-            // Return signal definitions (simplified - would need schema registry)
-            let result = Message::Result(clasp_core::ResultMessage { signals: vec![] });
+        Message::Query(query) => {
+            // Query the signal registry for matching signals
+            let signals = state.query_signals(&query.pattern);
+            let result = Message::Result(clasp_core::ResultMessage { signals });
             let bytes = codec::encode(&result).ok()?;
             Some(MessageResult::Send(bytes))
+        }
+
+        Message::Announce(announce) => {
+            // Register announced signals in the signal registry
+            state.register_signals(announce.signals.clone());
+            debug!(
+                "Registered {} signals in namespace {}",
+                announce.signals.len(),
+                announce.namespace
+            );
+            // Send ACK to confirm registration
+            let ack = Message::Ack(AckMessage {
+                address: Some(announce.namespace.clone()),
+                revision: None,
+                locked: None,
+                holder: None,
+                correlation_id: None,
+            });
+            let bytes = codec::encode(&ack).ok()?;
+            Some(MessageResult::Send(bytes))
+        }
+
+        Message::Sync(sync_msg) => {
+            // Clock synchronization - respond with server timestamps
+            // Client sends t1 (client send time)
+            // Server records t2 (server receive time) and t3 (server send time)
+            // Client records t4 (client receive time)
+            // RTT = (t4 - t1) - (t3 - t2)
+            // Offset = ((t2 - t1) + (t3 - t4)) / 2
+            let now = clasp_core::time::now();
+            let response = Message::Sync(clasp_core::SyncMessage {
+                t1: sync_msg.t1,
+                t2: Some(now), // Server receive time
+                t3: Some(now), // Server send time (same for instant response)
+            });
+            let bytes = codec::encode(&response).ok()?;
+            Some(MessageResult::Send(bytes))
+        }
+
+        Message::Bundle(bundle) => {
+            let session = session.as_ref()?;
+
+            // Process each message in the bundle atomically
+            // For now, we process SET and PUBLISH messages which are the common bundle contents
+            for inner_msg in &bundle.messages {
+                match inner_msg {
+                    Message::Set(set) => {
+                        // Check scope for write access (in authenticated mode)
+                        if security_mode == SecurityMode::Authenticated
+                            && !session.has_scope(Action::Write, &set.address)
+                        {
+                            warn!(
+                                "Session {} denied bundled SET to {} - insufficient scope",
+                                session.id, set.address
+                            );
+                            continue; // Skip this message but continue with others
+                        }
+
+                        // Apply to state
+                        if let Ok(revision) = state.apply_set(set, &session.id) {
+                            // Broadcast to subscribers
+                            let subscribers =
+                                subscriptions.find_subscribers(&set.address, Some(SignalType::Param));
+
+                            // Create updated SET message with revision
+                            let mut updated_set = set.clone();
+                            updated_set.revision = Some(revision);
+                            let broadcast_msg = Message::Set(updated_set);
+
+                            if let Ok(bytes) = codec::encode(&broadcast_msg) {
+                                // Send to all subscribers (including sender for confirmation)
+                                for sub_session_id in subscribers {
+                                    if let Some(sub_session) = sessions.get(&sub_session_id) {
+                                        let _ = sub_session.send(bytes.clone()).await;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Message::Publish(pub_msg) => {
+                        // Check scope for write access (in authenticated mode)
+                        if security_mode == SecurityMode::Authenticated
+                            && !session.has_scope(Action::Write, &pub_msg.address)
+                        {
+                            warn!(
+                                "Session {} denied bundled PUBLISH to {} - insufficient scope",
+                                session.id, pub_msg.address
+                            );
+                            continue;
+                        }
+
+                        // Find subscribers and broadcast
+                        let subscribers =
+                            subscriptions.find_subscribers(&pub_msg.address, pub_msg.signal);
+
+                        if let Ok(bytes) = codec::encode(inner_msg) {
+                            for sub_session_id in subscribers {
+                                if sub_session_id != session.id {
+                                    if let Some(sub_session) = sessions.get(&sub_session_id) {
+                                        let _ = sub_session.send(bytes.clone()).await;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        // Other message types in bundles are currently not processed
+                        debug!("Ignoring {:?} message type in bundle", inner_msg);
+                    }
+                }
+            }
+
+            // Send a single ACK for the entire bundle
+            let ack = Message::Ack(AckMessage {
+                address: None,
+                revision: None,
+                locked: None,
+                holder: None,
+                correlation_id: None,
+            });
+            let ack_bytes = codec::encode(&ack).ok()?;
+            Some(MessageResult::Send(ack_bytes))
         }
 
         _ => Some(MessageResult::None),

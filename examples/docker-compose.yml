@@ -1,0 +1,96 @@
+# CLASP Docker Compose Example
+#
+# This example sets up a complete CLASP development environment with:
+# - CLASP Router (core message router)
+# - MQTT Broker (for MQTT bridge testing)
+#
+# Usage:
+#   docker-compose up -d
+#   # Connect clients to ws://localhost:7330
+#
+# Stop:
+#   docker-compose down
+
+version: '3.8'
+
+services:
+  # CLASP Router - Core message router
+  clasp-router:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: clasp-router
+    ports:
+      - "7330:7330"   # WebSocket (primary)
+      - "7331:7331"   # UDP Discovery
+    environment:
+      - RUST_LOG=info
+      - CLASP_BIND_ADDR=0.0.0.0:7330
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "7330"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # MQTT Broker (Mosquitto) - For MQTT bridge testing
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: clasp-mqtt
+    ports:
+      - "1883:1883"   # MQTT
+      - "9001:9001"   # WebSocket MQTT
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # Redis (optional) - For distributed state
+  redis:
+    image: redis:7-alpine
+    container_name: clasp-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    profiles:
+      - distributed
+
+volumes:
+  mosquitto-data:
+  mosquitto-log:
+  redis-data:
+
+networks:
+  default:
+    name: clasp-network
+
+# Example configurations:
+#
+# Basic setup (CLASP + MQTT):
+#   docker-compose up -d clasp-router mqtt
+#
+# Full distributed setup:
+#   docker-compose --profile distributed up -d
+#
+# Connect JS client:
+#   const clasp = new Clasp('ws://localhost:7330');
+#
+# Connect MQTT client:
+#   mosquitto_sub -h localhost -t '#' -v
+#
+# Test MQTT to CLASP bridge:
+#   mosquitto_pub -h localhost -t 'test/topic' -m 'hello'

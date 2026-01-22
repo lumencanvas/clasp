@@ -89,6 +89,12 @@ pub struct HttpBridgeConfig {
     /// CLASP namespace prefix
     #[serde(default = "default_namespace")]
     pub namespace: String,
+    /// Polling interval in milliseconds for client mode (0 = disabled)
+    #[serde(default)]
+    pub poll_interval_ms: u64,
+    /// Endpoints to poll in client mode
+    #[serde(default)]
+    pub poll_endpoints: Vec<String>,
 }
 
 fn default_true() -> bool {
@@ -143,6 +149,8 @@ impl Default for HttpBridgeConfig {
             base_path: "/api".to_string(),
             timeout_secs: 30,
             namespace: "/http".to_string(),
+            poll_interval_ms: 0,
+            poll_endpoints: vec![],
         }
     }
 }
@@ -517,6 +525,124 @@ impl Bridge for HttpBridge {
                 // Client mode - ready to make requests
                 *self.running.lock() = true;
                 let _ = tx.send(BridgeEvent::Connected).await;
+
+                // Start polling if configured
+                if self.http_config.poll_interval_ms > 0 {
+                    let poll_interval = std::time::Duration::from_millis(self.http_config.poll_interval_ms);
+                    let base_url = self.http_config.url.clone();
+                    let timeout_secs = self.http_config.timeout_secs;
+                    let namespace = self.http_config.namespace.clone();
+                    let poll_endpoints = if self.http_config.poll_endpoints.is_empty() {
+                        vec!["/api/signals".to_string()]
+                    } else {
+                        self.http_config.poll_endpoints.clone()
+                    };
+                    let signals = self.signals.clone();
+                    let running = self.running.clone();
+                    let tx_clone = tx.clone();
+
+                    tokio::spawn(async move {
+                        let client = match reqwest::Client::builder()
+                            .timeout(std::time::Duration::from_secs(timeout_secs as u64))
+                            .build()
+                        {
+                            Ok(c) => c,
+                            Err(e) => {
+                                error!("Failed to create HTTP client: {}", e);
+                                return;
+                            }
+                        };
+
+                        let mut interval = tokio::time::interval(poll_interval);
+                        info!("HTTP polling started with interval {}ms", poll_interval.as_millis());
+
+                        loop {
+                            interval.tick().await;
+
+                            if !*running.lock() {
+                                break;
+                            }
+
+                            for endpoint in &poll_endpoints {
+                                let url = format!("{}{}", base_url, endpoint);
+
+                                match client.get(&url).send().await {
+                                    Ok(response) => {
+                                        if response.status().is_success() {
+                                            if let Ok(json) = response.json::<serde_json::Value>().await {
+                                                // Parse and convert to CLASP messages
+                                                if let Some(signals_arr) = json.get("signals").and_then(|s| s.as_array()) {
+                                                    for signal in signals_arr {
+                                                        if let (Some(addr), Some(val)) = (
+                                                            signal.get("address").and_then(|a| a.as_str()),
+                                                            signal.get("value"),
+                                                        ) {
+                                                            let clasp_addr = format!("{}{}", namespace, addr);
+                                                            let value = HttpBridge::json_to_value(val.clone());
+
+                                                            // Check if value changed
+                                                            let changed = {
+                                                                let current = signals.read();
+                                                                current.get(&clasp_addr) != Some(&value)
+                                                            };
+
+                                                            if changed {
+                                                                signals.write().insert(clasp_addr.clone(), value.clone());
+
+                                                                let msg = Message::Set(SetMessage {
+                                                                    address: clasp_addr,
+                                                                    value,
+                                                                    revision: None,
+                                                                    lock: false,
+                                                                    unlock: false,
+                                                                });
+
+                                                                if let Err(e) = tx_clone.send(BridgeEvent::ToClasp(msg)).await {
+                                                                    debug!("Failed to send polled data: {}", e);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                } else if let Some(value) = json.get("value") {
+                                                    // Single value response
+                                                    if let Some(addr) = json.get("address").and_then(|a| a.as_str()) {
+                                                        let clasp_addr = format!("{}{}", namespace, addr);
+                                                        let value = HttpBridge::json_to_value(value.clone());
+
+                                                        let changed = {
+                                                            let current = signals.read();
+                                                            current.get(&clasp_addr) != Some(&value)
+                                                        };
+
+                                                        if changed {
+                                                            signals.write().insert(clasp_addr.clone(), value.clone());
+
+                                                            let msg = Message::Set(SetMessage {
+                                                                address: clasp_addr,
+                                                                value,
+                                                                revision: None,
+                                                                lock: false,
+                                                                unlock: false,
+                                                            });
+
+                                                            let _ = tx_clone.send(BridgeEvent::ToClasp(msg)).await;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        debug!("HTTP poll error for {}: {}", url, e);
+                                    }
+                                }
+                            }
+                        }
+
+                        info!("HTTP polling stopped");
+                    });
+                }
+
                 info!(
                     "HTTP bridge started in client mode for {}",
                     self.http_config.url

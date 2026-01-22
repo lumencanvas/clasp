@@ -32,6 +32,18 @@ use std::net::SocketAddr;
 /// ALPN protocol identifier for CLASP over QUIC
 pub const CLASP_ALPN: &[u8] = b"clasp/2";
 
+/// Certificate verification mode
+#[derive(Debug, Clone, Default)]
+pub enum CertVerification {
+    /// Skip certificate verification (INSECURE - development only)
+    #[default]
+    SkipVerification,
+    /// Use system root certificates
+    SystemRoots,
+    /// Use custom root certificates (DER-encoded)
+    CustomRoots(Vec<Vec<u8>>),
+}
+
 /// QUIC transport configuration
 #[derive(Debug, Clone)]
 pub struct QuicConfig {
@@ -43,6 +55,8 @@ pub struct QuicConfig {
     pub idle_timeout_ms: u64,
     /// Initial congestion window (packets)
     pub initial_window: u32,
+    /// Certificate verification mode
+    pub cert_verification: CertVerification,
 }
 
 impl Default for QuicConfig {
@@ -52,6 +66,33 @@ impl Default for QuicConfig {
             keep_alive_ms: 5000,
             idle_timeout_ms: 30000,
             initial_window: 10,
+            cert_verification: CertVerification::default(),
+        }
+    }
+}
+
+impl QuicConfig {
+    /// Create a config with system root certificate verification (recommended for production)
+    pub fn with_system_roots() -> Self {
+        Self {
+            cert_verification: CertVerification::SystemRoots,
+            ..Default::default()
+        }
+    }
+
+    /// Create a config that skips certificate verification (development only)
+    pub fn insecure() -> Self {
+        Self {
+            cert_verification: CertVerification::SkipVerification,
+            ..Default::default()
+        }
+    }
+
+    /// Create a config with custom root certificates
+    pub fn with_custom_roots(certs: Vec<Vec<u8>>) -> Self {
+        Self {
+            cert_verification: CertVerification::CustomRoots(certs),
+            ..Default::default()
         }
     }
 }
@@ -145,12 +186,67 @@ impl QuicTransport {
     }
 
     fn build_client_config(config: &QuicConfig) -> Result<ClientConfig> {
-        // For development: skip certificate verification
-        // WARNING: Do not use in production without proper certificate handling
-        let crypto = rustls::ClientConfig::builder()
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(SkipServerVerification))
-            .with_no_client_auth();
+        let crypto = match &config.cert_verification {
+            CertVerification::SkipVerification => {
+                // WARNING: Do not use in production - vulnerable to MITM attacks
+                warn!("QUIC using insecure certificate verification - DO NOT USE IN PRODUCTION");
+                rustls::ClientConfig::builder()
+                    .dangerous()
+                    .with_custom_certificate_verifier(Arc::new(SkipServerVerification))
+                    .with_no_client_auth()
+            }
+            CertVerification::SystemRoots => {
+                // Use system root certificates
+                let mut root_store = rustls::RootCertStore::empty();
+
+                // Try to load native certs
+                match rustls_native_certs::load_native_certs() {
+                    Ok(certs) => {
+                        for cert in certs {
+                            if let Err(e) = root_store.add(cert) {
+                                debug!("Failed to add system cert: {}", e);
+                            }
+                        }
+                        info!("Loaded {} system root certificates", root_store.len());
+                    }
+                    Err(e) => {
+                        warn!("Failed to load system certs: {}", e);
+                    }
+                }
+
+                if root_store.is_empty() {
+                    return Err(TransportError::ConnectionFailed(
+                        "No root certificates available".to_string(),
+                    ));
+                }
+
+                rustls::ClientConfig::builder()
+                    .with_root_certificates(root_store)
+                    .with_no_client_auth()
+            }
+            CertVerification::CustomRoots(certs) => {
+                // Use custom root certificates
+                let mut root_store = rustls::RootCertStore::empty();
+
+                for cert_der in certs {
+                    let cert = rustls::pki_types::CertificateDer::from(cert_der.clone());
+                    if let Err(e) = root_store.add(cert) {
+                        warn!("Failed to add custom cert: {}", e);
+                    }
+                }
+
+                if root_store.is_empty() {
+                    return Err(TransportError::ConnectionFailed(
+                        "No valid custom certificates provided".to_string(),
+                    ));
+                }
+
+                info!("Using {} custom root certificates", root_store.len());
+                rustls::ClientConfig::builder()
+                    .with_root_certificates(root_store)
+                    .with_no_client_auth()
+            }
+        };
 
         let quic_crypto =
             quinn::crypto::rustls::QuicClientConfig::try_from(crypto).map_err(|e| {

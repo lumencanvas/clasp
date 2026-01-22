@@ -64,7 +64,7 @@ const clasp = new Clasp('wss://192.168.1.42:7330');
 
 ## Frame Format (4 bytes minimum)
 ```
-[0]    Magic 'C' (0x43)
+[0]    Magic 'S' (0x53)
 [1]    Flags (QoS, timestamp, encrypted, compressed)
 [2-3]  Payload length (uint16 BE)
 [4+]   MessagePack payload

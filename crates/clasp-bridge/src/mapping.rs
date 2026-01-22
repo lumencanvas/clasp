@@ -1,7 +1,9 @@
 //! Address mapping and value transformation
 
 use clasp_core::Value;
+use evalexpr::{eval_with_context_mut, ContextWithMutableVariables, HashMapContext};
 use std::collections::HashMap;
+use tracing::warn;
 
 /// Maps between protocol addresses and Clasp addresses
 #[derive(Debug, Clone)]
@@ -151,9 +153,39 @@ impl ValueTransform {
                     value.clone()
                 }
             }
-            ValueTransform::Expression(_expr) => {
-                // TODO: Implement expression evaluation
-                value.clone()
+            ValueTransform::Expression(expr) => {
+                let mut context = HashMapContext::new();
+
+                // Set value variable
+                if let Some(v) = value.as_f64() {
+                    let _ = context.set_value("value".to_string(), evalexpr::Value::Float(v));
+                    let _ = context.set_value("x".to_string(), evalexpr::Value::Float(v));
+                } else if let Some(v) = value.as_i64() {
+                    let _ = context.set_value("value".to_string(), evalexpr::Value::Int(v));
+                    let _ = context.set_value("x".to_string(), evalexpr::Value::Int(v));
+                }
+
+                // Add math constants
+                let _ = context.set_value(
+                    "PI".to_string(),
+                    evalexpr::Value::Float(std::f64::consts::PI),
+                );
+                let _ = context.set_value(
+                    "E".to_string(),
+                    evalexpr::Value::Float(std::f64::consts::E),
+                );
+
+                match eval_with_context_mut(expr, &mut context) {
+                    Ok(evalexpr::Value::Float(f)) => Value::Float(f),
+                    Ok(evalexpr::Value::Int(i)) => Value::Int(i),
+                    Ok(evalexpr::Value::Boolean(b)) => Value::Bool(b),
+                    Ok(evalexpr::Value::String(s)) => Value::String(s),
+                    Ok(_) => value.clone(),
+                    Err(e) => {
+                        warn!("Expression evaluation failed: {}", e);
+                        value.clone()
+                    }
+                }
             }
         }
     }

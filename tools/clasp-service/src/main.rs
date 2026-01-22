@@ -37,6 +37,9 @@ use clasp_bridge::{WebSocketBridge, WebSocketBridgeConfig, WsMode};
 #[cfg(feature = "http")]
 use clasp_bridge::{HttpBridge, HttpBridgeConfig, HttpMode};
 
+#[cfg(feature = "socketio")]
+use clasp_bridge::{SocketIOBridge, SocketIOBridgeConfig};
+
 /// Request from Electron
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
@@ -55,6 +58,10 @@ enum Request {
     DeleteBridge { id: String },
     #[serde(rename = "list_bridges")]
     ListBridges,
+    #[serde(rename = "get_diagnostics")]
+    GetDiagnostics { bridge_id: Option<String> },
+    #[serde(rename = "health_check")]
+    HealthCheck,
     #[serde(rename = "send_signal")]
     SendSignal {
         bridge_id: String,
@@ -100,12 +107,57 @@ struct BridgeInfo {
     target: String,
     target_addr: String,
     active: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    started_at: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    uptime_secs: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_error: Option<String>,
+    messages_sent: u64,
+    messages_received: u64,
+}
+
+/// Detailed diagnostics for a bridge
+#[derive(Debug, Clone, Serialize)]
+struct BridgeDiagnostics {
+    id: String,
+    protocol: String,
+    status: BridgeStatus,
+    config: serde_json::Value,
+    metrics: BridgeMetrics,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_activity: Option<u64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    recent_errors: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum BridgeStatus {
+    Starting,
+    Running,
+    Stopped,
+    Error,
+    Reconnecting,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+struct BridgeMetrics {
+    messages_sent: u64,
+    messages_received: u64,
+    bytes_sent: u64,
+    bytes_received: u64,
+    errors: u64,
+    reconnects: u64,
 }
 
 /// Active bridge handle
 struct ActiveBridge {
     info: BridgeInfo,
     bridge: Box<dyn Bridge>,
+    started_at: std::time::Instant,
+    metrics: Arc<RwLock<BridgeMetrics>>,
+    recent_errors: Arc<RwLock<Vec<String>>>,
 }
 
 /// Bridge service state
@@ -308,6 +360,42 @@ impl BridgeService {
                 Box::new(HttpBridge::new(config))
             }
 
+            #[cfg(feature = "socketio")]
+            "socketio" => {
+                let sio_namespace = extra_config
+                    .as_ref()
+                    .and_then(|c| c.get("sio_namespace"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("/")
+                    .to_string();
+
+                let events = extra_config
+                    .as_ref()
+                    .and_then(|c| c.get("events"))
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|e| e.as_str().map(String::from))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_else(|| vec!["message".to_string()]);
+
+                let auth = extra_config
+                    .as_ref()
+                    .and_then(|c| c.get("auth"))
+                    .cloned();
+
+                let config = SocketIOBridgeConfig {
+                    url: source_addr.clone(),
+                    sio_namespace,
+                    events,
+                    auth,
+                    reconnect: true,
+                    namespace: "/socketio".to_string(),
+                };
+                Box::new(SocketIOBridge::new(config))
+            }
+
             _ => {
                 return Err(anyhow!("Unsupported source protocol: {}", source));
             }
@@ -318,6 +406,17 @@ impl BridgeService {
         let bridge_id = id.clone();
         let mut bridge = bridge;
 
+        // Create metrics tracking
+        let metrics = Arc::new(RwLock::new(BridgeMetrics::default()));
+        let recent_errors = Arc::new(RwLock::new(Vec::new()));
+        let metrics_clone = metrics.clone();
+        let errors_clone = recent_errors.clone();
+        let started_at = std::time::Instant::now();
+        let start_timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
         match bridge.start().await {
             Ok(mut event_rx) => {
                 // Spawn task to handle bridge events
@@ -325,6 +424,12 @@ impl BridgeService {
                     while let Some(event) = event_rx.recv().await {
                         match event {
                             BridgeEvent::ToClasp(msg) => {
+                                // Track received messages
+                                {
+                                    let mut m = metrics_clone.write().await;
+                                    m.messages_received += 1;
+                                }
+
                                 // Extract address and value from the message
                                 let (address, value) = match &msg {
                                     Message::Set(set) => {
@@ -359,6 +464,11 @@ impl BridgeService {
                                     .await;
                             }
                             BridgeEvent::Disconnected { reason } => {
+                                // Track reconnects
+                                {
+                                    let mut m = metrics_clone.write().await;
+                                    m.reconnects += 1;
+                                }
                                 let _ = signal_tx
                                     .send(Response::BridgeEvent {
                                         bridge_id: bridge_id.clone(),
@@ -368,6 +478,19 @@ impl BridgeService {
                                     .await;
                             }
                             BridgeEvent::Error(e) => {
+                                // Track errors
+                                {
+                                    let mut m = metrics_clone.write().await;
+                                    m.errors += 1;
+                                }
+                                {
+                                    let mut errs = errors_clone.write().await;
+                                    errs.push(e.clone());
+                                    // Keep only last 10 errors
+                                    if errs.len() > 10 {
+                                        errs.remove(0);
+                                    }
+                                }
                                 let _ = signal_tx
                                     .send(Response::BridgeEvent {
                                         bridge_id: bridge_id.clone(),
@@ -392,11 +515,19 @@ impl BridgeService {
             target,
             target_addr,
             active: true,
+            started_at: Some(start_timestamp),
+            uptime_secs: None, // Computed dynamically
+            last_error: None,
+            messages_sent: 0,
+            messages_received: 0,
         };
 
         let active_bridge = ActiveBridge {
             info: info.clone(),
             bridge,
+            started_at,
+            metrics,
+            recent_errors,
         };
 
         self.bridges.write().await.insert(id, active_bridge);
@@ -415,19 +546,129 @@ impl BridgeService {
     }
 
     async fn list_bridges(&self) -> Vec<BridgeInfo> {
-        self.bridges
-            .read()
-            .await
-            .values()
-            .map(|b| BridgeInfo {
+        let bridges = self.bridges.read().await;
+        let mut result = Vec::new();
+
+        for b in bridges.values() {
+            let metrics = b.metrics.read().await;
+            let errors = b.recent_errors.read().await;
+            let uptime = b.started_at.elapsed().as_secs();
+
+            result.push(BridgeInfo {
                 id: b.info.id.clone(),
                 source: b.info.source.clone(),
                 source_addr: b.info.source_addr.clone(),
                 target: b.info.target.clone(),
                 target_addr: b.info.target_addr.clone(),
                 active: b.bridge.is_running(),
-            })
-            .collect()
+                started_at: b.info.started_at,
+                uptime_secs: Some(uptime),
+                last_error: errors.last().cloned(),
+                messages_sent: metrics.messages_sent,
+                messages_received: metrics.messages_received,
+            });
+        }
+
+        result
+    }
+
+    async fn get_diagnostics(&self, bridge_id: Option<String>) -> Result<serde_json::Value> {
+        let bridges = self.bridges.read().await;
+
+        if let Some(id) = bridge_id {
+            // Get diagnostics for specific bridge
+            if let Some(b) = bridges.get(&id) {
+                let metrics = b.metrics.read().await.clone();
+                let errors = b.recent_errors.read().await.clone();
+                let uptime = b.started_at.elapsed().as_secs();
+
+                let status = if b.bridge.is_running() {
+                    BridgeStatus::Running
+                } else if !errors.is_empty() {
+                    BridgeStatus::Error
+                } else {
+                    BridgeStatus::Stopped
+                };
+
+                let diag = BridgeDiagnostics {
+                    id: b.info.id.clone(),
+                    protocol: b.info.source.clone(),
+                    status,
+                    config: serde_json::json!({
+                        "source_addr": b.info.source_addr,
+                        "target": b.info.target,
+                        "target_addr": b.info.target_addr,
+                    }),
+                    metrics,
+                    last_activity: Some(std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0)),
+                    recent_errors: errors,
+                };
+
+                Ok(serde_json::to_value(diag).unwrap_or(serde_json::json!(null)))
+            } else {
+                Err(anyhow!("Bridge not found: {}", id))
+            }
+        } else {
+            // Get summary diagnostics for all bridges
+            let mut all_diags = Vec::new();
+
+            for b in bridges.values() {
+                let metrics = b.metrics.read().await.clone();
+                let errors = b.recent_errors.read().await.clone();
+
+                let status = if b.bridge.is_running() {
+                    BridgeStatus::Running
+                } else if !errors.is_empty() {
+                    BridgeStatus::Error
+                } else {
+                    BridgeStatus::Stopped
+                };
+
+                all_diags.push(BridgeDiagnostics {
+                    id: b.info.id.clone(),
+                    protocol: b.info.source.clone(),
+                    status,
+                    config: serde_json::json!({
+                        "source_addr": b.info.source_addr,
+                        "target": b.info.target,
+                        "target_addr": b.info.target_addr,
+                    }),
+                    metrics,
+                    last_activity: None,
+                    recent_errors: errors,
+                });
+            }
+
+            Ok(serde_json::to_value(all_diags).unwrap_or(serde_json::json!([])))
+        }
+    }
+
+    async fn health_check(&self) -> serde_json::Value {
+        let bridges = self.bridges.read().await;
+        let total = bridges.len();
+        let running = bridges.values().filter(|b| b.bridge.is_running()).count();
+        let errors: u64 = {
+            let mut sum = 0u64;
+            for b in bridges.values() {
+                sum += b.metrics.read().await.errors;
+            }
+            sum
+        };
+
+        serde_json::json!({
+            "status": if running == total && total > 0 { "healthy" } else if running > 0 { "degraded" } else { "idle" },
+            "bridges_total": total,
+            "bridges_running": running,
+            "bridges_stopped": total - running,
+            "total_errors": errors,
+            "uptime_secs": std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+        })
     }
 
     async fn send_signal(
@@ -666,6 +907,16 @@ async fn handle_request(service: &Arc<BridgeService>, request: Request) -> Respo
             Response::Ok {
                 data: serde_json::to_value(bridges).unwrap_or(serde_json::json!([])),
             }
+        }
+        Request::GetDiagnostics { bridge_id } => match service.get_diagnostics(bridge_id).await {
+            Ok(data) => Response::Ok { data },
+            Err(e) => Response::Error {
+                message: e.to_string(),
+            },
+        },
+        Request::HealthCheck => {
+            let health = service.health_check().await;
+            Response::Ok { data: health }
         }
         Request::SendSignal {
             bridge_id,

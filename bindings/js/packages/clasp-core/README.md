@@ -98,6 +98,110 @@ CLASP supports wildcards in subscriptions:
 | `/lights/*` | Single segment wildcard |
 | `/lights/**` | Multi-segment wildcard |
 
+## Browser Compatibility
+
+`@clasp-to/core` works in both Node.js and browser environments.
+
+### Browser Support
+
+| Browser | Version | Notes |
+|---------|---------|-------|
+| Chrome | 68+ | Full support |
+| Firefox | 63+ | Full support |
+| Safari | 12+ | Full support |
+| Edge | 79+ | Full support (Chromium) |
+| IE | Not supported | Use Edge or polyfills |
+
+### Bundle Size
+
+- **ESM**: ~15KB minified
+- **ESM + gzip**: ~5KB
+
+### Browser Usage
+
+```html
+<script type="module">
+import { Clasp } from 'https://unpkg.com/@clasp-to/core/dist/index.mjs';
+
+const clasp = new Clasp('wss://your-server.com:7330');
+await clasp.connect();
+
+// Use normally
+clasp.on('/sensor/*', (value, addr) => {
+  document.getElementById('display').textContent = `${addr}: ${value}`;
+});
+</script>
+```
+
+### Build Tool Integration
+
+Works with all modern bundlers:
+
+```javascript
+// Vite, Rollup, esbuild, webpack 5+
+import { Clasp } from '@clasp-to/core';
+```
+
+### React Example
+
+```jsx
+import { useEffect, useState, useRef } from 'react';
+import { Clasp } from '@clasp-to/core';
+
+function useClasp(url) {
+  const clientRef = useRef(null);
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    const client = new Clasp(url);
+    clientRef.current = client;
+
+    client.connect().then(() => setConnected(true));
+    client.onDisconnect(() => setConnected(false));
+
+    return () => client.close();
+  }, [url]);
+
+  return { client: clientRef.current, connected };
+}
+
+function Fader({ address }) {
+  const { client, connected } = useClasp('wss://localhost:7330');
+  const [value, setValue] = useState(0);
+
+  useEffect(() => {
+    if (!client || !connected) return;
+
+    const unsub = client.on(address, (v) => setValue(v));
+    return unsub;
+  }, [client, connected, address]);
+
+  const handleChange = (e) => {
+    const v = parseFloat(e.target.value);
+    setValue(v);
+    client?.set(address, v);
+  };
+
+  return (
+    <input
+      type="range"
+      min="0"
+      max="1"
+      step="0.01"
+      value={value}
+      onChange={handleChange}
+      disabled={!connected}
+    />
+  );
+}
+```
+
+### Known Limitations
+
+- **No mDNS discovery**: Browsers cannot perform mDNS lookups. Provide explicit server URLs.
+- **No raw UDP/TCP**: Only WebSocket transport is available in browsers.
+- **CORS**: Server must allow cross-origin connections if client is served from different domain.
+
 ## Documentation
 
 Visit **[clasp.to](https://clasp.to)** for full documentation.

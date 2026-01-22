@@ -110,6 +110,12 @@ impl Default for WebSocketBridgeConfig {
 /// WebSocket client connection
 type WsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
+/// WebSocket server connection (raw TCP)
+type WsServerStream = WebSocketStream<TcpStream>;
+
+/// Type alias for split sink
+type WsSink = futures::stream::SplitSink<WsServerStream, WsMessage>;
+
 /// WebSocket Bridge implementation
 pub struct WebSocketBridge {
     config: BridgeConfig,
@@ -366,9 +372,13 @@ impl WebSocketBridge {
         format: WsMessageFormat,
         namespace: String,
         event_tx: mpsc::Sender<BridgeEvent>,
+        mut send_rx: mpsc::Receiver<WsMessage>,
         mut shutdown_rx: mpsc::Receiver<()>,
         running: Arc<Mutex<bool>>,
     ) {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        use tokio::sync::RwLock;
+
         let listener = match TcpListener::bind(addr).await {
             Ok(l) => l,
             Err(e) => {
@@ -384,41 +394,81 @@ impl WebSocketBridge {
         *running.lock() = true;
         let _ = event_tx.send(BridgeEvent::Connected).await;
 
+        // Track connected clients with their send channels
+        let clients: Arc<RwLock<HashMap<u64, mpsc::Sender<WsMessage>>>> = Arc::new(RwLock::new(HashMap::new()));
+        let next_client_id = Arc::new(AtomicU64::new(0));
+
         loop {
             tokio::select! {
                 result = listener.accept() => {
                     match result {
                         Ok((stream, peer_addr)) => {
-                            info!("WebSocket client connected: {}", peer_addr);
+                            let client_id = next_client_id.fetch_add(1, Ordering::SeqCst);
+                            info!("WebSocket client {} connected: {}", client_id, peer_addr);
 
                             let format = format;
                             let namespace = namespace.clone();
                             let event_tx = event_tx.clone();
+                            let clients = clients.clone();
+
+                            // Create a channel for sending to this specific client
+                            let (client_tx, mut client_rx) = mpsc::channel::<WsMessage>(100);
+                            clients.write().await.insert(client_id, client_tx);
 
                             tokio::spawn(async move {
                                 if let Ok(ws_stream) = accept_async(stream).await {
-                                    let (_write, mut read) = ws_stream.split();
+                                    let (mut write, mut read) = ws_stream.split();
 
-                                    while let Some(msg) = read.next().await {
-                                        match msg {
-                                            Ok(ws_msg) => {
-                                                if let Some(clasp_msg) = Self::parse_message(&ws_msg, format, &namespace) {
-                                                    let _ = event_tx.send(BridgeEvent::ToClasp(clasp_msg)).await;
+                                    loop {
+                                        tokio::select! {
+                                            // Handle incoming messages from client
+                                            msg = read.next() => {
+                                                match msg {
+                                                    Some(Ok(ws_msg)) => {
+                                                        if let Some(clasp_msg) = Self::parse_message(&ws_msg, format, &namespace) {
+                                                            let _ = event_tx.send(BridgeEvent::ToClasp(clasp_msg)).await;
+                                                        }
+                                                    }
+                                                    Some(Err(e)) => {
+                                                        debug!("WebSocket client {} error: {}", client_id, e);
+                                                        break;
+                                                    }
+                                                    None => break,
                                                 }
                                             }
-                                            Err(e) => {
-                                                debug!("WebSocket client error: {}", e);
-                                                break;
+                                            // Handle outgoing messages to client
+                                            msg = client_rx.recv() => {
+                                                match msg {
+                                                    Some(ws_msg) => {
+                                                        if let Err(e) = write.send(ws_msg).await {
+                                                            debug!("Failed to send to client {}: {}", client_id, e);
+                                                            break;
+                                                        }
+                                                    }
+                                                    None => break,
+                                                }
                                             }
                                         }
                                     }
                                 }
 
-                                info!("WebSocket client disconnected: {}", peer_addr);
+                                // Clean up client on disconnect
+                                clients.write().await.remove(&client_id);
+                                info!("WebSocket client {} disconnected: {}", client_id, peer_addr);
                             });
                         }
                         Err(e) => {
                             error!("WebSocket accept error: {}", e);
+                        }
+                    }
+                }
+                // Handle messages to broadcast to all clients
+                msg = send_rx.recv() => {
+                    if let Some(ws_msg) = msg {
+                        // Broadcast to all connected clients
+                        let client_list: Vec<_> = clients.read().await.values().cloned().collect();
+                        for tx in client_list {
+                            let _ = tx.send(ws_msg.clone()).await;
                         }
                     }
                 }
@@ -484,6 +534,7 @@ impl Bridge for WebSocketBridge {
                     ws_config.format,
                     ws_config.namespace,
                     event_tx,
+                    send_rx,
                     shutdown_rx,
                     running,
                 ));

@@ -201,6 +201,13 @@ export interface SyncMessage {
   t3?: number;
 }
 
+/** ANNOUNCE message */
+export interface AnnounceMessage {
+  type: 'ANNOUNCE';
+  signals: SignalDefinition[];
+  namespace?: string;
+}
+
 /** QUERY message */
 export interface QueryMessage {
   type: 'QUERY';
@@ -231,6 +238,7 @@ export interface SignalDefinition {
 export type Message =
   | HelloMessage
   | WelcomeMessage
+  | AnnounceMessage
   | SubscribeMessage
   | UnsubscribeMessage
   | SetMessage
@@ -253,6 +261,8 @@ export interface ConnectOptions {
   token?: string;
   reconnect?: boolean;
   reconnectInterval?: number;
+  /** Connection timeout in milliseconds (default: 10000) */
+  connectionTimeout?: number;
 }
 
 /** Subscription callback */

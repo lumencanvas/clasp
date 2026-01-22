@@ -50,7 +50,7 @@ function encodeFrame(message, options = {}) {
   const headerSize = options.timestamp ? 12 : 4;
   const frame = Buffer.alloc(headerSize + payload.length);
 
-  frame[0] = 0x43;  // Magic 'C'
+  frame[0] = 0x53;  // Magic 'S' (for Streaming)
   frame[1] = flags;
   frame.writeUInt16BE(payload.length, 2);
 
@@ -70,7 +70,7 @@ function encodeFrame(message, options = {}) {
  * Decode a CLASP frame
  */
 function decodeFrame(buffer) {
-  if (buffer[0] !== 0x43) {
+  if (buffer[0] !== 0x53) {
     throw new Error('Invalid magic byte');
   }
 
@@ -328,19 +328,34 @@ class Clasp {
   }
 
   // Public API: Query signals
-  async query(pattern) {
-    return new Promise((resolve) => {
-      const handler = (msg) => {
-        if (msg.type === MSG.RESULT) {
-          this.ws.removeEventListener('message', handler);
-          resolve(msg.signals || []);
+  async query(pattern, timeout = 5000) {
+    return new Promise((resolve, reject) => {
+      let timeoutId;
+
+      const messageHandler = (event) => {
+        try {
+          const { message } = decodeFrame(Buffer.from(event.data));
+          if (message.type === MSG.RESULT) {
+            cleanup();
+            resolve(message.signals || []);
+          }
+        } catch (e) {
+          // Ignore decode errors for non-RESULT messages
         }
       };
-      this.ws.addEventListener('message', (event) => {
-        const { message } = decodeFrame(Buffer.from(event.data));
-        handler(message);
-      });
 
+      const cleanup = () => {
+        if (timeoutId) clearTimeout(timeoutId);
+        this.ws.removeEventListener('message', messageHandler);
+      };
+
+      // Set timeout to prevent hanging promises
+      timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error('Query timeout'));
+      }, timeout);
+
+      this.ws.addEventListener('message', messageHandler);
       this._send({ type: MSG.QUERY, pattern });
     });
   }

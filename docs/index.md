@@ -59,10 +59,10 @@ clasp bridge create --source osc:8000 --target midi:default
 | MIDI | Bidirectional | ✅ Stable |
 | DMX | Output | ✅ Stable |
 | Art-Net | Bidirectional | ✅ Stable |
-| MQTT | Bidirectional | 🚧 Planned |
-| WebSocket | Bidirectional | 🚧 Planned |
+| MQTT | Bidirectional | ✅ Implemented |
+| WebSocket | Bidirectional | ✅ Implemented |
 | Socket.IO | Bidirectional | 🚧 Planned |
-| HTTP/REST | Server + Client | 🚧 Planned |
+| HTTP/REST | Server + Client | ✅ Implemented |
 
 ## Architecture
 

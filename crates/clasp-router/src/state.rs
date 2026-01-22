@@ -1,7 +1,7 @@
 //! Router state management
 
 use clasp_core::state::{ParamState, StateStore, UpdateError};
-use clasp_core::{Message, ParamValue, SetMessage, SnapshotMessage, Value};
+use clasp_core::{ParamValue, SetMessage, SignalDefinition, SnapshotMessage, Value};
 use dashmap::DashMap;
 use parking_lot::RwLock;
 
@@ -13,6 +13,8 @@ pub struct RouterState {
     params: RwLock<StateStore>,
     /// Change listeners (for reactive updates)
     listeners: DashMap<String, Vec<Box<dyn Fn(&str, &Value) + Send + Sync>>>,
+    /// Signal registry (announced signals from clients)
+    signals: DashMap<String, SignalDefinition>,
 }
 
 impl RouterState {
@@ -20,7 +22,29 @@ impl RouterState {
         Self {
             params: RwLock::new(StateStore::new()),
             listeners: DashMap::new(),
+            signals: DashMap::new(),
         }
+    }
+
+    /// Register signals from an ANNOUNCE message
+    pub fn register_signals(&self, signals: Vec<SignalDefinition>) {
+        for signal in signals {
+            self.signals.insert(signal.address.clone(), signal);
+        }
+    }
+
+    /// Query signals matching a pattern
+    pub fn query_signals(&self, pattern: &str) -> Vec<SignalDefinition> {
+        self.signals
+            .iter()
+            .filter(|entry| clasp_core::address::glob_match(pattern, entry.key()))
+            .map(|entry| entry.value().clone())
+            .collect()
+    }
+
+    /// Get all registered signals
+    pub fn all_signals(&self) -> Vec<SignalDefinition> {
+        self.signals.iter().map(|entry| entry.value().clone()).collect()
     }
 
     /// Get a parameter value
