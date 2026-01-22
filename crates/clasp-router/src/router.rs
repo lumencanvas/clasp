@@ -28,8 +28,8 @@
 
 use bytes::Bytes;
 use clasp_core::{
-    codec, AckMessage, Action, CpskValidator, ErrorMessage, Frame, Message, SecurityMode,
-    SignalType, TokenValidator, ValidationResult, PROTOCOL_VERSION,
+    codec, AckMessage, Action, CpskValidator, ErrorMessage, Frame, Message, PublishMessage,
+    SecurityMode, SetMessage, SignalType, TokenValidator, ValidationResult, PROTOCOL_VERSION,
 };
 use clasp_transport::{TransportEvent, TransportReceiver, TransportSender, TransportServer};
 use dashmap::DashMap;
@@ -92,6 +92,8 @@ pub struct RouterConfig {
     pub session_timeout: u64,
     /// Security mode (Open or Authenticated)
     pub security_mode: SecurityMode,
+    /// Maximum subscriptions per session (0 = unlimited)
+    pub max_subscriptions_per_session: usize,
 }
 
 impl Default for RouterConfig {
@@ -107,6 +109,7 @@ impl Default for RouterConfig {
             max_sessions: 100,
             session_timeout: 300,
             security_mode: SecurityMode::Open,
+            max_subscriptions_per_session: 1000, // 0 = unlimited
         }
     }
 }
@@ -197,6 +200,11 @@ impl Router {
         info!("Router accepting connections");
         *self.running.write() = true;
 
+        // Start session cleanup task if timeout is configured
+        if self.config.session_timeout > 0 {
+            self.start_session_cleanup_task();
+        }
+
         while *self.running.read() {
             match server.accept().await {
                 Ok((sender, receiver, addr)) => {
@@ -210,6 +218,43 @@ impl Router {
         }
 
         Ok(())
+    }
+
+    /// Start background task to clean up timed-out sessions
+    fn start_session_cleanup_task(&self) {
+        let sessions = Arc::clone(&self.sessions);
+        let subscriptions = Arc::clone(&self.subscriptions);
+        let running = Arc::clone(&self.running);
+        let timeout_secs = self.config.session_timeout;
+
+        tokio::spawn(async move {
+            let check_interval = std::time::Duration::from_secs(timeout_secs / 4).max(std::time::Duration::from_secs(10));
+            let timeout = std::time::Duration::from_secs(timeout_secs);
+
+            loop {
+                tokio::time::sleep(check_interval).await;
+
+                if !*running.read() {
+                    break;
+                }
+
+                // Find and remove timed-out sessions
+                let timed_out: Vec<SessionId> = sessions
+                    .iter()
+                    .filter(|entry| entry.value().idle_duration() > timeout)
+                    .map(|entry| entry.key().clone())
+                    .collect();
+
+                for session_id in timed_out {
+                    if let Some((id, session)) = sessions.remove(&session_id) {
+                        info!("Session {} timed out after {:?} idle", id, session.idle_duration());
+                        subscriptions.remove_session(&id);
+                    }
+                }
+            }
+
+            debug!("Session cleanup task stopped");
+        });
     }
 
     // =========================================================================
@@ -660,6 +705,24 @@ async fn handle_message(
         Message::Subscribe(sub) => {
             let session = session.as_ref()?;
 
+            // Check subscription limit
+            let current_subs = session.subscriptions().len();
+            let max_subs = 1000; // Default limit
+            if current_subs >= max_subs {
+                warn!(
+                    "Session {} subscription limit reached ({}/{})",
+                    session.id, current_subs, max_subs
+                );
+                let error = Message::Error(ErrorMessage {
+                    code: 429, // Too Many Requests
+                    message: format!("Subscription limit reached (max {})", max_subs),
+                    address: Some(sub.pattern.clone()),
+                    correlation_id: None,
+                });
+                let bytes = codec::encode(&error).ok()?;
+                return Some(MessageResult::Send(bytes));
+            }
+
             // Check scope for read access (in authenticated mode)
             if security_mode == SecurityMode::Authenticated
                 && !session.has_scope(Action::Read, &sub.pattern)
@@ -973,8 +1036,11 @@ async fn handle_message(
         Message::Bundle(bundle) => {
             let session = session.as_ref()?;
 
-            // Process each message in the bundle atomically
-            // For now, we process SET and PUBLISH messages which are the common bundle contents
+            // PHASE 1: Validate ALL messages first (atomic validation)
+            // If any validation fails, reject the entire bundle
+            let mut validated_sets: Vec<&SetMessage> = Vec::new();
+            let mut validated_pubs: Vec<&PublishMessage> = Vec::new();
+
             for inner_msg in &bundle.messages {
                 match inner_msg {
                     Message::Set(set) => {
@@ -983,32 +1049,26 @@ async fn handle_message(
                             && !session.has_scope(Action::Write, &set.address)
                         {
                             warn!(
-                                "Session {} denied bundled SET to {} - insufficient scope",
+                                "Session {} denied bundled SET to {} - rejecting entire bundle",
                                 session.id, set.address
                             );
-                            continue; // Skip this message but continue with others
+                            // Return error for the entire bundle
+                            let err = Message::Error(ErrorMessage {
+                                code: 403,
+                                message: format!(
+                                    "Bundle rejected: insufficient scope for SET to {}",
+                                    set.address
+                                ),
+                                address: Some(set.address.clone()),
+                                correlation_id: None,
+                            });
+                            let err_bytes = codec::encode(&err).ok()?;
+                            return Some(MessageResult::Send(err_bytes));
                         }
 
-                        // Apply to state
-                        if let Ok(revision) = state.apply_set(set, &session.id) {
-                            // Broadcast to subscribers
-                            let subscribers =
-                                subscriptions.find_subscribers(&set.address, Some(SignalType::Param));
-
-                            // Create updated SET message with revision
-                            let mut updated_set = set.clone();
-                            updated_set.revision = Some(revision);
-                            let broadcast_msg = Message::Set(updated_set);
-
-                            if let Ok(bytes) = codec::encode(&broadcast_msg) {
-                                // Send to all subscribers (including sender for confirmation)
-                                for sub_session_id in subscribers {
-                                    if let Some(sub_session) = sessions.get(&sub_session_id) {
-                                        let _ = sub_session.send(bytes.clone()).await;
-                                    }
-                                }
-                            }
-                        }
+                        // Lock checks happen during apply_set - the state store
+                        // validates locks when actually applying the change
+                        validated_sets.push(set);
                     }
                     Message::Publish(pub_msg) => {
                         // Check scope for write access (in authenticated mode)
@@ -1016,25 +1076,22 @@ async fn handle_message(
                             && !session.has_scope(Action::Write, &pub_msg.address)
                         {
                             warn!(
-                                "Session {} denied bundled PUBLISH to {} - insufficient scope",
+                                "Session {} denied bundled PUBLISH to {} - rejecting entire bundle",
                                 session.id, pub_msg.address
                             );
-                            continue;
+                            let err = Message::Error(ErrorMessage {
+                                code: 403,
+                                message: format!(
+                                    "Bundle rejected: insufficient scope for PUBLISH to {}",
+                                    pub_msg.address
+                                ),
+                                address: Some(pub_msg.address.clone()),
+                                correlation_id: None,
+                            });
+                            let err_bytes = codec::encode(&err).ok()?;
+                            return Some(MessageResult::Send(err_bytes));
                         }
-
-                        // Find subscribers and broadcast
-                        let subscribers =
-                            subscriptions.find_subscribers(&pub_msg.address, pub_msg.signal);
-
-                        if let Ok(bytes) = codec::encode(inner_msg) {
-                            for sub_session_id in subscribers {
-                                if sub_session_id != session.id {
-                                    if let Some(sub_session) = sessions.get(&sub_session_id) {
-                                        let _ = sub_session.send(bytes.clone()).await;
-                                    }
-                                }
-                            }
-                        }
+                        validated_pubs.push(pub_msg);
                     }
                     _ => {
                         // Other message types in bundles are currently not processed
@@ -1043,10 +1100,60 @@ async fn handle_message(
                 }
             }
 
-            // Send a single ACK for the entire bundle
+            // PHASE 2: Apply all validated changes atomically
+            // Now that all validations passed, apply changes
+            let mut applied_revisions: Vec<(String, u64)> = Vec::new();
+
+            for set in &validated_sets {
+                match state.apply_set(set, &session.id) {
+                    Ok(revision) => {
+                        applied_revisions.push((set.address.clone(), revision));
+
+                        // Broadcast to subscribers
+                        let subscribers =
+                            subscriptions.find_subscribers(&set.address, Some(SignalType::Param));
+
+                        // Create updated SET message with revision
+                        let mut updated_set: SetMessage = (*set).clone();
+                        updated_set.revision = Some(revision);
+                        let broadcast_msg = Message::Set(updated_set);
+
+                        if let Ok(bytes) = codec::encode(&broadcast_msg) {
+                            for sub_session_id in subscribers {
+                                if let Some(sub_session) = sessions.get(&sub_session_id) {
+                                    let _ = sub_session.send(bytes.clone()).await;
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        // This shouldn't happen after validation, but handle gracefully
+                        error!("Bundle SET apply failed after validation: {}", e);
+                    }
+                }
+            }
+
+            // Process PUBLISH messages
+            for pub_msg in &validated_pubs {
+                let subscribers =
+                    subscriptions.find_subscribers(&pub_msg.address, pub_msg.signal);
+
+                let inner_msg = Message::Publish((*pub_msg).clone());
+                if let Ok(bytes) = codec::encode(&inner_msg) {
+                    for sub_session_id in subscribers {
+                        if sub_session_id != session.id {
+                            if let Some(sub_session) = sessions.get(&sub_session_id) {
+                                let _ = sub_session.send(bytes.clone()).await;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Send a single ACK for the entire bundle with count of applied operations
             let ack = Message::Ack(AckMessage {
                 address: None,
-                revision: None,
+                revision: applied_revisions.last().map(|(_, r)| *r),
                 locked: None,
                 holder: None,
                 correlation_id: None,

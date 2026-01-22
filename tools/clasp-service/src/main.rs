@@ -40,6 +40,9 @@ use clasp_bridge::{HttpBridge, HttpBridgeConfig, HttpMode};
 #[cfg(feature = "socketio")]
 use clasp_bridge::{SocketIOBridge, SocketIOBridgeConfig};
 
+#[cfg(feature = "sacn")]
+use clasp_bridge::{SacnBridge, SacnBridgeConfig, SacnMode};
+
 /// Request from Electron
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
@@ -356,6 +359,8 @@ impl BridgeService {
                     base_path,
                     timeout_secs: 30,
                     namespace: "/http".to_string(),
+                    poll_interval_ms: 0,
+                    poll_endpoints: vec![],
                 };
                 Box::new(HttpBridge::new(config))
             }
@@ -394,6 +399,82 @@ impl BridgeService {
                     namespace: "/socketio".to_string(),
                 };
                 Box::new(SocketIOBridge::new(config))
+            }
+
+            #[cfg(feature = "sacn")]
+            "sacn" => {
+                // Parse mode from config
+                let mode = extra_config
+                    .as_ref()
+                    .and_then(|c| c.get("mode"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| match s {
+                        "sender" => SacnMode::Sender,
+                        "bidirectional" => SacnMode::Bidirectional,
+                        _ => SacnMode::Receiver,
+                    })
+                    .unwrap_or(SacnMode::Receiver);
+
+                // Parse universes from config or default to [1]
+                let universes: Vec<u16> = extra_config
+                    .as_ref()
+                    .and_then(|c| c.get("universes"))
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_u64().map(|n| n as u16))
+                            .collect()
+                    })
+                    .unwrap_or_else(|| vec![1]);
+
+                let priority = extra_config
+                    .as_ref()
+                    .and_then(|c| c.get("priority"))
+                    .and_then(|v| v.as_u64())
+                    .map(|n| n as u8)
+                    .unwrap_or(100);
+
+                let source_name = extra_config
+                    .as_ref()
+                    .and_then(|c| c.get("source_name"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("CLASP sACN Bridge")
+                    .to_string();
+
+                let multicast = extra_config
+                    .as_ref()
+                    .and_then(|c| c.get("multicast"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
+
+                let unicast_destinations: Vec<String> = extra_config
+                    .as_ref()
+                    .and_then(|c| c.get("unicast_destinations"))
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                let config = SacnBridgeConfig {
+                    mode,
+                    universes,
+                    source_name,
+                    priority,
+                    bind_address: if source_addr.is_empty() {
+                        None
+                    } else {
+                        Some(source_addr.clone())
+                    },
+                    multicast,
+                    unicast_destinations,
+                    namespace: "/sacn".to_string(),
+                    preview: false,
+                    sync_address: 0,
+                };
+                Box::new(SacnBridge::new(config))
             }
 
             _ => {

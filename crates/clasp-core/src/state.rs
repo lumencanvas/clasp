@@ -165,6 +165,27 @@ pub enum UpdateError {
     OutOfRange,
 }
 
+impl std::fmt::Display for UpdateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RevisionConflict { expected, actual } => {
+                write!(f, "Revision conflict: expected {}, got {}", expected, actual)
+            }
+            Self::LockHeld { holder } => {
+                write!(f, "Parameter locked by {}", holder)
+            }
+            Self::ConflictRejected => {
+                write!(f, "Update rejected by conflict strategy")
+            }
+            Self::OutOfRange => {
+                write!(f, "Value out of allowed range")
+            }
+        }
+    }
+}
+
+impl std::error::Error for UpdateError {}
+
 /// State store for multiple params
 #[derive(Debug, Default)]
 pub struct StateStore {
@@ -251,8 +272,8 @@ impl StateStore {
 fn current_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_micros() as u64
+        .map(|d| d.as_micros() as u64)
+        .unwrap_or(0)
 }
 
 #[cfg(test)]

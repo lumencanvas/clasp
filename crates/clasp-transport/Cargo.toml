@@ -18,7 +18,7 @@ wasm-websocket = ["wasm-bindgen", "wasm-bindgen-futures", "web-sys", "js-sys"]
 
 # Native-only transports (not available in WASM)
 udp = []
-quic = ["quinn", "rustls"]
+quic = ["quinn", "rustls", "rustls-native-certs"]
 serial = ["tokio-serial"]
 ble = ["btleplug", "uuid"]
 webrtc = ["webrtc-rs", "serde_json"]
@@ -53,6 +53,7 @@ url = { version = "2.5", optional = true }
 # QUIC (optional)
 quinn = { workspace = true, optional = true }
 rustls = { version = "0.23", optional = true, default-features = false, features = ["ring", "std"] }
+rustls-native-certs = { version = "0.8", optional = true }
 
 # Serial (optional)
 tokio-serial = { version = "5.4", optional = true }

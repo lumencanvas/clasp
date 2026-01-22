@@ -199,20 +199,22 @@ impl QuicTransport {
                 // Use system root certificates
                 let mut root_store = rustls::RootCertStore::empty();
 
-                // Try to load native certs
-                match rustls_native_certs::load_native_certs() {
-                    Ok(certs) => {
-                        for cert in certs {
-                            if let Err(e) = root_store.add(cert) {
-                                debug!("Failed to add system cert: {}", e);
-                            }
-                        }
-                        info!("Loaded {} system root certificates", root_store.len());
-                    }
-                    Err(e) => {
-                        warn!("Failed to load system certs: {}", e);
+                // Load native certs - CertificateResult has certs and errors fields
+                let cert_result = rustls_native_certs::load_native_certs();
+
+                // Log any errors encountered during loading
+                for err in &cert_result.errors {
+                    debug!("Certificate loading error: {}", err);
+                }
+
+                // Add all successfully loaded certificates
+                for cert in cert_result.certs {
+                    if let Err(e) = root_store.add(cert) {
+                        debug!("Failed to add system cert: {}", e);
                     }
                 }
+
+                info!("Loaded {} system root certificates", root_store.len());
 
                 if root_store.is_empty() {
                     return Err(TransportError::ConnectionFailed(

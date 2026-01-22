@@ -32,6 +32,9 @@ pub mod artnet;
 #[cfg(feature = "dmx")]
 pub mod dmx;
 
+#[cfg(feature = "sacn")]
+pub mod sacn;
+
 #[cfg(feature = "mqtt")]
 pub mod mqtt;
 
@@ -60,6 +63,9 @@ pub use artnet::{ArtNetBridge, ArtNetBridgeConfig};
 
 #[cfg(feature = "dmx")]
 pub use dmx::{DmxBridge, DmxBridgeConfig, DmxInterfaceType};
+
+#[cfg(feature = "sacn")]
+pub use sacn::{SacnBridge, SacnBridgeConfig, SacnMode};
 
 #[cfg(feature = "mqtt")]
 pub use mqtt::{MqttBridge, MqttBridgeConfig};

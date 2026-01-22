@@ -14,7 +14,7 @@ pub struct RouterState {
     /// Change listeners (for reactive updates)
     listeners: DashMap<String, Vec<Box<dyn Fn(&str, &Value) + Send + Sync>>>,
     /// Signal registry (announced signals from clients)
-    signals: DashMap<String, SignalDefinition>,
+    pub signals: DashMap<String, SignalDefinition>,
 }
 
 impl RouterState {

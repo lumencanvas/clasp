@@ -311,11 +311,11 @@ impl CpskValidator {
     pub fn generate_token() -> String {
         use std::time::{SystemTime, UNIX_EPOCH};
 
-        // Use time-based seed for randomness
+        // Use time-based seed for randomness (fallback to 0 if time is before epoch)
         let seed = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
 
         // Simple LCG-based random generator
         let mut state = seed as u64;

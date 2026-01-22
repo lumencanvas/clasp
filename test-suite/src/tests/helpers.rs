@@ -131,6 +131,7 @@ impl TestRouter {
                 "stream".to_string(),
             ],
             security_mode: SecurityMode::Open,
+            max_subscriptions_per_session: 1000,
         })
         .await
     }

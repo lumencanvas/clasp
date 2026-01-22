@@ -60,6 +60,19 @@ pub struct EndpointConfig {
     /// Description for documentation
     #[serde(default)]
     pub description: Option<String>,
+    /// Whether this endpoint is enabled (default: true)
+    #[serde(default = "endpoint_enabled_default")]
+    pub enabled: bool,
+    /// Required scope/permission for this endpoint (empty = no auth required)
+    #[serde(default)]
+    pub required_scope: Option<String>,
+    /// Rate limit (requests per minute, 0 = unlimited)
+    #[serde(default)]
+    pub rate_limit: u32,
+}
+
+fn endpoint_enabled_default() -> bool {
+    true
 }
 
 /// HTTP Bridge configuration
@@ -124,24 +137,36 @@ impl Default for HttpBridgeConfig {
                     method: HttpMethod::GET,
                     clasp_address: "/**".to_string(),
                     description: Some("List all signals".to_string()),
+                    enabled: true,
+                    required_scope: None,
+                    rate_limit: 0,
                 },
                 EndpointConfig {
                     path: "/signals/*path".to_string(),
                     method: HttpMethod::GET,
                     clasp_address: "/{path}".to_string(),
                     description: Some("Get signal value".to_string()),
+                    enabled: true,
+                    required_scope: None,
+                    rate_limit: 0,
                 },
                 EndpointConfig {
                     path: "/signals/*path".to_string(),
                     method: HttpMethod::PUT,
                     clasp_address: "/{path}".to_string(),
                     description: Some("Set signal value".to_string()),
+                    enabled: true,
+                    required_scope: Some("write".to_string()),
+                    rate_limit: 0,
                 },
                 EndpointConfig {
                     path: "/signals/*path".to_string(),
                     method: HttpMethod::POST,
                     clasp_address: "/{path}".to_string(),
                     description: Some("Publish event".to_string()),
+                    enabled: true,
+                    required_scope: Some("write".to_string()),
+                    rate_limit: 0,
                 },
             ],
             cors_enabled: true,

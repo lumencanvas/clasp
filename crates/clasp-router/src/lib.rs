@@ -63,9 +63,8 @@
 //!
 //! let config = RouterConfig {
 //!     max_sessions: 1000,
-//!     max_params: 100_000,
 //!     max_subscriptions_per_session: 1000,
-//!     session_timeout_secs: 300,
+//!     session_timeout: 300,
 //!     ..Default::default()
 //! };
 //!

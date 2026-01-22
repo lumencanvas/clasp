@@ -28,6 +28,7 @@ async fn test_router_custom_config() {
         session_timeout: 120,
         features: vec!["param".to_string(), "event".to_string()],
         security_mode: SecurityMode::Open,
+        max_subscriptions_per_session: 1000,
     };
     let router = Router::new(config);
     assert_eq!(router.session_count(), 0);

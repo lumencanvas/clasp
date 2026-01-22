@@ -45,6 +45,7 @@ impl TestRouter {
             session_timeout: 300,
             features: vec!["param".to_string(), "event".to_string()],
             security_mode: SecurityMode::Open,
+            max_subscriptions_per_session: 1000,
         });
 
         let handle = tokio::spawn(async move {

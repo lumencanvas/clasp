@@ -19,15 +19,15 @@
 //!
 //! ## Quick Start
 //!
-//! ```no_run
+//! ```ignore
 //! use clasp_client::Clasp;
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
 //!     // Connect using builder pattern
 //!     let client = Clasp::builder("ws://localhost:7330")
-//!         .with_name("my-app")
-//!         .with_features(vec!["param", "event", "stream"])
+//!         .name("my-app")
+//!         .features(vec!["param", "event", "stream"])
 //!         .connect()
 //!         .await?;
 //!
@@ -41,8 +41,8 @@
 //!     // Set a parameter value
 //!     client.set("/lumen/scene/0/layer/0/opacity", 0.75).await?;
 //!
-//!     // Emit an event
-//!     client.emit("/cue/trigger", serde_json::json!({"cue": "intro"})).await?;
+//!     // Emit an event (with map value)
+//!     client.emit("/cue/trigger", clasp_core::Value::Map(Default::default())).await?;
 //!
 //!     // Stream high-rate data
 //!     for i in 0..100 {

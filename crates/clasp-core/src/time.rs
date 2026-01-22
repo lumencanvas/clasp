@@ -8,11 +8,13 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 pub type Timestamp = u64;
 
 /// Get current Unix timestamp in microseconds
+///
+/// Falls back to 0 if system time is before UNIX_EPOCH (edge case on misconfigured systems)
 pub fn now() -> Timestamp {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_micros() as Timestamp
+        .map(|d| d.as_micros() as Timestamp)
+        .unwrap_or(0)
 }
 
 /// Convert microseconds to Duration
@@ -280,10 +282,9 @@ impl<T: Clone> JitterBuffer<T> {
 
     /// Current buffer depth (time span in microseconds)
     pub fn depth_us(&self) -> u64 {
-        if self.buffer.len() < 2 {
-            0
-        } else {
-            self.buffer.last().unwrap().0 - self.buffer.first().unwrap().0
+        match (self.buffer.first(), self.buffer.last()) {
+            (Some(first), Some(last)) if self.buffer.len() >= 2 => last.0 - first.0,
+            _ => 0,
         }
     }
 }

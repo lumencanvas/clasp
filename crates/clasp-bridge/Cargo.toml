@@ -15,7 +15,7 @@ default = ["osc", "midi", "artnet", "dmx", "mqtt", "websocket", "http"]
 osc = ["rosc"]
 midi = ["midir"]
 artnet = ["artnet_protocol"]
-sacn = []
+sacn = ["sacn-lib"]
 dmx = []
 mqtt = ["rumqttc"]
 websocket = ["tokio-tungstenite"]
@@ -42,6 +42,9 @@ tracing = { workspace = true }
 rosc = { workspace = true, optional = true }
 midir = { workspace = true, optional = true }
 artnet_protocol = { workspace = true, optional = true }
+
+# sACN/E1.31
+sacn-lib = { package = "sacn", version = "0.11", optional = true }
 
 # Protocols - Modern
 rumqttc = { version = "0.24", optional = true }

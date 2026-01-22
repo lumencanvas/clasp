@@ -118,6 +118,7 @@ impl TestRouter {
             session_timeout: 60,
             features: vec!["param".to_string(), "event".to_string()],
             security_mode: SecurityMode::Open,
+            max_subscriptions_per_session: 1000,
         })
         .await
     }
@@ -460,6 +461,7 @@ async fn test_max_sessions_limit() -> TestResult {
             session_timeout: 60,
             features: vec!["param".to_string()],
             security_mode: SecurityMode::Open,
+            max_subscriptions_per_session: 1000,
         })
         .await;
 

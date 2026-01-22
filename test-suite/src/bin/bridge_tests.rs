@@ -170,6 +170,8 @@ fn test_http_config_client_mode() -> TestResult {
         base_path: "/v1".to_string(),
         timeout_secs: 60,
         namespace: "/api".to_string(),
+        poll_interval_ms: 0,
+        poll_endpoints: vec![],
     };
 
     if config.mode == HttpMode::Client

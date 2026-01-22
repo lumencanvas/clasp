@@ -181,7 +181,43 @@ impl WebSocketBridge {
                         }))
                     }
                 }
-                WsMessageFormat::MsgPack => None,
+                WsMessageFormat::MsgPack => {
+                    // MsgPack format expects binary messages, but try to parse text as JSON
+                    // and convert to CLASP message for better interoperability
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(text) {
+                        // Check if it looks like a CLASP message format
+                        if let (Some(addr), Some(val)) = (
+                            json.get("address").and_then(|a| a.as_str()),
+                            json.get("value"),
+                        ) {
+                            Some(Message::Set(SetMessage {
+                                address: addr.to_string(),
+                                value: Self::json_to_value(val.clone()),
+                                revision: None,
+                                lock: false,
+                                unlock: false,
+                            }))
+                        } else {
+                            // Wrap text as a message for the namespace
+                            Some(Message::Set(SetMessage {
+                                address: format!("{}/text", prefix),
+                                value: Value::String(text.clone()),
+                                revision: None,
+                                lock: false,
+                                unlock: false,
+                            }))
+                        }
+                    } else {
+                        // Plain text, wrap as message
+                        Some(Message::Set(SetMessage {
+                            address: format!("{}/text", prefix),
+                            value: Value::String(text.clone()),
+                            revision: None,
+                            lock: false,
+                            unlock: false,
+                        }))
+                    }
+                }
             },
             WsMessage::Binary(data) => match format {
                 WsMessageFormat::MsgPack => {
@@ -286,6 +322,7 @@ impl WebSocketBridge {
         namespace: String,
         auto_reconnect: bool,
         reconnect_delay: u32,
+        ping_interval_secs: u32,
         event_tx: mpsc::Sender<BridgeEvent>,
         mut send_rx: mpsc::Receiver<WsMessage>,
         mut shutdown_rx: mpsc::Receiver<()>,
@@ -302,14 +339,38 @@ impl WebSocketBridge {
 
                     let (mut write, mut read) = ws_stream.split();
 
+                    // Create ping interval if configured
+                    let ping_duration = if ping_interval_secs > 0 {
+                        Some(std::time::Duration::from_secs(ping_interval_secs as u64))
+                    } else {
+                        None
+                    };
+                    let mut ping_interval = ping_duration.map(tokio::time::interval);
+                    let mut awaiting_pong = false;
+
                     loop {
                         tokio::select! {
                             // Handle incoming messages
                             msg = read.next() => {
                                 match msg {
                                     Some(Ok(ws_msg)) => {
-                                        if let Some(clasp_msg) = Self::parse_message(&ws_msg, format, &namespace) {
-                                            let _ = event_tx.send(BridgeEvent::ToClasp(clasp_msg)).await;
+                                        match &ws_msg {
+                                            WsMessage::Pong(_) => {
+                                                awaiting_pong = false;
+                                                debug!("Received pong");
+                                            }
+                                            WsMessage::Ping(data) => {
+                                                // Respond with pong
+                                                if let Err(e) = write.send(WsMessage::Pong(data.clone())).await {
+                                                    error!("Failed to send pong: {}", e);
+                                                    break;
+                                                }
+                                            }
+                                            _ => {
+                                                if let Some(clasp_msg) = Self::parse_message(&ws_msg, format, &namespace) {
+                                                    let _ = event_tx.send(BridgeEvent::ToClasp(clasp_msg)).await;
+                                                }
+                                            }
                                         }
                                     }
                                     Some(Err(e)) => {
@@ -330,6 +391,26 @@ impl WebSocketBridge {
                                         break;
                                     }
                                 }
+                            }
+                            // Handle ping interval
+                            _ = async {
+                                if let Some(ref mut interval) = ping_interval {
+                                    interval.tick().await
+                                } else {
+                                    // Never fires if ping is disabled
+                                    std::future::pending::<tokio::time::Instant>().await
+                                }
+                            } => {
+                                if awaiting_pong {
+                                    warn!("Ping timeout - no pong received");
+                                    break;
+                                }
+                                if let Err(e) = write.send(WsMessage::Ping(vec![])).await {
+                                    error!("Failed to send ping: {}", e);
+                                    break;
+                                }
+                                awaiting_pong = true;
+                                debug!("Sent ping");
                             }
                             // Handle shutdown
                             _ = shutdown_rx.recv() => {
@@ -371,6 +452,7 @@ impl WebSocketBridge {
         addr: SocketAddr,
         format: WsMessageFormat,
         namespace: String,
+        ping_interval_secs: u32,
         event_tx: mpsc::Sender<BridgeEvent>,
         mut send_rx: mpsc::Receiver<WsMessage>,
         mut shutdown_rx: mpsc::Receiver<()>,
@@ -410,6 +492,7 @@ impl WebSocketBridge {
                             let namespace = namespace.clone();
                             let event_tx = event_tx.clone();
                             let clients = clients.clone();
+                            let ping_interval = ping_interval_secs;
 
                             // Create a channel for sending to this specific client
                             let (client_tx, mut client_rx) = mpsc::channel::<WsMessage>(100);
@@ -419,14 +502,37 @@ impl WebSocketBridge {
                                 if let Ok(ws_stream) = accept_async(stream).await {
                                     let (mut write, mut read) = ws_stream.split();
 
+                                    // Create ping interval if configured
+                                    let ping_duration = if ping_interval > 0 {
+                                        Some(std::time::Duration::from_secs(ping_interval as u64))
+                                    } else {
+                                        None
+                                    };
+                                    let mut ping_timer = ping_duration.map(tokio::time::interval);
+                                    let mut awaiting_pong = false;
+
                                     loop {
                                         tokio::select! {
                                             // Handle incoming messages from client
                                             msg = read.next() => {
                                                 match msg {
                                                     Some(Ok(ws_msg)) => {
-                                                        if let Some(clasp_msg) = Self::parse_message(&ws_msg, format, &namespace) {
-                                                            let _ = event_tx.send(BridgeEvent::ToClasp(clasp_msg)).await;
+                                                        match &ws_msg {
+                                                            WsMessage::Pong(_) => {
+                                                                awaiting_pong = false;
+                                                                debug!("Client {} pong received", client_id);
+                                                            }
+                                                            WsMessage::Ping(data) => {
+                                                                if let Err(e) = write.send(WsMessage::Pong(data.clone())).await {
+                                                                    debug!("Failed to send pong to client {}: {}", client_id, e);
+                                                                    break;
+                                                                }
+                                                            }
+                                                            _ => {
+                                                                if let Some(clasp_msg) = Self::parse_message(&ws_msg, format, &namespace) {
+                                                                    let _ = event_tx.send(BridgeEvent::ToClasp(clasp_msg)).await;
+                                                                }
+                                                            }
                                                         }
                                                     }
                                                     Some(Err(e)) => {
@@ -447,6 +553,24 @@ impl WebSocketBridge {
                                                     }
                                                     None => break,
                                                 }
+                                            }
+                                            // Handle ping interval
+                                            _ = async {
+                                                if let Some(ref mut timer) = ping_timer {
+                                                    timer.tick().await
+                                                } else {
+                                                    std::future::pending::<tokio::time::Instant>().await
+                                                }
+                                            } => {
+                                                if awaiting_pong {
+                                                    warn!("Client {} ping timeout", client_id);
+                                                    break;
+                                                }
+                                                if let Err(e) = write.send(WsMessage::Ping(vec![])).await {
+                                                    debug!("Failed to send ping to client {}: {}", client_id, e);
+                                                    break;
+                                                }
+                                                awaiting_pong = true;
                                             }
                                         }
                                     }
@@ -517,6 +641,7 @@ impl Bridge for WebSocketBridge {
                     ws_config.namespace,
                     ws_config.auto_reconnect,
                     ws_config.reconnect_delay_secs,
+                    ws_config.ping_interval_secs,
                     event_tx,
                     send_rx,
                     shutdown_rx,
@@ -533,6 +658,7 @@ impl Bridge for WebSocketBridge {
                     addr,
                     ws_config.format,
                     ws_config.namespace,
+                    ws_config.ping_interval_secs,
                     event_tx,
                     send_rx,
                     shutdown_rx,
