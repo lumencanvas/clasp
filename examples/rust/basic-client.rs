@@ -6,7 +6,7 @@
 //!   cargo run --example basic-client
 //!
 //! Or add to your Cargo.toml:
-//!   clasp-client = "0.1"
+//!   clasp-client = "3.0"
 
 use anyhow::Result;
 use clasp_client::Clasp;

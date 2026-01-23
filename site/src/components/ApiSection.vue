@@ -80,7 +80,7 @@ async def main():
 
 asyncio.run(main())`
 
-const rsCode = `// Cargo.toml: clasp-client = "0.1"
+const rsCode = `// Cargo.toml: clasp-client = "3.0"
 
 use clasp_client::{Clasp, ClaspBuilder};
 use clasp_core::Value;

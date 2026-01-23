@@ -106,8 +106,8 @@ Add to your project:
 
 ```toml
 [dependencies]
-clasp-router = "0.1"  # For server
-clasp-client = "0.1"  # For client
+clasp-router = "3.0"  # For server
+clasp-client = "3.0"  # For client
 ```
 
 Features demonstrated (basic-client):

@@ -42,6 +42,9 @@ async fn test_lww_resolution(config: &ConformanceConfig, report: &mut Conformanc
         // Client 2 sets value (should win - last write)
         client2.set(address, Value::Int(2)).await?;
 
+        // Allow time for state propagation to all clients
+        sleep(Duration::from_millis(50)).await;
+
         // Both clients should see value 2
         let value1 = client1.get(address).await?;
         let value2 = client2.get(address).await?;

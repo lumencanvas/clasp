@@ -22,7 +22,7 @@ Example:
     >>> asyncio.run(main())
 """
 
-__version__ = "0.1.0"
+__version__ = "3.0.1"
 __author__ = "LumenCanvas"
 
 from .client import Clasp, ClaspBuilder

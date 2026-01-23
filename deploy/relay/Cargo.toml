@@ -8,7 +8,7 @@
 
 [package]
 name = "clasp-relay"
-version = "0.1.0"
+version = "3.0.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "CLASP relay server using published crates"
@@ -23,8 +23,8 @@ websocket = ["clasp-router/websocket"]
 
 [dependencies]
 # Published crates from crates.io
-clasp-core = "0.1"
-clasp-router = "0.1"
+clasp-core = "3.0"
+clasp-router = "3.0"
 
 # Runtime
 tokio = { version = "1", features = ["full"] }
