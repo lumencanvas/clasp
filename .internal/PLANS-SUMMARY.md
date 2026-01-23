@@ -1,6 +1,6 @@
 # CLASP Plans Summary
-**Date:** January 23, 2026  
-**Status:** ✅ **COMPLETE**
+**Date:** January 23, 2026
+**Status:** 📋 **PLANNING** (plans created, not yet executed)
 
 ---
 
@@ -32,8 +32,16 @@ Identify gaps in test coverage and create a comprehensive plan for testing all C
   - Stream signal type (needs more comprehensive tests)
 
 ### Priority Breakdown
-- **🔴 Critical (9 items):** P2P tests, MQTT/HTTP bridge tests, BUNDLE/Stream tests, Security tests
-- **🟠 High (4 items):** TCP transport, Error handling, Load tests, Python binding tests
+- **🔴 Critical (9 items):** P2P tests, MQTT/HTTP/WebSocket bridge tests, BUNDLE/Stream tests, Security tests  
+  **Progress:**  
+  - HTTP bridge tests: ✅ (see `test-suite/src/bin/http_integration_tests.rs`)  
+  - MQTT bridge tests: ✅ (see `test-suite/src/bin/mqtt_integration_tests.rs`)  
+  - WebSocket bridge tests: ✅ (see `test-suite/src/bin/websocket_bridge_tests.rs`)  
+  - BUNDLE message tests: ✅ (see `test-suite/src/bin/bundle_tests.rs`)  
+  - Locks/LWW conflict basics: ✅ (see `test-suite/src/bin/lock_tests.rs`)  
+- **🟠 High (4 items):** TCP transport, Error handling, Load tests, Python binding tests  
+  **Progress:**  
+  - Initial TCP transport tests: ✅ (see `tcp_transport_tests` binary in test-suite)  
 - **🟡 Medium (11 items):** Remaining bridges, Advanced features, Edge cases
 - **🟢 Low (5 items):** BLE/Serial, Soak tests, Additional binding tests
 
@@ -99,7 +107,10 @@ docs/api/
    - Embedded Systems
 
 4. **Protocol Integration Guides**
-   - OSC, MIDI, MQTT, HTTP, Art-Net, DMX, sACN, etc.
+   - OSC, MIDI, MQTT, HTTP, WebSocket, Art-Net, DMX, sACN, etc.  
+   **Progress:**  
+   - HTTP integration guide: ✅ (`docs/guides/protocols/http-integration.md`)  
+   - MQTT integration guide: ✅ (`docs/guides/protocols/mqtt-integration.md`)
 
 5. **Advanced Topics**
    - P2P Setup

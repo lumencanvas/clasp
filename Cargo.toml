@@ -10,9 +10,10 @@ members = [
     "crates/clasp-embedded",
     "crates/clasp-wasm",
     "crates/clasp-cli",
+    "crates/clasp-test-utils",
     "tools/clasp-service",
     "tools/clasp-router",
-    "test-suite",
+    "clasp-e2e",
 ]
 
 [workspace.package]
@@ -84,6 +85,7 @@ clasp-router = { version = "0.1", path = "crates/clasp-router" }
 clasp-client = { version = "0.1", path = "crates/clasp-client" }
 clasp-embedded = { version = "0.1", path = "crates/clasp-embedded" }
 clasp-cli = { version = "0.1", path = "crates/clasp-cli" }
+clasp-test-utils = { version = "0.1", path = "crates/clasp-test-utils" }
 
 [profile.release]
 lto = true

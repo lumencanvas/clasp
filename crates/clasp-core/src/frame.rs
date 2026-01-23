@@ -37,7 +37,7 @@ pub struct FrameFlags {
     pub has_timestamp: bool,
     pub encrypted: bool,
     pub compressed: bool,
-    /// Encoding version: 0 = v2 (MessagePack named), 1 = v3 (binary)
+    /// Encoding version: 0 = legacy (MessagePack named), 1+ = compact binary
     pub version: u8,
 }
 
@@ -54,7 +54,7 @@ impl FrameFlags {
         if self.compressed {
             flags |= 0x08;
         }
-        // Version in bits 0-2 (0 = v2 legacy, 1 = v3 binary)
+        // Version in bits 0-2 (0 = legacy MessagePack, 1+ = compact binary)
         flags |= self.version & 0x07;
         flags
     }
@@ -69,8 +69,8 @@ impl FrameFlags {
         }
     }
 
-    /// Check if frame uses v3 binary encoding
-    pub fn is_v3_binary(&self) -> bool {
+    /// Check if frame uses compact binary encoding (version >= 1)
+    pub fn is_binary_encoding(&self) -> bool {
         self.version >= 1
     }
 }
@@ -275,7 +275,7 @@ mod tests {
         assert!(decoded.encrypted);
         assert!(!decoded.compressed);
         assert_eq!(decoded.version, 1);
-        assert!(decoded.is_v3_binary());
+        assert!(decoded.is_binary_encoding());
     }
 
     #[test]
@@ -285,14 +285,14 @@ mod tests {
             version: 0,
             ..Default::default()
         };
-        assert!(!v2_flags.is_v3_binary());
+        assert!(!v2_flags.is_binary_encoding());
 
         // Test v3 binary (version = 1)
         let v3_flags = FrameFlags {
             version: 1,
             ..Default::default()
         };
-        assert!(v3_flags.is_v3_binary());
+        assert!(v3_flags.is_binary_encoding());
     }
 
     #[test]
@@ -308,5 +308,63 @@ mod tests {
 
         // Incomplete payload
         assert_eq!(Frame::check_complete(&encoded[..5]), None);
+    }
+
+    #[test]
+    fn test_frame_max_payload_size() {
+        // Frame with maximum allowed payload should encode successfully
+        let payload = vec![0u8; MAX_PAYLOAD_SIZE];
+        let frame = Frame::new(payload.clone())
+            .with_qos(QoS::Fire)
+            .with_encrypted(true);
+
+        let encoded = frame.encode().expect("encode max payload");
+        let decoded = Frame::decode(&encoded[..]).expect("decode max payload");
+
+        assert_eq!(decoded.payload.len(), MAX_PAYLOAD_SIZE);
+        assert_eq!(decoded.flags.qos, QoS::Fire);
+        assert!(decoded.flags.encrypted);
+        assert!(!decoded.flags.has_timestamp);
+    }
+
+    #[test]
+    fn test_frame_payload_too_large() {
+        // Payload exceeding MAX_PAYLOAD_SIZE should return PayloadTooLarge
+        let payload = vec![0u8; MAX_PAYLOAD_SIZE + 1];
+        let frame = Frame::new(payload);
+
+        let err = frame.encode().expect_err("expected PayloadTooLarge error");
+        match err {
+            Error::PayloadTooLarge(len) => assert_eq!(len, MAX_PAYLOAD_SIZE + 1),
+            other => panic!("unexpected error: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_decode_invalid_magic() {
+        let frame = Frame::new(b"magic".as_slice());
+        let mut encoded_vec = frame.encode().unwrap().to_vec();
+
+        // Corrupt magic byte
+        encoded_vec[0] = 0x00;
+
+        let err = Frame::decode(&encoded_vec[..]).expect_err("expected InvalidMagic error");
+        match err {
+            Error::InvalidMagic(byte) => assert_eq!(byte, 0x00),
+            other => panic!("unexpected error: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_check_complete_with_timestamp() {
+        let frame = Frame::new(b"ts".as_slice()).with_timestamp(42);
+        let encoded = frame.encode().unwrap();
+
+        // Header with timestamp is larger; verify check_complete accounts for it
+        assert_eq!(Frame::check_complete(&encoded), Some(encoded.len()));
+
+        // Remove last byte to make it incomplete
+        let truncated = &encoded[..encoded.len() - 1];
+        assert_eq!(Frame::check_complete(truncated), None);
     }
 }

@@ -383,6 +383,32 @@ impl WebRtcTransport {
         })
     }
 
+    /// Send data via the reliable channel (for params/events that need guaranteed delivery)
+    pub async fn send_reliable(&self, data: Bytes) -> Result<()> {
+        let channel = self.reliable_channel.lock();
+        if let Some(ref dc) = *channel {
+            dc.send(&data)
+                .await
+                .map_err(|e| TransportError::SendFailed(format!("Reliable send failed: {}", e)))?;
+            Ok(())
+        } else {
+            Err(TransportError::NotConnected)
+        }
+    }
+
+    /// Send data via the unreliable channel (for streams that prioritize latency)
+    pub async fn send_unreliable(&self, data: Bytes) -> Result<()> {
+        let channel = self.unreliable_channel.lock();
+        if let Some(ref dc) = *channel {
+            dc.send(&data)
+                .await
+                .map_err(|e| TransportError::SendFailed(format!("Unreliable send failed: {}", e)))?;
+            Ok(())
+        } else {
+            Err(TransportError::NotConnected)
+        }
+    }
+
     async fn create_peer_connection(config: &WebRtcConfig) -> Result<Arc<RTCPeerConnection>> {
         let mut m = MediaEngine::default();
         m.register_default_codecs().map_err(|e| {

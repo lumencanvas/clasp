@@ -71,3 +71,10 @@ jsonpath_lib = "0.3"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+clasp-router = { workspace = true }
+clasp-client = { workspace = true }
+clasp-test-utils = { workspace = true }
+rosc = { workspace = true }
+midir = { workspace = true }
+artnet_protocol = { workspace = true }
+tracing-subscriber = "0.3"

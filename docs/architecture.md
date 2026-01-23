@@ -15,10 +15,10 @@ CLASP is organized into layers, from low-level protocol to high-level applicatio
 │  clasp-client  │  clasp-router  │  clasp-bridge             │
 ├─────────────────────────────────────────────────────────────┤
 │                    TRANSPORT                                 │
-│  WebSocket  │  QUIC  │  UDP  │  BLE  │  Serial              │
+│  WebSocket  │  WebRTC  │  QUIC  │  UDP  │  BLE  │  Serial   │
 ├─────────────────────────────────────────────────────────────┤
 │                      CORE                                    │
-│  Types  │  Codec (v3 binary)  │  Addresses  │  Security     │
+│  Types  │  Codec (binary)  │  Addresses  │  Security        │
 ├─────────────────────────────────────────────────────────────┤
 │                    EMBEDDED                                  │
 │  no_std client + server (bring your own transport)          │
@@ -36,7 +36,7 @@ CLASP is organized into layers, from low-level protocol to high-level applicatio
 Contains:
 - Message types (SET, PUBLISH, SUBSCRIBE, etc.)
 - Value types (Int, Float, Bool, String, Bytes, Array, Map)
-- v3 binary codec (55% smaller than MessagePack)
+- Binary codec (55% smaller than MessagePack)
 - Address parsing and pattern matching
 - Frame format and QoS
 
@@ -85,10 +85,10 @@ websocket::serve("0.0.0.0:7330", handler).await?;
 
 **Role:** Message routing and state management  
 **Dependencies:** clasp-core, clasp-transport  
-**This is the SERVER library.**
+**This is the ROUTER library.**
 
 Use when you want to:
-- Build a CLASP server/hub
+- Build a CLASP router (central message hub)
 - Route messages between clients
 - Manage state with revisions
 - Handle subscriptions
@@ -205,12 +205,12 @@ let client = Clasp::connect("wss://relay.clasp.to").await?;
 client.set("/hello", "world").await?;
 ```
 
-### Pattern 2: Local Server + Clients
+### Pattern 2: Local Router + Clients
 
-Run your own server:
+Run your own router:
 
 ```rust
-// Server (one process)
+// Router (one process)
 let router = Router::new(config);
 router.serve_websocket("0.0.0.0:7330").await?;
 
@@ -235,7 +235,7 @@ tokio::spawn(async move {
     }
 });
 
-// CLASP server accepts connections
+// CLASP router accepts connections
 router.serve_websocket("0.0.0.0:7330").await?;
 ```
 

@@ -13,6 +13,7 @@ Protocol bridges for CLASP, enabling communication with external protocols like 
 | HTTP | `http` | TCP | Bidirectional |
 | Art-Net | `artnet` | UDP | Bidirectional |
 | DMX | `dmx` | Serial | Output |
+| sACN | `sacn` | UDP Multicast | Output |
 | Socket.IO | `socketio` | TCP | Bidirectional |
 
 ## Usage

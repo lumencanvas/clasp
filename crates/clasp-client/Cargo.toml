@@ -39,3 +39,5 @@ dashmap = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+clasp-router = { workspace = true }
+clasp-test-utils = { workspace = true }

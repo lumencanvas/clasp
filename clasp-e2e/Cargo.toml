@@ -1,0 +1,178 @@
+[package]
+name = "clasp-e2e"
+version.workspace = true
+edition.workspace = true
+description = "End-to-end tests, benchmarks, and load tests for CLASP protocol"
+
+[features]
+default = ["embedded-server"]
+embedded-server = ["clasp-embedded/server"]
+p2p = ["clasp-client/p2p", "clasp-transport/webrtc"]
+
+[dependencies]
+# CLASP crates (workspace)
+clasp-core.workspace = true
+clasp-transport.workspace = true
+clasp-bridge.workspace = true
+clasp-router.workspace = true
+clasp-client.workspace = true
+clasp-discovery = { workspace = true, features = ["rendezvous"] }
+clasp-embedded.workspace = true
+clasp-test-utils.workspace = true
+
+# Real protocol libraries for integration testing
+rosc.workspace = true
+midir.workspace = true
+artnet_protocol = "0.4"
+mqttbytes = "0.6"
+bytes = "1.0"
+rumqttc = "0.24"
+uuid.workspace = true
+
+# Async runtime
+tokio.workspace = true
+futures.workspace = true
+async-trait.workspace = true
+
+# Networking
+tokio-tungstenite.workspace = true
+socket2.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+rmp-serde = "1.1"
+
+# Testing utilities
+criterion.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Timing and stats
+hdrhistogram = "7.5"
+rand = "0.8"
+reqwest = { version = "0.12", features = ["json"] }
+
+# JWT for security tests
+jsonwebtoken = "9.2"
+
+# Certificate generation for QUIC tests
+rcgen = "0.13"
+
+[dev-dependencies]
+tempfile = "3.10"
+
+[[bin]]
+name = "run-all-tests"
+path = "src/main.rs"
+
+# E2E and Integration Tests (kept as binaries)
+[[bin]]
+name = "e2e-protocol-tests"
+path = "src/bin/e2e_protocol_tests.rs"
+
+[[bin]]
+name = "p2p-connection-tests"
+path = "src/bin/p2p_connection_tests.rs"
+
+[[bin]]
+name = "relay-e2e"
+path = "src/bin/relay_e2e.rs"
+
+[[bin]]
+name = "clasp-to-clasp"
+path = "src/bin/clasp_to_clasp.rs"
+
+[[bin]]
+name = "broker-tests"
+path = "src/bin/broker_tests.rs"
+
+[[bin]]
+name = "bridge-tests"
+path = "src/bin/bridge_tests.rs"
+
+[[bin]]
+name = "network-tests"
+path = "src/bin/network_tests.rs"
+
+# Security Tests
+[[bin]]
+name = "security-tests"
+path = "src/bin/security_tests.rs"
+
+[[bin]]
+name = "security-pentest"
+path = "src/bin/security_pentest.rs"
+
+# Load and Stress Tests
+[[bin]]
+name = "load-tests"
+path = "src/bin/load_tests.rs"
+
+[[bin]]
+name = "soak-tests"
+path = "src/bin/soak_tests.rs"
+
+# Hardware/Embedded Tests
+[[bin]]
+name = "embedded-tests"
+path = "src/bin/embedded_tests.rs"
+
+[[bin]]
+name = "hardware-tests"
+path = "src/bin/hardware_tests.rs"
+
+# Debug/Verification Tools
+[[bin]]
+name = "debug-benchmark"
+path = "src/bin/debug_benchmark.rs"
+
+[[bin]]
+name = "debug-subscription"
+path = "src/bin/debug_subscription.rs"
+
+[[bin]]
+name = "debug-snapshot"
+path = "src/bin/debug_snapshot.rs"
+
+[[bin]]
+name = "debug-late-joiner"
+path = "src/bin/debug_late_joiner.rs"
+
+[[bin]]
+name = "verify-patterns"
+path = "src/bin/verify_patterns.rs"
+
+[[bin]]
+name = "proof-tests"
+path = "src/bin/proof_tests.rs"
+
+# Benchmarks (binaries)
+[[bin]]
+name = "real-benchmarks"
+path = "src/bin/real_benchmarks.rs"
+
+[[bin]]
+name = "latency-benchmarks"
+path = "src/bin/latency_benchmarks.rs"
+
+[[bin]]
+name = "gesture-coalescing-benchmarks"
+path = "src/bin/gesture_coalescing_benchmarks.rs"
+
+[[bin]]
+name = "rendezvous-benchmarks"
+path = "src/bin/rendezvous_benchmarks.rs"
+
+[[bin]]
+name = "clock-sync-benchmark"
+path = "src/bin/clock_sync_benchmark.rs"
+
+[[bin]]
+name = "resilience-benchmark"
+path = "src/bin/resilience_benchmark.rs"
+
+# Benchmark harness
+[[bench]]
+name = "throughput"
+harness = false

@@ -28,7 +28,7 @@ fn decode_benchmark(c: &mut Criterion) {
     let encoded = codec::encode(&msg).unwrap();
 
     c.bench_function("decode_set_message", |b| {
-        b.iter(|| black_box(codec::decode::<Message>(&encoded).unwrap()))
+        b.iter(|| black_box(codec::decode(&encoded).unwrap()))
     });
 }
 
@@ -55,7 +55,7 @@ fn roundtrip_benchmark(c: &mut Criterion) {
     c.bench_function("roundtrip_complex_message", |b| {
         b.iter(|| {
             let encoded = codec::encode(&msg).unwrap();
-            black_box(codec::decode::<Message>(&encoded).unwrap())
+            black_box(codec::decode(&encoded).unwrap())
         })
     });
 }

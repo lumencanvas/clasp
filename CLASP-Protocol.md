@@ -242,17 +242,6 @@ For severely constrained devices (< 8KB RAM), a "Lite" profile exists:
 
 Lite devices can communicate with full CLASP via a bridge.
 
-### 2.2.2 Embedded Optimization
-
-For severely constrained devices (< 8KB RAM), a "Lite" profile exists:
-
-- Fixed 2-byte addresses (numeric IDs instead of paths)
-- No compression
-- No encryption
-- UDP only
-
-Lite devices can communicate with full CLASP via a bridge.
-
 ## 2.3 WebSocket Specifics
 
 - URI: `wss://host:port/clasp` or `ws://host:port/clasp` (dev only)

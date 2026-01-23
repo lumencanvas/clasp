@@ -70,7 +70,7 @@ const clasp = new Clasp('wss://192.168.1.42:7330');
 [4+]   Payload (binary encoded)
 ```
 
-## v3 Binary Encoding (54% smaller)
+## Binary Encoding (Compact, 54% smaller)
 
 SET message format:
 ```

@@ -1,0 +1,19 @@
+[package]
+name = "clasp-test-utils"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Test utilities for CLASP protocol crates"
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true }
+
+# Core CLASP crates
+clasp-core = { workspace = true }
+clasp-router = { workspace = true }
+clasp-client = { workspace = true }
+
+# Utilities
+parking_lot = { workspace = true }

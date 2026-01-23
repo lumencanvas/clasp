@@ -4,9 +4,15 @@ Transport layer implementations for CLASP (Creative Low-Latency Application Stre
 
 ## Supported Transports
 
-- **WebSocket** - Primary transport for browser and server communication
-- **QUIC** - Low-latency UDP-based transport (optional)
-- **TCP** - Reliable streaming transport (optional)
+| Transport | Feature Flag | Description |
+|-----------|--------------|-------------|
+| **WebSocket** | `websocket` (default) | Primary transport for browser and server communication |
+| **QUIC** | `quic` | Low-latency UDP-based transport with TLS 1.3 |
+| **TCP** | `tcp` | Reliable streaming transport |
+| **UDP** | `udp` | Lightweight datagram transport for LAN |
+| **WebRTC** | `webrtc` | P2P data channels with NAT traversal |
+| **BLE** | `ble` | Bluetooth Low Energy GATT service |
+| **Serial** | `serial` | Hardware serial port communication |
 
 ## Usage
 

@@ -22,7 +22,7 @@ const capabilities = [
   },
   {
     title: 'EMBEDDED',
-    desc: 'no_std Lite profile: 2-byte addresses, fixed-size messages, UDP transport.'
+    desc: 'no_std client + MiniRouter server: <4KB RAM, subscription routing, compatible with any transport (UDP, HTTP, BLE).'
   }
 ]
 </script>

@@ -88,3 +88,7 @@ web-sys = { version = "0.3", optional = true, features = [
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+clasp-router = { workspace = true }
+clasp-client = { workspace = true }
+clasp-test-utils = { workspace = true }
+rcgen = "0.13"

@@ -1,13 +1,13 @@
 //! CLASP Embedded
 //!
-//! Minimal `no_std` implementation of the **standard CLASP v3 protocol**.
-//! 
+//! Minimal `no_std` implementation of the **standard CLASP binary protocol**.
+//!
 //! This crate provides both client AND server (mini-router) capabilities
 //! for embedded devices like ESP32, Raspberry Pi Pico, etc.
 //!
 //! # Protocol Compatibility
 //!
-//! **Uses the same v3 binary protocol as the full CLASP implementation.**
+//! **Uses the same compact binary protocol as the full CLASP implementation.**
 //! Messages from embedded devices are fully compatible with desktop/cloud routers.
 //!
 //! # Memory Budget
@@ -34,7 +34,7 @@ extern crate alloc;
 use alloc::{string::String, vec::Vec};
 
 // ============================================================================
-// CLASP v3 Protocol Constants (same as clasp-core)
+// CLASP Protocol Constants (same as clasp-core)
 // ============================================================================
 
 /// Protocol magic byte
@@ -43,7 +43,7 @@ pub const MAGIC: u8 = 0x53; // 'S' for Stream
 /// Protocol version (used in HELLO messages)
 pub const VERSION: u8 = 1;
 
-/// Message type codes (same as v3)
+/// Message type codes (standard CLASP binary format)
 pub mod msg {
     pub const HELLO: u8 = 0x01;
     pub const WELCOME: u8 = 0x02;
@@ -59,7 +59,7 @@ pub mod msg {
     pub const ERROR: u8 = 0x51;
 }
 
-/// Value type codes (same as v3)
+/// Value type codes (standard CLASP binary format)
 pub mod val {
     pub const NULL: u8 = 0x00;
     pub const BOOL: u8 = 0x01;
@@ -72,7 +72,7 @@ pub mod val {
 }
 
 // ============================================================================
-// Frame Format (same as v3)
+// Frame Format (standard CLASP binary format)
 // ============================================================================
 
 /// Frame header size (without timestamp)
@@ -91,17 +91,17 @@ pub fn decode_header(buf: &[u8]) -> Option<(u8, usize)> {
     Some((flags, len))
 }
 
-/// Frame flags for v3 binary encoding
+/// Frame flags for compact binary encoding
 /// Bits: [qos:2][has_ts:1][enc:1][cmp:1][rsv:1][version:2]
-pub const FLAGS_V3: u8 = 0x01; // version=1 (v3 binary), rest default
+pub const FLAGS_BINARY: u8 = 0x01; // version=1 (compact binary), rest default
 
-/// Encode frame header with v3 flags
+/// Encode frame header with binary encoding flags
 pub fn encode_header(buf: &mut [u8], _flags: u8, payload_len: usize) -> usize {
     if buf.len() < HEADER_SIZE {
         return 0;
     }
     buf[0] = MAGIC;
-    buf[1] = FLAGS_V3; // Always use v3 binary encoding
+    buf[1] = FLAGS_BINARY; // Always use compact binary encoding
     let len = (payload_len as u16).to_be_bytes();
     buf[2] = len[0];
     buf[3] = len[1];
@@ -109,7 +109,7 @@ pub fn encode_header(buf: &mut [u8], _flags: u8, payload_len: usize) -> usize {
 }
 
 // ============================================================================
-// Value Encoding/Decoding (subset of v3)
+// Value Encoding/Decoding (compact binary format)
 // ============================================================================
 
 /// Simple value type for embedded
@@ -211,7 +211,7 @@ pub fn decode_value(buf: &[u8]) -> Option<(Value, usize)> {
 }
 
 // ============================================================================
-// String Encoding (length-prefixed, same as v3)
+// String Encoding (length-prefixed, standard CLASP format)
 // ============================================================================
 
 /// Encode a string (u16 length prefix)
@@ -241,7 +241,7 @@ pub fn decode_string(buf: &[u8]) -> Option<(&str, usize)> {
 }
 
 // ============================================================================
-// Message Encoding (v3 compatible)
+// Message Encoding (compact binary format)
 // ============================================================================
 
 /// Get value type code for flags byte
@@ -277,7 +277,7 @@ fn encode_value_data(buf: &mut [u8], value: &Value) -> usize {
 }
 
 /// Encode a SET message payload (without frame header)
-/// Format (v3): msg_type(1) + flags(1) + addr_len(2) + addr + value_data
+/// Format: msg_type(1) + flags(1) + addr_len(2) + addr + value_data
 /// Flags: [has_rev:1][lock:1][unlock:1][rsv:1][vtype:4]
 pub fn encode_set(buf: &mut [u8], address: &str, value: &Value) -> usize {
     if buf.len() < 2 {
@@ -354,7 +354,7 @@ pub fn encode_subscribe_frame(buf: &mut [u8], pattern: &str) -> usize {
     header_size + payload_len
 }
 
-/// Encode a HELLO message (v3 format)
+/// Encode a HELLO message (binary format)
 /// Format: msg_type(1) + version(1) + features(1) + name + token
 pub fn encode_hello(buf: &mut [u8], name: &str) -> usize {
     if buf.len() < 6 {
@@ -426,6 +426,8 @@ pub enum Message<'a> {
     Hello { name: &'a str, version: u8 },
     Welcome { session: &'a str },
     Set { address: &'a str, value: Value },
+    Subscribe { id: u32, pattern: &'a str },
+    Unsubscribe { id: u32 },
     Ping,
     Pong,
     Error { code: u16, message: &'a str },
@@ -443,7 +445,7 @@ pub fn decode_message(payload: &[u8]) -> Option<Message<'_>> {
     
     match msg_type {
         msg::HELLO => {
-            // v3 HELLO format: version(1) + features(1) + name + token
+            // HELLO format: version(1) + features(1) + name + token
             if data.len() < 2 {
                 return None;
             }
@@ -453,7 +455,7 @@ pub fn decode_message(payload: &[u8]) -> Option<Message<'_>> {
             Some(Message::Hello { name, version })
         }
         msg::WELCOME => {
-            // v3 WELCOME format: version(1) + features(1) + time(8) + session + name
+            // WELCOME format: version(1) + features(1) + time(8) + session + name
             if data.len() < 10 {
                 return None;
             }
@@ -467,7 +469,7 @@ pub fn decode_message(payload: &[u8]) -> Option<Message<'_>> {
             Some(Message::Welcome { session })
         }
         msg::SET => {
-            // v3 SET format: flags(1) + address + value_data
+            // SET format: flags(1) + address + value_data
             // Flags: [has_rev:1][lock:1][unlock:1][rsv:1][vtype:4]
             if data.is_empty() {
                 return None;
@@ -505,6 +507,23 @@ pub fn decode_message(payload: &[u8]) -> Option<Message<'_>> {
             };
             
             Some(Message::Set { address, value })
+        }
+        msg::SUBSCRIBE => {
+            // SUBSCRIBE format: id(4) + pattern
+            if data.len() < 4 {
+                return None;
+            }
+            let id = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+            let (pattern, _) = decode_string(&data[4..])?;
+            Some(Message::Subscribe { id, pattern })
+        }
+        msg::UNSUBSCRIBE => {
+            // UNSUBSCRIBE format: id(4)
+            if data.len() < 4 {
+                return None;
+            }
+            let id = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+            Some(Message::Unsubscribe { id })
         }
         msg::PING => Some(Message::Ping),
         msg::PONG => Some(Message::Pong),
@@ -637,7 +656,7 @@ impl Default for StateCache {
 }
 
 // ============================================================================
-// Client (v3 Compatible)
+// Client (Compact Binary Protocol)
 // ============================================================================
 
 /// Client state
@@ -652,7 +671,7 @@ pub enum ClientState {
 pub const TX_BUF_SIZE: usize = 256;
 pub const RX_BUF_SIZE: usize = 512;
 
-/// Embedded CLASP client (v3 compatible)
+/// Embedded CLASP client (compact binary protocol)
 ///
 /// # Memory Usage
 /// ~3KB total (cache + buffers + state)
@@ -732,24 +751,177 @@ impl Default for Client {
 }
 
 // ============================================================================
-// Mini-Router/Server (v3 Compatible)
+// Mini-Router/Server (Compact Binary Protocol)
 // ============================================================================
 
 #[cfg(feature = "server")]
 pub mod server {
     use super::*;
-    
+
     /// Maximum clients for embedded router
     pub const MAX_CLIENTS: usize = 4;
-    
-    /// Client session
+
+    /// Maximum subscriptions per client
+    pub const MAX_SUBS_PER_CLIENT: usize = 8;
+
+    /// Maximum pattern length for subscriptions
+    pub const MAX_PATTERN_LEN: usize = 64;
+
+    /// Subscription entry
+    #[derive(Clone)]
+    pub struct Subscription {
+        pub active: bool,
+        pub id: u32,
+        pub pattern: [u8; MAX_PATTERN_LEN],
+        pub pattern_len: usize,
+    }
+
+    impl Subscription {
+        pub const fn empty() -> Self {
+            Self {
+                active: false,
+                id: 0,
+                pattern: [0; MAX_PATTERN_LEN],
+                pattern_len: 0,
+            }
+        }
+
+        /// Check if address matches this subscription pattern
+        pub fn matches(&self, address: &str) -> bool {
+            if !self.active || self.pattern_len == 0 {
+                return false;
+            }
+
+            // Get pattern as &str
+            let pattern = match core::str::from_utf8(&self.pattern[..self.pattern_len]) {
+                Ok(s) => s,
+                Err(_) => return false,
+            };
+
+            // Simple wildcard matching
+            // * matches one segment, ** matches any number of segments
+            Self::match_pattern(pattern, address)
+        }
+
+        fn match_pattern(pattern: &str, address: &str) -> bool {
+            // Simple iterative matching without heap allocation
+            // Split into segments manually
+            let mut pattern_iter = pattern.split('/').filter(|s| !s.is_empty());
+            let mut address_iter = address.split('/').filter(|s| !s.is_empty());
+
+            loop {
+                match (pattern_iter.next(), address_iter.next()) {
+                    (None, None) => return true,
+                    (Some("**"), _) => {
+                        // ** matches zero or more segments
+                        // Check if there's more pattern after **
+                        if let Some(next_pattern) = pattern_iter.next() {
+                            // Must find next_pattern in remaining address
+                            loop {
+                                match address_iter.next() {
+                                    None => return next_pattern == "**",
+                                    Some(seg) if seg == next_pattern || next_pattern == "*" => {
+                                        // Continue matching rest
+                                        break;
+                                    }
+                                    Some(_) => continue,
+                                }
+                            }
+                        } else {
+                            // ** at end matches everything
+                            return true;
+                        }
+                    }
+                    (Some("*"), Some(_)) => continue,
+                    (Some(p), Some(a)) if p == a => continue,
+                    (None, Some(_)) => return false,
+                    (Some(_), None) => {
+                        // Check if remaining pattern is just **
+                        return pattern_iter.all(|p| p == "**");
+                    }
+                    _ => return false,
+                }
+            }
+        }
+    }
+
+    /// Client session with subscriptions
     pub struct Session {
         pub active: bool,
         pub id: u8,
+        pub subscriptions: [Subscription; MAX_SUBS_PER_CLIENT],
+        pub sub_count: u8,
     }
-    
-    /// Minimal embedded router
-    /// 
+
+    impl Session {
+        pub const fn new() -> Self {
+            Self {
+                active: false,
+                id: 0,
+                subscriptions: [const { Subscription::empty() }; MAX_SUBS_PER_CLIENT],
+                sub_count: 0,
+            }
+        }
+
+        /// Add a subscription
+        pub fn subscribe(&mut self, id: u32, pattern: &str) -> bool {
+            if self.sub_count as usize >= MAX_SUBS_PER_CLIENT {
+                return false;
+            }
+            if pattern.len() > MAX_PATTERN_LEN {
+                return false;
+            }
+
+            // Find empty slot
+            for sub in &mut self.subscriptions {
+                if !sub.active {
+                    sub.active = true;
+                    sub.id = id;
+                    sub.pattern[..pattern.len()].copy_from_slice(pattern.as_bytes());
+                    sub.pattern_len = pattern.len();
+                    self.sub_count += 1;
+                    return true;
+                }
+            }
+            false
+        }
+
+        /// Remove a subscription by ID
+        pub fn unsubscribe(&mut self, id: u32) -> bool {
+            for sub in &mut self.subscriptions {
+                if sub.active && sub.id == id {
+                    sub.active = false;
+                    sub.pattern_len = 0;
+                    self.sub_count = self.sub_count.saturating_sub(1);
+                    return true;
+                }
+            }
+            false
+        }
+
+        /// Check if any subscription matches the address
+        pub fn has_match(&self, address: &str) -> bool {
+            self.subscriptions.iter().any(|s| s.matches(address))
+        }
+    }
+
+    /// Broadcast result - which clients should receive a message
+    pub struct BroadcastList {
+        pub clients: [bool; MAX_CLIENTS],
+        pub count: u8,
+    }
+
+    impl BroadcastList {
+        pub const fn empty() -> Self {
+            Self {
+                clients: [false; MAX_CLIENTS],
+                count: 0,
+            }
+        }
+    }
+
+    /// Minimal embedded router with subscription support
+    ///
     /// Can act as a local hub for sensors/actuators, forwarding to a main router.
     pub struct MiniRouter {
         pub state: StateCache,
@@ -757,33 +929,41 @@ pub mod server {
         session_count: u8,
         tx_buf: [u8; TX_BUF_SIZE],
     }
-    
+
     impl MiniRouter {
         pub const fn new() -> Self {
             Self {
                 state: StateCache::new(),
-                sessions: [const { Session { active: false, id: 0 } }; MAX_CLIENTS],
+                sessions: [const { Session::new() }; MAX_CLIENTS],
                 session_count: 0,
                 tx_buf: [0; TX_BUF_SIZE],
             }
         }
-        
+
         /// Process incoming message from a client
+        ///
+        /// Returns a response frame to send back to the client (if any)
         pub fn process(&mut self, client_id: u8, data: &[u8]) -> Option<&[u8]> {
             let (_, payload_len) = decode_header(data)?;
             let payload = &data[HEADER_SIZE..HEADER_SIZE + payload_len];
             let msg = decode_message(payload)?;
-            
+
             match msg {
                 Message::Hello { name, .. } => {
-                    // Create session, respond with Welcome
                     self.create_session(client_id);
                     Some(self.prepare_welcome(client_id))
                 }
+                Message::Subscribe { id, pattern } => {
+                    self.handle_subscribe(client_id, id, pattern);
+                    None // ACK could be sent
+                }
+                Message::Unsubscribe { id } => {
+                    self.handle_unsubscribe(client_id, id);
+                    None
+                }
                 Message::Set { address, value } => {
-                    // Update state
                     self.state.set(address, value);
-                    None // Could broadcast to other clients
+                    None // Broadcast handled separately via get_broadcast_targets
                 }
                 Message::Ping => {
                     Some(self.prepare_pong())
@@ -791,61 +971,120 @@ pub mod server {
                 _ => None,
             }
         }
-        
+
+        /// Get list of clients that should receive a broadcast for an address
+        ///
+        /// Call this after processing a SET to get which clients need the update
+        pub fn get_broadcast_targets(&self, address: &str, sender_id: u8) -> BroadcastList {
+            let mut result = BroadcastList::empty();
+
+            for (i, session) in self.sessions.iter().enumerate() {
+                // Don't send back to sender, only to other active sessions with matching subs
+                if session.active && i as u8 != sender_id && session.has_match(address) {
+                    result.clients[i] = true;
+                    result.count += 1;
+                }
+            }
+
+            result
+        }
+
+        /// Prepare a SET frame for broadcasting to subscribers
+        ///
+        /// Returns the frame bytes to send to each matching client
+        pub fn prepare_broadcast(&mut self, address: &str, value: Value) -> &[u8] {
+            let n = encode_set_frame(&mut self.tx_buf, address, &value);
+            &self.tx_buf[..n]
+        }
+
+        fn handle_subscribe(&mut self, client_id: u8, id: u32, pattern: &str) {
+            if let Some(session) = self.sessions.get_mut(client_id as usize) {
+                if session.active {
+                    session.subscribe(id, pattern);
+                }
+            }
+        }
+
+        fn handle_unsubscribe(&mut self, client_id: u8, id: u32) {
+            if let Some(session) = self.sessions.get_mut(client_id as usize) {
+                if session.active {
+                    session.unsubscribe(id);
+                }
+            }
+        }
+
         fn create_session(&mut self, client_id: u8) {
             if (client_id as usize) < MAX_CLIENTS {
-                self.sessions[client_id as usize] = Session { active: true, id: client_id };
+                self.sessions[client_id as usize] = Session {
+                    active: true,
+                    id: client_id,
+                    subscriptions: [const { Subscription::empty() }; MAX_SUBS_PER_CLIENT],
+                    sub_count: 0,
+                };
                 self.session_count += 1;
             }
         }
-        
+
+        /// Remove a client session
+        pub fn disconnect(&mut self, client_id: u8) {
+            if let Some(session) = self.sessions.get_mut(client_id as usize) {
+                if session.active {
+                    session.active = false;
+                    session.sub_count = 0;
+                    self.session_count = self.session_count.saturating_sub(1);
+                }
+            }
+        }
+
         fn prepare_welcome(&mut self, _client_id: u8) -> &[u8] {
-            // v3 WELCOME format: type + version + features + time(u64) + session + name
             let payload_start = HEADER_SIZE;
             let mut offset = payload_start;
-            
-            // Message type
+
             self.tx_buf[offset] = msg::WELCOME;
             offset += 1;
-            
-            // Version
+
             self.tx_buf[offset] = VERSION;
             offset += 1;
-            
-            // Features flags
+
             self.tx_buf[offset] = 0xF8; // param|event|stream|gesture|timeline
             offset += 1;
-            
-            // Server time (u64 BE) - just use 0 for embedded
+
             self.tx_buf[offset..offset + 8].copy_from_slice(&0u64.to_be_bytes());
             offset += 8;
-            
-            // Session ID as string
+
             offset += encode_string(&mut self.tx_buf[offset..], "embedded");
-            
-            // Server name
             offset += encode_string(&mut self.tx_buf[offset..], "MiniRouter");
-            
+
             let payload_len = offset - payload_start;
             encode_header(&mut self.tx_buf, 0, payload_len);
-            
+
             &self.tx_buf[..offset]
         }
-        
+
         fn prepare_pong(&mut self) -> &[u8] {
             let n = encode_pong_frame(&mut self.tx_buf);
             &self.tx_buf[..n]
         }
-        
+
         pub fn get(&self, address: &str) -> Option<Value> {
             self.state.get(address)
         }
-        
+
         pub fn set(&mut self, address: &str, value: Value) {
             self.state.set(address, value);
         }
+
+        /// Get number of active sessions
+        pub fn session_count(&self) -> u8 {
+            self.session_count
+        }
+
+        /// Get mutable access to a session (for testing/setup)
+        pub fn session_mut(&mut self, client_id: u8) -> Option<&mut Session> {
+            self.sessions.get_mut(client_id as usize)
+        }
     }
-    
+
     impl Default for MiniRouter {
         fn default() -> Self {
             Self::new()
@@ -906,7 +1145,7 @@ mod tests {
         let hello = client.prepare_hello("ESP32");
         assert!(hello.len() > HEADER_SIZE);
         
-        // Simulate welcome response (v3 format: type + version + features + time + session + name)
+        // Simulate welcome response (binary format: type + version + features + time + session + name)
         let mut welcome_buf = [0u8; 64];
         let payload_start = HEADER_SIZE;
         let mut offset = payload_start;
@@ -968,10 +1207,97 @@ mod tests {
     #[test]
     fn test_mini_router() {
         use server::MiniRouter;
-        
+
         let mut router = MiniRouter::new();
         router.set("/light/brightness", Value::Float(0.8));
-        
+
         assert_eq!(router.get("/light/brightness").unwrap().as_float(), Some(0.8));
+    }
+
+    #[cfg(feature = "server")]
+    #[test]
+    fn test_mini_router_subscriptions() {
+        use server::{MiniRouter, Session, Subscription};
+
+        // Test subscription pattern matching
+        let mut sub = Subscription::empty();
+        sub.active = true;
+        sub.pattern_len = "/light/*".len();
+        sub.pattern[..sub.pattern_len].copy_from_slice(b"/light/*");
+
+        assert!(sub.matches("/light/brightness"));
+        assert!(sub.matches("/light/color"));
+        assert!(!sub.matches("/audio/volume"));
+        assert!(!sub.matches("/light/zone/1"));
+
+        // Test ** wildcard
+        sub.pattern_len = "/light/**".len();
+        sub.pattern[..sub.pattern_len].copy_from_slice(b"/light/**");
+        assert!(sub.matches("/light/brightness"));
+        assert!(sub.matches("/light/zone/1/brightness"));
+        assert!(!sub.matches("/audio/volume"));
+
+        // Test session subscriptions
+        let mut session = Session::new();
+        session.active = true;
+        assert!(session.subscribe(1, "/light/*"));
+        assert!(session.subscribe(2, "/audio/**"));
+        assert_eq!(session.sub_count, 2);
+
+        assert!(session.has_match("/light/brightness"));
+        assert!(session.has_match("/audio/master/volume"));
+        assert!(!session.has_match("/midi/cc/1"));
+
+        // Unsubscribe
+        assert!(session.unsubscribe(1));
+        assert_eq!(session.sub_count, 1);
+        assert!(!session.has_match("/light/brightness"));
+        assert!(session.has_match("/audio/master/volume"));
+    }
+
+    #[cfg(feature = "server")]
+    #[test]
+    fn test_mini_router_broadcast() {
+        use server::MiniRouter;
+
+        let mut router = MiniRouter::new();
+
+        // Simulate two clients connecting
+        // Client 0 subscribes to /light/**
+        // Client 1 subscribes to /audio/**
+
+        // Create sessions manually (normally done via HELLO message)
+        {
+            let session = router.session_mut(0).unwrap();
+            session.active = true;
+            session.id = 0;
+            session.subscribe(1, "/light/**");
+        }
+
+        {
+            let session = router.session_mut(1).unwrap();
+            session.active = true;
+            session.id = 1;
+            session.subscribe(1, "/audio/**");
+        }
+
+        // Client 2 sends a SET to /light/brightness
+        router.set("/light/brightness", Value::Float(0.75));
+
+        // Get broadcast targets (excluding sender 2)
+        let targets = router.get_broadcast_targets("/light/brightness", 2);
+        assert_eq!(targets.count, 1);
+        assert!(targets.clients[0]); // Client 0 should receive
+        assert!(!targets.clients[1]); // Client 1 should NOT receive
+
+        // Test audio broadcast
+        let targets = router.get_broadcast_targets("/audio/volume", 2);
+        assert_eq!(targets.count, 1);
+        assert!(!targets.clients[0]); // Client 0 should NOT receive
+        assert!(targets.clients[1]); // Client 1 should receive
+
+        // Test that sender doesn't receive their own broadcast
+        let targets = router.get_broadcast_targets("/light/brightness", 0);
+        assert_eq!(targets.count, 0); // Client 0 sent it, so no one else matches
     }
 }

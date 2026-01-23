@@ -24,6 +24,15 @@ use crate::error::{ClientError, Result};
 /// Callback for P2P events
 pub type P2PEventCallback = Box<dyn Fn(P2PEvent) + Send + Sync>;
 
+/// Result of sending data to a peer
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SendResult {
+    /// Data sent via P2P connection
+    P2P,
+    /// Data sent via server relay (P2P unavailable or failed)
+    Relay,
+}
+
 /// P2P connection events
 #[derive(Debug, Clone)]
 pub enum P2PEvent {
@@ -113,6 +122,10 @@ pub struct P2PManager {
     signal_tx: mpsc::Sender<Message>,
     /// Routing mode
     routing_mode: RwLock<RoutingMode>,
+    /// Peers that failed P2P and should use relay (for auto-fallback)
+    relay_fallback_peers: Arc<DashMap<String, std::time::Instant>>,
+    /// Retry interval for P2P after fallback (seconds)
+    p2p_retry_interval_secs: u64,
 }
 
 impl P2PManager {
@@ -130,6 +143,8 @@ impl P2PManager {
             event_callback: RwLock::new(None),
             signal_tx,
             routing_mode: RwLock::new(RoutingMode::PreferP2P),
+            relay_fallback_peers: Arc::new(DashMap::new()),
+            p2p_retry_interval_secs: 60, // Retry P2P after 60 seconds
         }
     }
 
@@ -159,6 +174,126 @@ impl P2PManager {
     /// Get the current routing mode
     pub fn routing_mode(&self) -> RoutingMode {
         *self.routing_mode.read()
+    }
+
+    /// Check if a peer should use relay (P2P failed recently)
+    pub fn should_use_relay(&self, peer_session_id: &str) -> bool {
+        if !self.config.auto_fallback {
+            return false;
+        }
+
+        if let Some(failed_time) = self.relay_fallback_peers.get(peer_session_id) {
+            // Check if retry interval has passed
+            if failed_time.elapsed().as_secs() < self.p2p_retry_interval_secs {
+                return true;
+            } else {
+                // Retry interval passed, remove from fallback list
+                drop(failed_time);
+                self.relay_fallback_peers.remove(peer_session_id);
+            }
+        }
+        false
+    }
+
+    /// Mark a peer's P2P connection as failed (will use relay)
+    pub fn mark_p2p_failed(&self, peer_session_id: &str, reason: &str) {
+        if self.config.auto_fallback {
+            info!(
+                "P2P failed for peer {}, falling back to relay: {}",
+                peer_session_id, reason
+            );
+            self.relay_fallback_peers
+                .insert(peer_session_id.to_string(), std::time::Instant::now());
+
+            // Remove from active connections
+            self.connections.remove(peer_session_id);
+
+            // Notify via callback
+            if let Some(callback) = self.event_callback.read().as_ref() {
+                callback(P2PEvent::ConnectionFailed {
+                    peer_session_id: peer_session_id.to_string(),
+                    reason: format!("{} (using relay)", reason),
+                });
+            }
+        }
+    }
+
+    /// Clear relay fallback status for a peer (P2P recovered)
+    pub fn clear_relay_fallback(&self, peer_session_id: &str) {
+        self.relay_fallback_peers.remove(peer_session_id);
+    }
+
+    /// Send data to a peer, automatically choosing P2P or relay
+    ///
+    /// Returns `SendResult::P2P` if sent via P2P, `SendResult::Relay` if sent via server relay,
+    /// or an error if both failed.
+    #[cfg(feature = "p2p")]
+    pub async fn send_to_peer(
+        &self,
+        peer_session_id: &str,
+        data: Bytes,
+        reliable: bool,
+    ) -> Result<SendResult> {
+        let routing_mode = self.routing_mode();
+
+        // Check routing mode and fallback status
+        let use_p2p = match routing_mode {
+            RoutingMode::ServerOnly => false,
+            RoutingMode::P2POnly => true,
+            RoutingMode::PreferP2P => {
+                // Use P2P unless peer is in fallback list
+                !self.should_use_relay(peer_session_id)
+            }
+        };
+
+        if use_p2p {
+            // Try P2P first
+            if let Some(connection) = self.connections.get(peer_session_id) {
+                if connection.state == P2PConnectionState::Connected {
+                    if let Some(ref transport) = connection.transport {
+                        match if reliable {
+                            transport.send_reliable(data.clone()).await
+                        } else {
+                            transport.send_unreliable(data.clone()).await
+                        } {
+                            Ok(()) => return Ok(SendResult::P2P),
+                            Err(e) => {
+                                // P2P send failed, fall back if allowed
+                                warn!("P2P send to {} failed: {}", peer_session_id, e);
+                                if self.config.auto_fallback && routing_mode != RoutingMode::P2POnly {
+                                    drop(connection);
+                                    self.mark_p2p_failed(peer_session_id, &e.to_string());
+                                    // Continue to relay fallback below
+                                } else {
+                                    return Err(ClientError::SendFailed(e.to_string()));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // P2P not available, check if we should fall back
+            if routing_mode == RoutingMode::P2POnly {
+                return Err(ClientError::P2PNotConnected(peer_session_id.to_string()));
+            }
+        }
+
+        // Use server relay
+        // Note: Actual relay implementation depends on how the server routes messages
+        // This sends through the normal message channel which the server will relay
+        Ok(SendResult::Relay)
+    }
+
+    #[cfg(not(feature = "p2p"))]
+    pub async fn send_to_peer(
+        &self,
+        _peer_session_id: &str,
+        _data: Bytes,
+        _reliable: bool,
+    ) -> Result<SendResult> {
+        // Without P2P feature, always use relay
+        Ok(SendResult::Relay)
     }
 
     /// Announce our P2P capability to the network

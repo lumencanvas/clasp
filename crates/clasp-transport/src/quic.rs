@@ -190,10 +190,12 @@ impl QuicTransport {
             CertVerification::SkipVerification => {
                 // WARNING: Do not use in production - vulnerable to MITM attacks
                 warn!("QUIC using insecure certificate verification - DO NOT USE IN PRODUCTION");
-                rustls::ClientConfig::builder()
+                let mut cfg = rustls::ClientConfig::builder()
                     .dangerous()
                     .with_custom_certificate_verifier(Arc::new(SkipServerVerification))
-                    .with_no_client_auth()
+                    .with_no_client_auth();
+                cfg.alpn_protocols = vec![CLASP_ALPN.to_vec()];
+                cfg
             }
             CertVerification::SystemRoots => {
                 // Use system root certificates
@@ -222,9 +224,11 @@ impl QuicTransport {
                     ));
                 }
 
-                rustls::ClientConfig::builder()
+                let mut cfg = rustls::ClientConfig::builder()
                     .with_root_certificates(root_store)
-                    .with_no_client_auth()
+                    .with_no_client_auth();
+                cfg.alpn_protocols = vec![CLASP_ALPN.to_vec()];
+                cfg
             }
             CertVerification::CustomRoots(certs) => {
                 // Use custom root certificates
@@ -244,9 +248,11 @@ impl QuicTransport {
                 }
 
                 info!("Using {} custom root certificates", root_store.len());
-                rustls::ClientConfig::builder()
+                let mut cfg = rustls::ClientConfig::builder()
                     .with_root_certificates(root_store)
-                    .with_no_client_auth()
+                    .with_no_client_auth();
+                cfg.alpn_protocols = vec![CLASP_ALPN.to_vec()];
+                cfg
             }
         };
 

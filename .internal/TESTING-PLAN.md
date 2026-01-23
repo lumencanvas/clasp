@@ -62,15 +62,19 @@ This document outlines the comprehensive testing plan for CLASP, identifying gap
 
 ### 1.2 Bridge Integration Tests
 
-**Status:** Some bridges have tests, others need comprehensive integration tests
+**Status:** Some bridges have tests, others need comprehensive integration tests  
+**Progress (2026‑01‑23):**
+- HTTP bridge: core server‑mode mappings tested end‑to‑end in `http_integration_tests.rs` (PUT/GET/POST → CLASP SET/PUBLISH).
+- MQTT bridge: initial end‑to‑end tests in `mqtt_integration_tests.rs` (MQTT↔CLASP translation, QoS configuration, topic/address mapping).
+- WebSocket bridge: JSON text mapping verified in `websocket_bridge_tests.rs` (WebSocket↔CLASP SET JSON).
 
 #### 1.2.1 MQTT Bridge ⚠️ NEEDS MORE
 
 **Required Tests:**
-- [ ] MQTT → CLASP message translation
-- [ ] CLASP → MQTT message translation
-- [ ] QoS level mapping (MQTT QoS 0/1/2 → CLASP Q0/Q1/Q2)
-- [ ] Topic → Address mapping
+- [x] MQTT → CLASP message translation
+- [x] CLASP → MQTT message translation
+- [x] QoS level mapping (MQTT QoS 0/1 → CLASP Q0/Q1) *(Q2 still to exercise explicitly)*
+- [x] Topic → Address mapping
 - [ ] Retained messages → CLASP state
 - [ ] Will messages handling
 - [ ] Multiple MQTT brokers
@@ -83,11 +87,11 @@ This document outlines the comprehensive testing plan for CLASP, identifying gap
 #### 1.2.2 HTTP Bridge ⚠️ NEEDS MORE
 
 **Required Tests:**
-- [ ] REST API → CLASP SET/PUBLISH
+- [x] REST API → CLASP SET/PUBLISH
 - [ ] CLASP → HTTP webhook callbacks
-- [ ] GET requests → CLASP GET
-- [ ] POST/PUT/PATCH → CLASP SET
-- [ ] DELETE → CLASP SET (null value)
+- [x] GET requests → CLASP GET
+- [x] POST/PUT/PATCH → CLASP SET
+- [x] DELETE → CLASP SET (null value)
 - [ ] Query parameters → CLASP address mapping
 - [ ] Request body parsing (JSON, form-data)
 - [ ] Response formatting
@@ -102,10 +106,10 @@ This document outlines the comprehensive testing plan for CLASP, identifying gap
 #### 1.2.3 WebSocket Bridge ⚠️ NEEDS MORE
 
 **Required Tests:**
-- [ ] WebSocket → CLASP message translation
-- [ ] CLASP → WebSocket message translation
+- [x] WebSocket → CLASP message translation *(JSON text → SET)*
+- [x] CLASP → WebSocket message translation *(SET → JSON text)*
 - [ ] Text vs binary frames
-- [ ] JSON payload parsing
+- [ ] JSON payload parsing *(binary MsgPack mode)*
 - [ ] MessagePack payload parsing
 - [ ] Subprotocol negotiation
 - [ ] Connection lifecycle

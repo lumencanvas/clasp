@@ -27,6 +27,9 @@ pub enum ClientError {
     #[error("transport error: {0}")]
     Transport(#[from] clasp_transport::TransportError),
 
+    #[error("P2P not connected to peer: {0}")]
+    P2PNotConnected(String),
+
     #[error("client error: {0}")]
     Other(String),
 }

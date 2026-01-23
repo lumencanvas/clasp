@@ -26,6 +26,13 @@ regex-lite = "0.1"
 
 [dev-dependencies]
 criterion = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+clasp-router = { workspace = true }
+clasp-client = { workspace = true }
+clasp-transport = { workspace = true }
+clasp-test-utils = { workspace = true }
+rosc = { workspace = true }
+midir = { workspace = true }
 
 [[bench]]
 name = "codec"
