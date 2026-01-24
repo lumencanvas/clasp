@@ -1,5 +1,5 @@
 import { ref, reactive, shallowRef, readonly } from 'vue'
-import { ClaspBuilder } from '../lib/clasp.js'
+import { ClaspBuilder } from '@clasp-to/core'
 
 // Shared state across all components
 const client = shallowRef(null)
