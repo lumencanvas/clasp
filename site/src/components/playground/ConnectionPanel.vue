@@ -17,7 +17,7 @@ const {
 
 const presets = [
   { label: 'Local Server', url: 'ws://localhost:7330' },
-  { label: 'Public Relay', url: 'wss://relay.clasp.to' },
+  { label: 'Public Relay', url: 'wss://clasp-relay-s4743.ondigitalocean.app' },
 ]
 
 function selectPreset(url) {
