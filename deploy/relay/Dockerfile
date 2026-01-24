@@ -12,7 +12,7 @@
 # For development (using local crates), build from repo root with:
 #   docker build -f deploy/relay/Dockerfile.dev -t clasp-relay-dev .
 
-FROM rust:1.75-slim-bookworm as builder
+FROM rust:1.85-slim-bookworm as builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \

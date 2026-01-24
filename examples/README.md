@@ -1,132 +1,127 @@
 # CLASP Examples
 
-This directory contains example code demonstrating how to use CLASP in various scenarios.
+Comprehensive examples demonstrating how to use CLASP in various scenarios across JavaScript, Python, and Rust.
+
+## Quick Start
+
+```bash
+# Start a CLASP router first
+cargo run -p clasp-router-server -- --listen 0.0.0.0:7330
+
+# Then run any example
+```
 
 ## JavaScript Examples
 
-### simple-publisher.js
-
-Demonstrates publishing values and events to a CLASP server.
+Located in `examples/js/`. Run with Node.js 18+.
 
 ```bash
 cd examples/js
 npm install @clasp-to/core
-node simple-publisher.js
 ```
 
-Features demonstrated:
-- Setting parameter values
-- Emitting events
-- Streaming high-rate data
-- Atomic bundles
-- Scheduled bundles
+| Example | Description |
+|---------|-------------|
+| `simple-publisher.js` | Basic publishing: set params, emit events, stream data |
+| `simple-subscriber.js` | Subscribing with wildcards, rate limiting, epsilon filtering |
+| `signal-types.js` | All 5 signal types: Param, Event, Stream, Gesture, Timeline |
+| `bundles-and-scheduling.js` | Atomic bundles, scheduled execution, cancellation |
+| `gestures.js` | Touch/pen input, multi-touch, pressure sensitivity, coalescing |
+| `discovery.js` | mDNS discovery, UDP broadcast, manual connection |
+| `locks.js` | Exclusive control, lock contention, hierarchical locks |
+| `late-joiner.js` | State synchronization for late-joining clients |
+| `security-tokens.js` | CPSK tokens, scoped permissions, authentication |
+| `p2p-webrtc.js` | Peer-to-peer via WebRTC DataChannels |
+| `embedded-server.js` | Integrating CLASP into your Node.js app |
 
-### simple-subscriber.js
-
-Demonstrates subscribing to values and events from a CLASP server.
+### Run an Example
 
 ```bash
-cd examples/js
-npm install @clasp-to/core
-node simple-subscriber.js
+node signal-types.js
+node bundles-and-scheduling.js
+# etc.
 ```
-
-Features demonstrated:
-- Subscribing to specific addresses
-- Wildcard subscriptions (`*` and `**`)
-- Rate-limited subscriptions
-- Change threshold filtering (epsilon)
-- Getting values (async)
-- Checking cached values (sync)
-- Unsubscribing
-
-### embedded-server.js
-
-Demonstrates integrating CLASP with your Node.js application.
-
-```bash
-# Start router first
-cargo run -p clasp-router-server -- --listen 0.0.0.0:7330
-
-# Then run the example
-cd examples/js
-npm install @clasp-to/core
-node embedded-server.js
-```
-
-Features demonstrated:
-- Connecting to CLASP from your app
-- Publishing application state (CPU, memory, sensors)
-- Subscribing to commands from other clients
 
 ## Python Examples
 
-### embedded_server.py
-
-Demonstrates integrating CLASP with your Python application.
+Located in `examples/python/`. Requires Python 3.9+.
 
 ```bash
-# Start router first
-cargo run -p clasp-router-server -- --listen 0.0.0.0:7330
-
-# Then run the example
 pip install clasp-to
-python examples/python/embedded_server.py
 ```
 
-Features demonstrated:
-- Async connection to CLASP
-- Publishing sensor data periodically
-- Command handling via subscriptions
+| Example | Description |
+|---------|-------------|
+| `signal_types.py` | All 5 signal types with async/await |
+| `bundles_and_scheduling.py` | Atomic and scheduled bundles |
+| `late_joiner.py` | State sync demonstration |
+| `security_tokens.py` | Token-based authentication |
+| `p2p_webrtc.py` | Peer-to-peer connections |
+| `embedded_server.py` | Integrating CLASP into Python apps |
+
+### Run an Example
+
+```bash
+python signal_types.py
+python bundles_and_scheduling.py
+# etc.
+```
 
 ## Rust Examples
 
-### basic-client.rs
+Located in `examples/rust/`. These are cargo examples.
 
-Comprehensive Rust client example.
+```bash
+# Add to your Cargo.toml
+[dependencies]
+clasp-client = "3.0"
+clasp-router = "3.0"  # If embedding a router
+```
+
+| Example | Description |
+|---------|-------------|
+| `basic-client.rs` | Comprehensive client example |
+| `signal_types.rs` | All signal types in Rust |
+| `bundles_and_scheduling.rs` | Atomic and scheduled bundles |
+| `late_joiner.rs` | State synchronization |
+| `security_tokens.rs` | Token authentication |
+| `p2p_webrtc.rs` | WebRTC peer-to-peer |
+| `embedded-server.rs` | Embedding router in your app |
+
+### Run an Example
 
 ```bash
 cargo run --example basic-client
+cargo run --example signal_types
+cargo run --example bundles_and_scheduling
+# etc.
 ```
 
-### embedded-server.rs
+## Feature Coverage
 
-Demonstrates embedding a CLASP server in your Rust application.
-
-```bash
-cargo run --example embedded-server
-```
-
-Features demonstrated:
-- Running CLASP router alongside your business logic
-- Publishing data from your application to connected clients
-- Custom routing and state management
-
-Add to your project:
-
-```toml
-[dependencies]
-clasp-router = "3.0"  # For server
-clasp-client = "3.0"  # For client
-```
-
-Features demonstrated (basic-client):
-- Builder pattern for client creation
-- Setting parameters
-- Subscribing with callbacks
-- Emitting events
-- Streaming data
-- Getting values
-- Atomic and scheduled bundles
+| Feature | JS | Python | Rust |
+|---------|:--:|:------:|:----:|
+| Params (stateful values) | signal-types | signal_types | signal_types |
+| Events (one-shot triggers) | signal-types | signal_types | signal_types |
+| Streams (high-frequency) | signal-types | signal_types | signal_types |
+| Gestures (phased input) | gestures | signal_types | signal_types |
+| Timelines (automation) | signal-types | signal_types | signal_types |
+| Atomic Bundles | bundles-and-scheduling | bundles_and_scheduling | bundles_and_scheduling |
+| Scheduled Bundles | bundles-and-scheduling | bundles_and_scheduling | bundles_and_scheduling |
+| Wildcard Subscriptions | simple-subscriber | signal_types | basic-client |
+| Late Joiner Sync | late-joiner | late_joiner | late_joiner |
+| Locks | locks | - | - |
+| Discovery (mDNS/UDP) | discovery | - | - |
+| Security Tokens | security-tokens | security_tokens | security_tokens |
+| P2P WebRTC | p2p-webrtc | p2p_webrtc | p2p_webrtc |
+| Embedded Server | embedded-server | embedded_server | embedded-server |
 
 ## Docker Compose
 
-### docker-compose.yml
-
-Complete development environment with CLASP Router and MQTT broker.
+A complete development environment is available:
 
 ```bash
-# Start basic setup
+# Start CLASP router + MQTT broker
 docker-compose up -d clasp-router mqtt
 
 # Start with Redis for distributed state
@@ -136,22 +131,18 @@ docker-compose --profile distributed up -d
 docker-compose down
 ```
 
-Services:
-- **clasp-router**: Core CLASP message router (port 7330)
-- **mqtt**: Mosquitto MQTT broker (port 1883)
-- **redis**: Redis for distributed state (port 6379, optional)
-
 ## Environment Variables
 
-All examples support the following environment variables:
+All examples support:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CLASP_URL` | `ws://localhost:7330` | CLASP server WebSocket URL |
+| `CLASP_URL` | `ws://localhost:7330` | CLASP server URL |
+| `CLASP_TOKEN` | (none) | Authentication token |
 
 ## Running a CLASP Server
 
-To run these examples, you need a CLASP server. Options:
+Options:
 
 1. **Desktop App**: Download from [releases](https://github.com/lumencanvas/clasp/releases)
 
@@ -165,9 +156,9 @@ To run these examples, you need a CLASP server. Options:
    cargo run -p clasp-router-server
    ```
 
-## More Examples
+## More Resources
 
-For more complex integration examples, see:
-- [TouchOSC Integration](../docs/integrations/touchosc.md)
-- [Resolume Integration](../docs/integrations/resolume.md)
-- [QLab Integration](../docs/integrations/qlab.md)
+- [Tutorials](../docs/tutorials/) - Step-by-step learning guides
+- [How-To Guides](../docs/how-to/) - Solve specific problems
+- [API Reference](../docs/reference/api/) - Complete API documentation
+- [Integrations](../docs/integrations/) - TouchOSC, Resolume, QLab, etc.
