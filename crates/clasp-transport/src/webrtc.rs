@@ -63,6 +63,9 @@ impl Default for WebRtcConfig {
     }
 }
 
+/// Data received callback type - (data, reliable)
+pub type DataCallback = Box<dyn Fn(Bytes, bool) + Send + Sync>;
+
 /// WebRTC transport for CLASP
 #[cfg(feature = "webrtc")]
 pub struct WebRtcTransport {
@@ -72,6 +75,7 @@ pub struct WebRtcTransport {
     reliable_channel: Arc<Mutex<Option<Arc<RTCDataChannel>>>>,
     connection_callback: Arc<Mutex<Option<Box<dyn Fn() + Send + Sync>>>>,
     ice_candidate_callback: Arc<Mutex<Option<Box<dyn Fn(String) + Send + Sync>>>>,
+    data_callback: Arc<Mutex<Option<DataCallback>>>,
 }
 
 #[cfg(feature = "webrtc")]
@@ -118,6 +122,7 @@ impl WebRtcTransport {
             Arc::new(Mutex::new(None));
         let ice_candidate_callback: Arc<Mutex<Option<Box<dyn Fn(String) + Send + Sync>>>> =
             Arc::new(Mutex::new(None));
+        let data_callback: Arc<Mutex<Option<DataCallback>>> = Arc::new(Mutex::new(None));
 
         // Set up on_open handlers for created channels
         if let Some(ref reliable) = reliable_channel {
@@ -142,6 +147,29 @@ impl WebRtcTransport {
             }
         }
 
+        // Set up message handlers for offerer's channels
+        if let Some(ref channel) = unreliable_channel {
+            let data_cb = data_callback.clone();
+            channel.on_message(Box::new(move |msg: DataChannelMessage| {
+                let data = Bytes::copy_from_slice(&msg.data);
+                if let Some(ref cb) = *data_cb.lock() {
+                    cb(data, false); // unreliable = false
+                }
+                Box::pin(async {})
+            }));
+        }
+
+        if let Some(ref channel) = reliable_channel {
+            let data_cb = data_callback.clone();
+            channel.on_message(Box::new(move |msg: DataChannelMessage| {
+                let data = Bytes::copy_from_slice(&msg.data);
+                if let Some(ref cb) = *data_cb.lock() {
+                    cb(data, true); // reliable = true
+                }
+                Box::pin(async {})
+            }));
+        }
+
         let transport = Self {
             config,
             peer_connection: peer_connection.clone(),
@@ -149,6 +177,7 @@ impl WebRtcTransport {
             reliable_channel: Arc::new(Mutex::new(reliable_channel)),
             connection_callback,
             ice_candidate_callback: ice_candidate_callback.clone(),
+            data_callback,
         };
 
         // Set up ICE candidate handler
@@ -201,26 +230,29 @@ impl WebRtcTransport {
             Arc::new(Mutex::new(None));
         let ice_candidate_callback: Arc<Mutex<Option<Box<dyn Fn(String) + Send + Sync>>>> =
             Arc::new(Mutex::new(None));
+        let data_callback: Arc<Mutex<Option<DataCallback>>> = Arc::new(Mutex::new(None));
 
         let unreliable_clone = unreliable_channel_ref.clone();
         let reliable_clone = reliable_channel_ref.clone();
         let callback_clone = connection_callback.clone();
+        let data_callback_clone = data_callback.clone();
 
         peer_connection.on_data_channel(Box::new(move |channel: Arc<RTCDataChannel>| {
             let label: String = channel.label().to_string();
             info!("Received data channel from offerer: {}", label);
 
-            // Set up channel handlers
-            let (tx, _rx) = mpsc::channel(100);
-            let tx_clone = tx.clone();
+            // Determine if this is the reliable channel
+            let is_reliable = label == "clasp-reliable";
 
+            // Set up message handler with data callback
+            let data_cb = data_callback_clone.clone();
             let channel_for_message = channel.clone();
             channel_for_message.on_message(Box::new(move |msg: DataChannelMessage| {
                 let data = Bytes::copy_from_slice(&msg.data);
-                let tx = tx_clone.clone();
-                Box::pin(async move {
-                    let _ = tx.send(TransportEvent::Data(data)).await;
-                })
+                if let Some(ref cb) = *data_cb.lock() {
+                    cb(data, is_reliable);
+                }
+                Box::pin(async {})
             }));
 
             // Store channel first
@@ -230,9 +262,7 @@ impl WebRtcTransport {
                 *unreliable_clone.lock() = Some(channel.clone());
             }
 
-            // Set up channel handlers (message, open, close)
-            let tx_open = tx.clone();
-            let is_reliable = label == "clasp-reliable";
+            // Set up channel handlers (open, close)
             let callback = callback_clone.clone();
             let label_for_open = label.clone();
 
@@ -250,14 +280,11 @@ impl WebRtcTransport {
 
             let channel_for_open = channel.clone();
             channel_for_open.on_open(Box::new(move || {
-                let tx = tx_open.clone();
                 let callback = callback.clone();
-                let is_reliable = is_reliable;
                 let label = label_for_open.clone();
                 Box::pin(async move {
                     info!("DataChannel '{}' opened (answerer)", label);
-                    let _ = tx.send(TransportEvent::Connected).await;
-                    // Also call connection callback for reliable channel
+                    // Call connection callback for reliable channel
                     if is_reliable {
                         info!("Reliable channel opened (answerer), calling connection callback");
                         if let Some(ref cb) = *callback.lock() {
@@ -270,12 +297,12 @@ impl WebRtcTransport {
                 })
             }));
 
-            let tx_close = tx.clone();
+            let label_for_close = label.clone();
             let channel_for_close = channel.clone();
             channel_for_close.on_close(Box::new(move || {
-                let tx = tx_close.clone();
+                let label = label_for_close.clone();
                 Box::pin(async move {
-                    let _ = tx.send(TransportEvent::Disconnected { reason: None }).await;
+                    info!("DataChannel '{}' closed (answerer)", label);
                 })
             }));
 
@@ -289,6 +316,7 @@ impl WebRtcTransport {
             reliable_channel: reliable_channel_ref,
             connection_callback,
             ice_candidate_callback: ice_candidate_callback.clone(),
+            data_callback,
         };
 
         // Set up ICE candidate handler
@@ -353,6 +381,17 @@ impl WebRtcTransport {
         F: Fn(String) + Send + Sync + 'static,
     {
         *self.ice_candidate_callback.lock() = Some(Box::new(callback));
+    }
+
+    /// Set callback to be called when data is received
+    ///
+    /// The callback receives (data, reliable) where reliable is true if the data
+    /// came from the reliable channel, false if from the unreliable channel.
+    pub fn on_data<F>(&self, callback: F)
+    where
+        F: Fn(Bytes, bool) + Send + Sync + 'static,
+    {
+        *self.data_callback.lock() = Some(Box::new(callback));
     }
 
     /// Get sender/receiver pair for the unreliable channel (streams)

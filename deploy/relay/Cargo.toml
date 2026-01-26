@@ -8,7 +8,7 @@
 
 [package]
 name = "clasp-relay"
-version = "3.2.0"
+version = "3.3.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "CLASP multi-protocol relay server"
@@ -32,8 +32,8 @@ osc-server = ["clasp-router/osc-server"]
 
 [dependencies]
 # Published crates from crates.io
-clasp-core = "3.2"
-clasp-router = "3.2"
+clasp-core = "3.3"
+clasp-router = "3.3"
 
 # Runtime
 tokio = { version = "1", features = ["full"] }

@@ -932,6 +932,47 @@ impl Clasp {
             .map(|p2p| p2p.is_peer_connected(peer_session_id))
             .unwrap_or(false)
     }
+
+    /// Send data to a peer via P2P (requires p2p feature)
+    ///
+    /// Returns `SendResult::P2P` if sent via direct P2P, `SendResult::Relay` if sent via server.
+    /// Behavior depends on the current routing mode and connection state.
+    #[cfg(feature = "p2p")]
+    pub async fn send_p2p(
+        &self,
+        peer_session_id: &str,
+        data: bytes::Bytes,
+        reliable: bool,
+    ) -> Result<p2p::SendResult> {
+        if let Some(ref p2p_manager) = self.p2p_manager {
+            p2p_manager.send_to_peer(peer_session_id, data, reliable).await
+        } else {
+            Err(ClientError::Other(
+                "P2P not configured. Use builder.p2p_config() to enable.".to_string(),
+            ))
+        }
+    }
+
+    /// Set P2P routing mode (requires p2p feature)
+    ///
+    /// - `RoutingMode::PreferP2P` (default): Try P2P first, fall back to relay
+    /// - `RoutingMode::P2POnly`: Only use P2P, fail if unavailable
+    /// - `RoutingMode::ServerOnly`: Never use P2P, always relay
+    #[cfg(feature = "p2p")]
+    pub fn set_p2p_routing_mode(&self, mode: clasp_core::p2p::RoutingMode) {
+        if let Some(ref p2p_manager) = self.p2p_manager {
+            p2p_manager.set_routing_mode(mode);
+        }
+    }
+
+    /// Get current P2P routing mode (requires p2p feature)
+    #[cfg(feature = "p2p")]
+    pub fn p2p_routing_mode(&self) -> clasp_core::p2p::RoutingMode {
+        self.p2p_manager
+            .as_ref()
+            .map(|p2p| p2p.routing_mode())
+            .unwrap_or_default()
+    }
 }
 
 /// Handle incoming message

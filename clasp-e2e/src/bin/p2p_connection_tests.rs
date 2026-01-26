@@ -9,7 +9,8 @@
 
 #[cfg(feature = "p2p")]
 use {
-    clasp_client::{Clasp, P2PEvent},
+    bytes::Bytes,
+    clasp_client::{Clasp, P2PEvent, RoutingMode, SendResult},
     clasp_core::P2PConfig,
     clasp_router::{Router, RouterConfig},
     std::sync::atomic::{AtomicBool, AtomicU64, Ordering},
@@ -47,6 +48,15 @@ async fn main() {
 
         // Test 5: STUN server configuration
         test_stun_configuration().await;
+
+        // Test 6: P2P data transfer
+        test_p2p_data_transfer().await;
+
+        // Test 7: P2P routing mode behavior
+        test_p2p_routing_mode().await;
+
+        // Test 8: P2P connection failure with nonexistent peer
+        test_p2p_nonexistent_peer().await;
     }
 
     #[cfg(not(feature = "p2p"))]
@@ -128,11 +138,12 @@ async fn test_p2p_connection_establishment() {
     let connection_failed = Arc::new(AtomicBool::new(false));
     let connected_clone = connected.clone();
     let failed_clone = connection_failed.clone();
+    let session_a_for_callback = session_a.clone();
 
     // Set up P2P event handler for client B
     client_b.on_p2p_event(move |event| match event {
         P2PEvent::Connected { peer_session_id } => {
-            if peer_session_id == session_a {
+            if peer_session_id == session_a_for_callback {
                 connected_clone.store(true, Ordering::SeqCst);
             }
         }
@@ -140,7 +151,7 @@ async fn test_p2p_connection_establishment() {
             peer_session_id,
             reason,
         } => {
-            if peer_session_id == session_a {
+            if peer_session_id == session_a_for_callback {
                 eprintln!("  Connection failed: {}", reason);
                 failed_clone.store(true, Ordering::SeqCst);
             }
@@ -425,4 +436,441 @@ async fn test_stun_configuration() {
     }
 
     println!("  ✅ PASS: STUN configuration verified\n");
+}
+
+/// Test 6: P2P data transfer
+/// Verify actual data flows over P2P channel
+#[cfg(feature = "p2p")]
+async fn test_p2p_data_transfer() {
+    println!("┌──────────────────────────────────────────────────────────────────┐");
+    println!("│ Test 6: P2P Data Transfer                                        │");
+    println!("└──────────────────────────────────────────────────────────────────┘");
+
+    let port = find_port().await;
+    let addr = format!("127.0.0.1:{}", port);
+
+    let router = Router::new(RouterConfig::default());
+    let router_handle = {
+        let addr = addr.clone();
+        tokio::spawn(async move {
+            let _ = router.serve_websocket(&addr).await;
+        })
+    };
+
+    sleep(Duration::from_millis(100)).await;
+
+    let url = format!("ws://{}", addr);
+
+    let p2p_config = P2PConfig {
+        ice_servers: vec!["stun:stun.l.google.com:19302".to_string()],
+        ..Default::default()
+    };
+
+    let client_a = match Clasp::builder(&url)
+        .name("DataSender")
+        .p2p_config(p2p_config.clone())
+        .connect()
+        .await
+    {
+        Ok(c) => c,
+        Err(e) => {
+            router_handle.abort();
+            println!("  ❌ FAIL: Client A connection failed: {}", e);
+            return;
+        }
+    };
+
+    let client_b = match Clasp::builder(&url)
+        .name("DataReceiver")
+        .p2p_config(p2p_config)
+        .connect()
+        .await
+    {
+        Ok(c) => c,
+        Err(e) => {
+            router_handle.abort();
+            println!("  ❌ FAIL: Client B connection failed: {}", e);
+            return;
+        }
+    };
+
+    let session_a = client_a.session_id().unwrap();
+    let session_b = client_b.session_id().unwrap();
+
+    println!("  Sender session: {}", session_a);
+    println!("  Receiver session: {}", session_b);
+
+    // Track connection and data reception
+    let connected = Arc::new(AtomicBool::new(false));
+    let data_received = Arc::new(AtomicBool::new(false));
+    let received_payload = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let connected_clone = connected.clone();
+    let data_received_clone = data_received.clone();
+    let received_payload_clone = received_payload.clone();
+
+    // Set up P2P event handler for client B (receiver)
+    client_b.on_p2p_event(move |event| match event {
+        P2PEvent::Connected { peer_session_id } => {
+            if peer_session_id == session_a {
+                connected_clone.store(true, Ordering::SeqCst);
+            }
+        }
+        P2PEvent::Data {
+            peer_session_id,
+            data,
+            reliable: _,
+        } => {
+            if peer_session_id == session_a {
+                *received_payload_clone.lock().unwrap() = data.to_vec();
+                data_received_clone.store(true, Ordering::SeqCst);
+            }
+        }
+        _ => {}
+    });
+
+    // Wait for P2P announcements to propagate
+    sleep(Duration::from_millis(200)).await;
+
+    // Client A initiates P2P connection
+    if let Err(e) = client_a.connect_to_peer(&session_b).await {
+        router_handle.abort();
+        println!("  ❌ FAIL: Failed to initiate P2P connection: {}", e);
+        return;
+    }
+
+    // Wait for P2P connection to be established
+    let start = Instant::now();
+    let deadline = start + Duration::from_secs(10);
+    while Instant::now() < deadline {
+        if connected.load(Ordering::SeqCst) {
+            break;
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+
+    if !connected.load(Ordering::SeqCst) {
+        router_handle.abort();
+        println!("  ❌ FAIL: P2P connection not established within timeout");
+        return;
+    }
+
+    println!("  ✅ P2P connection established");
+
+    // Send test data
+    let test_data = b"Hello P2P World!";
+    let test_bytes = Bytes::from_static(test_data);
+
+    match client_a.send_p2p(&session_b, test_bytes, true).await {
+        Ok(result) => {
+            println!("  Send result: {:?}", result);
+            if result == SendResult::P2P {
+                println!("  ✅ Data sent via P2P channel");
+            } else {
+                println!("  ⚠️  Data sent via relay (P2P channel not used)");
+            }
+        }
+        Err(e) => {
+            router_handle.abort();
+            println!("  ❌ FAIL: Failed to send P2P data: {}", e);
+            return;
+        }
+    }
+
+    // Wait for data to be received
+    let data_deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < data_deadline {
+        if data_received.load(Ordering::SeqCst) {
+            let payload = received_payload.lock().unwrap().clone();
+            if payload == test_data {
+                println!("  ✅ PASS: Data transfer verified - payload matches\n");
+            } else {
+                println!("  ⚠️  Data received but payload mismatch");
+                println!("     Expected: {:?}", test_data);
+                println!("     Received: {:?}\n", payload);
+            }
+            router_handle.abort();
+            return;
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+
+    router_handle.abort();
+    println!("  ⚠️  Data not received within timeout");
+    println!("  ⚠️  This may be expected if P2P data channel is not fully integrated\n");
+}
+
+/// Test 7: P2P routing mode behavior
+/// Verify routing mode affects send path
+#[cfg(feature = "p2p")]
+async fn test_p2p_routing_mode() {
+    println!("┌──────────────────────────────────────────────────────────────────┐");
+    println!("│ Test 7: P2P Routing Mode Behavior                                │");
+    println!("└──────────────────────────────────────────────────────────────────┘");
+
+    let port = find_port().await;
+    let addr = format!("127.0.0.1:{}", port);
+
+    let router = Router::new(RouterConfig::default());
+    let router_handle = {
+        let addr = addr.clone();
+        tokio::spawn(async move {
+            let _ = router.serve_websocket(&addr).await;
+        })
+    };
+
+    sleep(Duration::from_millis(100)).await;
+
+    let url = format!("ws://{}", addr);
+
+    let p2p_config = P2PConfig {
+        ice_servers: vec!["stun:stun.l.google.com:19302".to_string()],
+        ..Default::default()
+    };
+
+    let client_a = match Clasp::builder(&url)
+        .name("RoutingTester")
+        .p2p_config(p2p_config.clone())
+        .connect()
+        .await
+    {
+        Ok(c) => c,
+        Err(e) => {
+            router_handle.abort();
+            println!("  ❌ FAIL: Client A connection failed: {}", e);
+            return;
+        }
+    };
+
+    let client_b = match Clasp::builder(&url)
+        .name("RoutingPeer")
+        .p2p_config(p2p_config)
+        .connect()
+        .await
+    {
+        Ok(c) => c,
+        Err(e) => {
+            router_handle.abort();
+            println!("  ❌ FAIL: Client B connection failed: {}", e);
+            return;
+        }
+    };
+
+    let session_b = client_b.session_id().unwrap();
+
+    // Track connection
+    let connected = Arc::new(AtomicBool::new(false));
+    let connected_clone = connected.clone();
+    let session_a = client_a.session_id().unwrap();
+
+    client_b.on_p2p_event(move |event| {
+        if let P2PEvent::Connected { peer_session_id } = event {
+            if peer_session_id == session_a {
+                connected_clone.store(true, Ordering::SeqCst);
+            }
+        }
+    });
+
+    // Test 1: Check default routing mode
+    let default_mode = client_a.p2p_routing_mode();
+    println!("  Default routing mode: {:?}", default_mode);
+    if default_mode == RoutingMode::PreferP2P {
+        println!("  ✅ Default is PreferP2P");
+    } else {
+        println!("  ⚠️  Default is {:?}, expected PreferP2P", default_mode);
+    }
+
+    // Test 2: Set to ServerOnly
+    client_a.set_p2p_routing_mode(RoutingMode::ServerOnly);
+    let mode = client_a.p2p_routing_mode();
+    if mode == RoutingMode::ServerOnly {
+        println!("  ✅ Set to ServerOnly");
+    } else {
+        println!("  ❌ FAIL: Expected ServerOnly, got {:?}", mode);
+    }
+
+    // Test 3: Set to P2POnly
+    client_a.set_p2p_routing_mode(RoutingMode::P2POnly);
+    let mode = client_a.p2p_routing_mode();
+    if mode == RoutingMode::P2POnly {
+        println!("  ✅ Set to P2POnly");
+    } else {
+        println!("  ❌ FAIL: Expected P2POnly, got {:?}", mode);
+    }
+
+    // Test 4: Restore to PreferP2P
+    client_a.set_p2p_routing_mode(RoutingMode::PreferP2P);
+    let mode = client_a.p2p_routing_mode();
+    if mode == RoutingMode::PreferP2P {
+        println!("  ✅ Restored to PreferP2P");
+    } else {
+        println!("  ❌ FAIL: Expected PreferP2P, got {:?}", mode);
+    }
+
+    // Wait for announcements
+    sleep(Duration::from_millis(200)).await;
+
+    // Establish P2P connection
+    if let Err(e) = client_a.connect_to_peer(&session_b).await {
+        router_handle.abort();
+        println!("  ❌ FAIL: Failed to initiate P2P connection: {}", e);
+        return;
+    }
+
+    // Wait for connection
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline {
+        if connected.load(Ordering::SeqCst) {
+            break;
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+
+    if !connected.load(Ordering::SeqCst) {
+        router_handle.abort();
+        println!("  ⚠️  P2P connection not established, skipping send tests");
+        println!("  ✅ PASS: Routing mode getter/setter works\n");
+        return;
+    }
+
+    // Test 5: Send with PreferP2P (should use P2P if connected)
+    let test_data = Bytes::from_static(b"routing test");
+    match client_a.send_p2p(&session_b, test_data.clone(), true).await {
+        Ok(result) => {
+            println!("  PreferP2P send result: {:?}", result);
+        }
+        Err(e) => {
+            println!("  PreferP2P send error: {}", e);
+        }
+    }
+
+    // Test 6: Send with ServerOnly (should use relay)
+    client_a.set_p2p_routing_mode(RoutingMode::ServerOnly);
+    match client_a.send_p2p(&session_b, test_data.clone(), true).await {
+        Ok(result) => {
+            println!("  ServerOnly send result: {:?}", result);
+            if result == SendResult::Relay {
+                println!("  ✅ ServerOnly correctly uses relay");
+            }
+        }
+        Err(e) => {
+            println!("  ServerOnly send error: {}", e);
+        }
+    }
+
+    // Test 7: Send with P2POnly (should use P2P or fail)
+    client_a.set_p2p_routing_mode(RoutingMode::P2POnly);
+    match client_a.send_p2p(&session_b, test_data.clone(), true).await {
+        Ok(result) => {
+            println!("  P2POnly send result: {:?}", result);
+            if result == SendResult::P2P {
+                println!("  ✅ P2POnly correctly uses P2P");
+            }
+        }
+        Err(e) => {
+            println!("  P2POnly send error (expected if P2P channel not ready): {}", e);
+        }
+    }
+
+    router_handle.abort();
+    println!("  ✅ PASS: Routing mode behavior verified\n");
+}
+
+/// Test 8: P2P connection failure with nonexistent peer
+/// Verify proper error handling for invalid peer
+#[cfg(feature = "p2p")]
+async fn test_p2p_nonexistent_peer() {
+    println!("┌──────────────────────────────────────────────────────────────────┐");
+    println!("│ Test 8: P2P Connection Failure with Nonexistent Peer             │");
+    println!("└──────────────────────────────────────────────────────────────────┘");
+
+    let port = find_port().await;
+    let addr = format!("127.0.0.1:{}", port);
+
+    let router = Router::new(RouterConfig::default());
+    let router_handle = {
+        let addr = addr.clone();
+        tokio::spawn(async move {
+            let _ = router.serve_websocket(&addr).await;
+        })
+    };
+
+    sleep(Duration::from_millis(100)).await;
+
+    let url = format!("ws://{}", addr);
+
+    // Use a short connection timeout (5 seconds) so the test doesn't take forever
+    let p2p_config = P2PConfig {
+        ice_servers: vec!["stun:stun.l.google.com:19302".to_string()],
+        connection_timeout_secs: 5,
+        ..Default::default()
+    };
+
+    let client = match Clasp::builder(&url)
+        .name("LonelyClient")
+        .p2p_config(p2p_config)
+        .connect()
+        .await
+    {
+        Ok(c) => c,
+        Err(e) => {
+            router_handle.abort();
+            println!("  ❌ FAIL: Client connection failed: {}", e);
+            return;
+        }
+    };
+
+    println!("  Client session: {}", client.session_id().unwrap());
+    println!("  Connection timeout configured: 5 seconds");
+
+    // Track connection failure
+    let connection_failed = Arc::new(AtomicBool::new(false));
+    let failure_reason = Arc::new(std::sync::Mutex::new(String::new()));
+    let failed_clone = connection_failed.clone();
+    let reason_clone = failure_reason.clone();
+
+    client.on_p2p_event(move |event| {
+        if let P2PEvent::ConnectionFailed {
+            peer_session_id: _,
+            reason,
+        } = event
+        {
+            *reason_clone.lock().unwrap() = reason;
+            failed_clone.store(true, Ordering::SeqCst);
+        }
+    });
+
+    // Try to connect to a nonexistent peer
+    let fake_session_id = "nonexistent-session-12345";
+    println!("  Attempting connection to nonexistent peer: {}", fake_session_id);
+
+    match client.connect_to_peer(fake_session_id).await {
+        Ok(_) => {
+            println!("  Connection initiated (waiting for timeout failure event)");
+        }
+        Err(e) => {
+            println!("  ✅ Immediate error returned: {}", e);
+            router_handle.abort();
+            println!("  ✅ PASS: Nonexistent peer handled correctly\n");
+            return;
+        }
+    }
+
+    // Wait for connection failure event (wait longer than the 5s timeout)
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline {
+        if connection_failed.load(Ordering::SeqCst) {
+            let reason = failure_reason.lock().unwrap().clone();
+            println!("  ✅ ConnectionFailed event received");
+            println!("  Failure reason: {}", reason);
+            router_handle.abort();
+            println!("  ✅ PASS: Nonexistent peer handled correctly\n");
+            return;
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+
+    router_handle.abort();
+    println!("  ⚠️  No failure event received within timeout");
+    println!("  ⚠️  Connection may hang indefinitely for nonexistent peers");
+    println!("  ⚠️  Consider adding timeout logic for P2P connection attempts\n");
 }

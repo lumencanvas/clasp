@@ -99,7 +99,11 @@ pub use builder::ClaspBuilder;
 pub use client::Clasp;
 pub use error::{ClientError, Result};
 #[cfg(feature = "p2p")]
-pub use p2p::{P2PEvent, P2PManager};
+pub use p2p::{P2PEvent, P2PManager, SendResult};
+
+// Re-export P2P routing mode for convenience
+#[cfg(feature = "p2p")]
+pub use clasp_core::RoutingMode;
 
 /// Prelude for convenient imports
 pub mod prelude {
@@ -107,7 +111,9 @@ pub mod prelude {
     pub use crate::client::Clasp;
     pub use crate::error::{ClientError, Result};
     #[cfg(feature = "p2p")]
-    pub use crate::p2p::{P2PEvent, P2PManager};
+    pub use crate::p2p::{P2PEvent, P2PManager, SendResult};
+    #[cfg(feature = "p2p")]
+    pub use clasp_core::RoutingMode;
     pub use clasp_core::{
         EasingType, GesturePhase, Message, SignalType, TimelineData, TimelineKeyframe, Value,
     };

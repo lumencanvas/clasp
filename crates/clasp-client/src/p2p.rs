@@ -414,6 +414,26 @@ impl P2PManager {
             });
         });
 
+        // Set up data handler for offerer
+        let p2p_manager_data = Arc::clone(self);
+        let peer_id_data = peer_session_id.to_string();
+        transport.on_data(move |data, reliable| {
+            debug!(
+                "Data received from peer {} (reliable={}): {} bytes",
+                peer_id_data,
+                reliable,
+                data.len()
+            );
+            // Emit P2PEvent::Data
+            if let Some(callback) = p2p_manager_data.event_callback.read().as_ref() {
+                callback(P2PEvent::Data {
+                    peer_session_id: peer_id_data.clone(),
+                    data,
+                    reliable,
+                });
+            }
+        });
+
         connection.transport = Some(transport);
 
         // Store connection
@@ -430,6 +450,47 @@ impl P2PManager {
         self.send_signal(peer_session_id, signal).await?;
 
         info!("P2P connection initiated to {}", peer_session_id);
+
+        // Spawn connection timeout task
+        let p2p_manager_timeout = Arc::clone(self);
+        let peer_id_timeout = peer_session_id.to_string();
+        let timeout_secs = self.config.connection_timeout_secs;
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(timeout_secs)).await;
+
+            // Check if connection was established
+            let should_fail = {
+                if let Some(connection) = p2p_manager_timeout.connections.get(&peer_id_timeout) {
+                    // If still in Connecting or GatheringCandidates state, it failed
+                    matches!(
+                        connection.state,
+                        P2PConnectionState::Connecting | P2PConnectionState::GatheringCandidates
+                    )
+                } else {
+                    // Connection was removed (possibly by other logic), nothing to do
+                    false
+                }
+            };
+
+            if should_fail {
+                warn!(
+                    "P2P connection to {} timed out after {} seconds",
+                    peer_id_timeout, timeout_secs
+                );
+
+                // Remove the failed connection
+                p2p_manager_timeout.connections.remove(&peer_id_timeout);
+
+                // Emit ConnectionFailed event
+                if let Some(callback) = p2p_manager_timeout.event_callback.read().as_ref() {
+                    callback(P2PEvent::ConnectionFailed {
+                        peer_session_id: peer_id_timeout.clone(),
+                        reason: format!("Connection timed out after {} seconds", timeout_secs),
+                    });
+                }
+            }
+        });
+
         Ok(())
     }
 
@@ -653,6 +714,26 @@ impl P2PManager {
                     warn!("Failed to send ICE candidate: {}", e);
                 }
             });
+        });
+
+        // Set up data handler for answerer
+        let p2p_manager_data = Arc::clone(self);
+        let peer_id_data = from.to_string();
+        transport.on_data(move |data, reliable| {
+            debug!(
+                "Data received from peer {} (reliable={}): {} bytes",
+                peer_id_data,
+                reliable,
+                data.len()
+            );
+            // Emit P2PEvent::Data
+            if let Some(callback) = p2p_manager_data.event_callback.read().as_ref() {
+                callback(P2PEvent::Data {
+                    peer_session_id: peer_id_data.clone(),
+                    data,
+                    reliable,
+                });
+            }
         });
 
         // Create connection entry

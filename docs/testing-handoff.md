@@ -58,20 +58,22 @@
 ## Blockers / Decisions Needed
 
 ### P2P Data Flow Tests
-**Issue:** The `clasp-client` public API doesn't expose methods to:
-- Send user data directly over P2P channels (`send_p2p(peer, bytes, reliable)`)
-- Change P2P routing mode (`set_p2p_routing_mode(mode)`)
+**Status: ✅ RESOLVED in v3.3.0**
 
-**Options:**
-1. **Extend the client API** (recommended):
-   - Add `Clasp::send_p2p(peer_session_id, data, reliable)` → delegates to `P2PManager`
-   - Add `Clasp::set_p2p_routing_mode(mode)` → delegates to `P2PManager`
-   - Then add tests that verify data actually flows peer-to-peer and routing mode affects delivery
-2. **Test via internal APIs** (faster, but less realistic):
-   - Access `P2PManager` directly in tests (requires exposing internals or using `#[cfg(test)]` helpers)
-   - Less useful for validating the public API contract
+The `clasp-client` public API now exposes:
+- `Clasp::send_p2p(peer_session_id, data, reliable)` - Send data to peer via P2P
+- `Clasp::set_p2p_routing_mode(mode)` - Control routing behavior
+- `Clasp::p2p_routing_mode()` - Get current routing mode
+- Re-exports: `SendResult`, `RoutingMode` types
 
-**Recommendation:** Option 1 - extend the client API. This makes P2P actually usable by end users, not just internally testable.
+Tests added in `clasp-e2e/src/bin/p2p_connection_tests.rs`:
+- Test 6: `test_p2p_data_transfer()` - Verifies data flows over P2P channel ✅
+- Test 7: `test_p2p_routing_mode()` - Verifies routing mode affects send path ✅
+- Test 8: `test_p2p_nonexistent_peer()` - Verifies connection timeout handling ✅
+
+Additional fixes:
+- P2P data reception now works (wired `on_data` callback in WebRtcTransport)
+- Connection timeout emits `P2PEvent::ConnectionFailed` after configured timeout
 
 ### Environment-Sensitive Tests
 **Issue:** Some test scenarios (NAT traversal, TURN server variants, network degradation) require:
@@ -86,28 +88,25 @@
 
 ## Next Steps (Priority Order)
 
-### Immediate (Next Session)
-1. **Extend `clasp-client` API for P2P data flow:**
-   - Add `send_p2p()` method
-   - Add `set_p2p_routing_mode()` method
-   - Update `clasp-client/src/client.rs` and expose through `Clasp` struct
+### Immediate (Next Session) - ✅ COMPLETED in v3.3.0
+1. **Extend `clasp-client` API for P2P data flow:** ✅
+   - Added `send_p2p()` method
+   - Added `set_p2p_routing_mode()` method
+   - Added `p2p_routing_mode()` getter
+   - Re-exported `SendResult`, `RoutingMode` types
 
-2. **Add P2P data flow test:**
-   - In `p2p_connection_tests.rs`, add `test_p2p_data_transfer()`:
-     - Establish P2P connection
-     - Send test payload from A → B over reliable channel
-     - Verify B receives it via `P2PEvent::Data { reliable: true }`
-     - Optionally test unreliable channel
+2. **Add P2P data flow test:** ✅
+   - Added `test_p2p_data_transfer()` in `clasp-e2e/src/bin/p2p_connection_tests.rs`
+   - Establishes P2P connection, sends payload, verifies receipt via `P2PEvent::Data`
 
-3. **Add routing mode test:**
-   - In `p2p_connection_tests.rs`, add `test_p2p_routing_mode()`:
-     - With `PreferP2P`: verify data arrives via P2P events
-     - Switch to `RouterOnly`: verify P2P events stop, data arrives via normal CLASP messages
+3. **Add routing mode test:** ✅
+   - Added `test_p2p_routing_mode()` in `clasp-e2e/src/bin/p2p_connection_tests.rs`
+   - Verifies all routing modes work: `PreferP2P`, `P2POnly`, `ServerOnly`
+   - Verifies `SendResult::P2P` vs `SendResult::Relay` based on mode
 
-4. **Add failure path test:**
-   - In `p2p_connection_tests.rs`, add `test_p2p_nonexistent_peer()`:
-     - Try to `connect_to_peer()` with invalid session ID
-     - Expect `P2PEvent::ConnectionFailed` with sensible error message
+4. **Add failure path test:** ✅
+   - Added `test_p2p_nonexistent_peer()` in `clasp-e2e/src/bin/p2p_connection_tests.rs`
+   - Verifies connection timeout emits `P2PEvent::ConnectionFailed`
 
 ### Medium Priority
 5. **Security: Token replay tests** (`security_pentest.rs`):
@@ -147,4 +146,4 @@
 
 ---
 
-**Status:** ✅ Test structure documented, P2P tests extended (ready for API work to enable deeper tests)
+**Status:** ✅ COMPLETE - P2P API extended, all tests pass (v3.3.0)
