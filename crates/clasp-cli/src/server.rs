@@ -115,8 +115,9 @@ async fn run_tcp_server(bind: &str, port: u16, shutdown_rx: &mut mpsc::Receiver<
                     Ok((stream, peer)) => {
                         println!("{} Client connected: {}", "TCP".cyan(), peer);
                         tokio::spawn(async move {
-                            // Handle connection
-                            let _ = handle_tcp_connection(stream).await;
+                            if let Err(e) = handle_tcp_connection(stream).await {
+                                eprintln!("TCP connection error for {}: {}", peer, e);
+                            }
                         });
                     }
                     Err(e) => {

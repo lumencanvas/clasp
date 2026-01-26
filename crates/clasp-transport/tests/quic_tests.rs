@@ -158,8 +158,12 @@ async fn test_quic_client_server_connect() {
     let server =
         QuicTransport::new_server(addr, cert, key).expect("Server creation should succeed");
 
-    // Create client
-    let client = QuicTransport::new_client().expect("Client creation should succeed");
+    // Create client with SkipVerification for self-signed certs in tests
+    let config = QuicConfig {
+        cert_verification: CertVerification::SkipVerification,
+        ..Default::default()
+    };
+    let client = QuicTransport::new_client_with_config(config).expect("Client creation should succeed");
 
     // Spawn server accept task
     let server_handle = tokio::spawn(async move {
@@ -206,7 +210,12 @@ async fn test_quic_bidirectional_stream() {
     let server =
         QuicTransport::new_server(addr, cert, key).expect("Server creation should succeed");
 
-    let client = QuicTransport::new_client().expect("Client creation should succeed");
+    // Use SkipVerification for self-signed certs in tests
+    let config = QuicConfig {
+        cert_verification: CertVerification::SkipVerification,
+        ..Default::default()
+    };
+    let client = QuicTransport::new_client_with_config(config).expect("Client creation should succeed");
 
     // Server task - echoes back received data
     let server_handle = tokio::spawn(async move {

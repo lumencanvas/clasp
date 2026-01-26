@@ -146,8 +146,19 @@ impl TokenStore {
         let content =
             serde_json::to_string_pretty(self).context("Failed to serialize token store")?;
 
-        std::fs::write(path, content)
-            .with_context(|| format!("Failed to write token file: {}", path.display()))
+        std::fs::write(path, &content)
+            .with_context(|| format!("Failed to write token file: {}", path.display()))?;
+
+        // Set restrictive permissions on Unix (tokens are sensitive)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let permissions = std::fs::Permissions::from_mode(0o600);
+            std::fs::set_permissions(path, permissions)
+                .with_context(|| format!("Failed to set permissions on token file: {}", path.display()))?;
+        }
+
+        Ok(())
     }
 
     /// Add a token to the store

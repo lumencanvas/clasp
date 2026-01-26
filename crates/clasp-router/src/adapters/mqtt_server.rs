@@ -36,6 +36,8 @@ use crate::session::{Session, SessionId};
 use crate::state::RouterState;
 use crate::subscription::{Subscription, SubscriptionManager};
 
+use clasp_core::security::{TokenValidator, ValidationResult};
+
 #[cfg(feature = "mqtts")]
 use tokio_rustls::TlsAcceptor;
 
@@ -155,6 +157,8 @@ pub struct MqttServerAdapter {
     mqtt_sessions: Arc<DashMap<String, Arc<MqttSession>>>,
     /// Running flag
     running: Arc<RwLock<bool>>,
+    /// Token validator for authentication (if require_auth is true)
+    validator: Option<Arc<dyn TokenValidator>>,
     /// TLS acceptor (if configured)
     #[cfg(feature = "mqtts")]
     tls_acceptor: Option<TlsAcceptor>,
@@ -175,9 +179,20 @@ impl MqttServerAdapter {
             state,
             mqtt_sessions: Arc::new(DashMap::new()),
             running: Arc::new(RwLock::new(false)),
+            validator: None,
             #[cfg(feature = "mqtts")]
             tls_acceptor: None,
         }
+    }
+
+    /// Set a token validator for authentication
+    ///
+    /// When `require_auth` is true in the config, MQTT clients must provide
+    /// username/password. The password is treated as the CLASP token and
+    /// validated using this validator.
+    pub fn with_validator(mut self, validator: Arc<dyn TokenValidator>) -> Self {
+        self.validator = Some(validator);
+        self
     }
 
     /// Start the MQTT server
@@ -267,6 +282,7 @@ impl MqttServerAdapter {
         let state = Arc::clone(&self.state);
         let mqtt_sessions = Arc::clone(&self.mqtt_sessions);
         let running = Arc::clone(&self.running);
+        let validator = self.validator.clone();
 
         tokio::spawn(async move {
             if let Err(e) = handle_mqtt_connection(
@@ -278,6 +294,7 @@ impl MqttServerAdapter {
                 state,
                 mqtt_sessions,
                 running,
+                validator,
             )
             .await
             {
@@ -307,6 +324,7 @@ async fn handle_mqtt_connection(
     state: Arc<RouterState>,
     mqtt_sessions: Arc<DashMap<String, Arc<MqttSession>>>,
     running: Arc<RwLock<bool>>,
+    validator: Option<Arc<dyn TokenValidator>>,
 ) -> Result<()> {
     let mut read_buf = BytesMut::with_capacity(4096);
 
@@ -347,17 +365,72 @@ async fn handle_mqtt_connection(
 
     // Validate credentials if required
     if config.require_auth {
-        if connect.login.is_none() {
+        let login = match &connect.login {
+            Some(login) => login,
+            None => {
+                let connack = ConnAck {
+                    session_present: false,
+                    code: ConnectReturnCode::BadUserNamePassword,
+                };
+                let mut buf = BytesMut::new();
+                connack.write(&mut buf)?;
+                stream.write_all(&buf).await?;
+                return Err(RouterError::Auth("Authentication required".into()));
+            }
+        };
+
+        // Validate password as CLASP token
+        let token = &login.password;
+        if let Some(ref validator) = validator {
+            match validator.validate(token) {
+                ValidationResult::Valid(_token_info) => {
+                    debug!("MQTT client {} authenticated successfully", client_id);
+                }
+                ValidationResult::Invalid(reason) => {
+                    warn!("MQTT auth failed for {}: {}", client_id, reason);
+                    let connack = ConnAck {
+                        session_present: false,
+                        code: ConnectReturnCode::BadUserNamePassword,
+                    };
+                    let mut buf = BytesMut::new();
+                    connack.write(&mut buf)?;
+                    stream.write_all(&buf).await?;
+                    return Err(RouterError::Auth(format!("Invalid token: {}", reason)));
+                }
+                ValidationResult::NotMyToken => {
+                    warn!("MQTT auth failed for {}: unrecognized token format", client_id);
+                    let connack = ConnAck {
+                        session_present: false,
+                        code: ConnectReturnCode::BadUserNamePassword,
+                    };
+                    let mut buf = BytesMut::new();
+                    connack.write(&mut buf)?;
+                    stream.write_all(&buf).await?;
+                    return Err(RouterError::Auth("Unrecognized token format".into()));
+                }
+                ValidationResult::Expired => {
+                    warn!("MQTT auth failed for {}: token expired", client_id);
+                    let connack = ConnAck {
+                        session_present: false,
+                        code: ConnectReturnCode::NotAuthorized,
+                    };
+                    let mut buf = BytesMut::new();
+                    connack.write(&mut buf)?;
+                    stream.write_all(&buf).await?;
+                    return Err(RouterError::Auth("Token expired".into()));
+                }
+            }
+        } else {
+            warn!("MQTT require_auth enabled but no validator configured - rejecting connection");
             let connack = ConnAck {
                 session_present: false,
-                code: ConnectReturnCode::BadUserNamePassword,
+                code: ConnectReturnCode::ServiceUnavailable,
             };
             let mut buf = BytesMut::new();
             connack.write(&mut buf)?;
             stream.write_all(&buf).await?;
-            return Err(RouterError::Auth("Authentication required".into()));
+            return Err(RouterError::Auth("No token validator configured".into()));
         }
-        // TODO: Validate username/password against token validator
     }
 
     // Create CLASP session (using a transport sender that writes to our channel)

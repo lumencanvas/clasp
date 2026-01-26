@@ -39,9 +39,10 @@ const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 1000;
 #[derive(Debug, Clone, Default)]
 pub enum CertVerification {
     /// Skip certificate verification (INSECURE - development only)
-    #[default]
+    /// WARNING: This allows MITM attacks! Only use for local development.
     SkipVerification,
-    /// Use system root certificates
+    /// Use system root certificates (RECOMMENDED for production)
+    #[default]
     SystemRoots,
     /// Use custom root certificates (DER-encoded)
     CustomRoots(Vec<Vec<u8>>),
