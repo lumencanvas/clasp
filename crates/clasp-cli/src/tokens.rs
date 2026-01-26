@@ -154,8 +154,12 @@ impl TokenStore {
         {
             use std::os::unix::fs::PermissionsExt;
             let permissions = std::fs::Permissions::from_mode(0o600);
-            std::fs::set_permissions(path, permissions)
-                .with_context(|| format!("Failed to set permissions on token file: {}", path.display()))?;
+            std::fs::set_permissions(path, permissions).with_context(|| {
+                format!(
+                    "Failed to set permissions on token file: {}",
+                    path.display()
+                )
+            })?;
         }
 
         Ok(())

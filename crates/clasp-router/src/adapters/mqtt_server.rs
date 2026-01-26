@@ -398,7 +398,10 @@ async fn handle_mqtt_connection(
                     return Err(RouterError::Auth(format!("Invalid token: {}", reason)));
                 }
                 ValidationResult::NotMyToken => {
-                    warn!("MQTT auth failed for {}: unrecognized token format", client_id);
+                    warn!(
+                        "MQTT auth failed for {}: unrecognized token format",
+                        client_id
+                    );
                     let connack = ConnAck {
                         session_present: false,
                         code: ConnectReturnCode::BadUserNamePassword,

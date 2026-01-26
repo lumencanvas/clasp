@@ -117,21 +117,17 @@ impl RendezvousKeepalive {
             .map_err(|e| DiscoveryError::Other(format!("Rendezvous registration failed: {}", e)))?;
 
         *self.device_id.write() = Some(response.id);
-        tracing::info!(
-            "Registered with rendezvous server (TTL: {}s)",
-            response.ttl
-        );
+        tracing::info!("Registered with rendezvous server (TTL: {}s)", response.ttl);
         Ok(())
     }
 
     async fn refresh(&self) -> Result<bool> {
         let device_id: Option<String> = self.device_id.read().clone();
         if let Some(ref id) = device_id {
-            let success = self
-                .client
-                .refresh(id)
-                .await
-                .map_err(|e| DiscoveryError::Other(format!("Rendezvous refresh failed: {}", e)))?;
+            let success =
+                self.client.refresh(id).await.map_err(|e| {
+                    DiscoveryError::Other(format!("Rendezvous refresh failed: {}", e))
+                })?;
 
             if !success {
                 // Device was removed, re-register

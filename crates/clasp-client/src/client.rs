@@ -945,7 +945,9 @@ impl Clasp {
         reliable: bool,
     ) -> Result<p2p::SendResult> {
         if let Some(ref p2p_manager) = self.p2p_manager {
-            p2p_manager.send_to_peer(peer_session_id, data, reliable).await
+            p2p_manager
+                .send_to_peer(peer_session_id, data, reliable)
+                .await
         } else {
             Err(ClientError::Other(
                 "P2P not configured. Use builder.p2p_config() to enable.".to_string(),

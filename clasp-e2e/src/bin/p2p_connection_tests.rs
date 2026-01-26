@@ -767,7 +767,10 @@ async fn test_p2p_routing_mode() {
             }
         }
         Err(e) => {
-            println!("  P2POnly send error (expected if P2P channel not ready): {}", e);
+            println!(
+                "  P2POnly send error (expected if P2P channel not ready): {}",
+                e
+            );
         }
     }
 
@@ -841,7 +844,10 @@ async fn test_p2p_nonexistent_peer() {
 
     // Try to connect to a nonexistent peer
     let fake_session_id = "nonexistent-session-12345";
-    println!("  Attempting connection to nonexistent peer: {}", fake_session_id);
+    println!(
+        "  Attempting connection to nonexistent peer: {}",
+        fake_session_id
+    );
 
     match client.connect_to_peer(fake_session_id).await {
         Ok(_) => {

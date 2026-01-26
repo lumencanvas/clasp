@@ -1810,11 +1810,7 @@ async fn handle_message(
 
 /// Try to send a message to a session with drop tracking.
 /// Records the drop and sends notification when threshold is exceeded.
-fn try_send_with_drop_tracking_sync(
-    session: &Arc<Session>,
-    data: Bytes,
-    session_id: &SessionId,
-) {
+fn try_send_with_drop_tracking_sync(session: &Arc<Session>, data: Bytes, session_id: &SessionId) {
     if let Err(e) = session.try_send(data) {
         warn!(
             "Failed to send to {}: {} (buffer full, dropping)",
