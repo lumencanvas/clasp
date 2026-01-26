@@ -56,7 +56,7 @@ fn test_encode_decode_welcome() {
 fn test_encode_decode_set() {
     let msg = Message::Set(SetMessage {
         address: "/test/path".to_string(),
-        value: Value::Float(3.14),
+        value: Value::Float(1.25),
         revision: Some(1),
         lock: false,
         unlock: false,
@@ -69,7 +69,7 @@ fn test_encode_decode_set() {
         Message::Set(set) => {
             assert_eq!(set.address, "/test/path");
             match set.value {
-                Value::Float(f) => assert!((f - 3.14).abs() < 0.001),
+                Value::Float(f) => assert!((f - 1.25).abs() < 0.001),
                 _ => panic!("Expected Float value"),
             }
         }
@@ -136,7 +136,7 @@ fn test_value_types() {
         Value::Bool(false),
         Value::Int(42),
         Value::Int(-1000),
-        Value::Float(3.14159),
+        Value::Float(1.2345),
         Value::String("hello world".to_string()),
         Value::Array(vec![Value::Int(1), Value::Int(2), Value::Int(3)]),
         Value::Map(

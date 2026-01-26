@@ -94,7 +94,7 @@ fn test_value_conversion_int() {
 /// Test converting float values
 #[wasm_bindgen_test]
 fn test_value_conversion_float() {
-    let test_values = [0.0f64, 1.5, -1.5, 3.14159, f64::MAX, f64::MIN];
+    let test_values = [0.0f64, 1.5, -1.5, 1.2345, f64::MAX, f64::MIN];
 
     for f in test_values {
         let clasp_float = Value::Float(f);
@@ -210,7 +210,7 @@ fn test_value_conversion_array() {
         vec![
             Value::Bool(true),
             Value::String("hello".to_string()),
-            Value::Float(3.14),
+            Value::Float(1.25),
         ],
         vec![
             Value::Array(vec![Value::Int(1), Value::Int(2)]),

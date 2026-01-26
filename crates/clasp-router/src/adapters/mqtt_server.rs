@@ -388,7 +388,10 @@ async fn handle_mqtt_connection(
     connack.write(&mut buf)?;
     stream.write_all(&buf).await?;
 
-    info!("MQTT session established: {} -> {}", client_id, clasp_session_id);
+    info!(
+        "MQTT session established: {} -> {}",
+        client_id, clasp_session_id
+    );
 
     // Main loop: handle incoming packets and outgoing messages
     loop {
@@ -638,10 +641,7 @@ async fn handle_mqtt_packet(
 /// - `+` matches a single level (CLASP: `*`)
 /// - `#` matches multiple levels (CLASP: `**`)
 fn mqtt_topic_to_clasp_pattern(namespace: &str, topic: &str) -> String {
-    let clasp_path = topic
-        .replace('+', "*")
-        .replace('#', "**")
-        .replace('/', "/");
+    let clasp_path = topic.replace('+', "*").replace('#', "**").replace('/', "/");
     format!("{}/{}", namespace, clasp_path)
 }
 

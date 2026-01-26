@@ -140,6 +140,13 @@ export interface GetMessage {
   address: string;
 }
 
+/** Timeline keyframe */
+export interface TimelineKeyframe {
+  time: number;
+  value: Value;
+  easing?: 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'step';
+}
+
 /** PUBLISH message */
 export interface PublishMessage {
   type: 'PUBLISH';
@@ -152,6 +159,10 @@ export interface PublishMessage {
   id?: number;
   phase?: 'start' | 'move' | 'end' | 'cancel';
   timestamp?: number;
+  /** Timeline keyframes (for signal='timeline') */
+  keyframes?: TimelineKeyframe[];
+  /** Whether the timeline should loop (for signal='timeline') */
+  loop?: boolean;
 }
 
 /** SNAPSHOT message */

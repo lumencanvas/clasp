@@ -198,7 +198,7 @@ async fn test_value_float_encoding(_config: &ConformanceConfig, report: &mut Con
             0.0f64,
             1.0,
             -1.0,
-            3.14159265358979,
+            1.23456789012345,
             f64::MIN_POSITIVE,
             f64::MAX,
             f64::MIN,

@@ -104,9 +104,9 @@ pub mod adapters;
 pub use error::{Result, RouterError};
 pub use gesture::{GestureRegistry, GestureResult};
 pub use p2p::{analyze_address, P2PAddressType, P2PCapabilities};
-pub use router::{MultiProtocolConfig, Router, RouterConfig, RouterConfigBuilder, TransportConfig};
 #[cfg(feature = "quic")]
 pub use router::QuicServerConfig;
+pub use router::{MultiProtocolConfig, Router, RouterConfig, RouterConfigBuilder, TransportConfig};
 pub use session::{Session, SessionId};
 pub use state::RouterState;
 pub use subscription::SubscriptionManager;

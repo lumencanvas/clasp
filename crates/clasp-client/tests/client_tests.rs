@@ -644,7 +644,7 @@ async fn test_value_type_float() {
         .expect("Subscribe failed");
 
     client
-        .set("/types/float", 3.14159f64)
+        .set("/types/float", 1.2345f64)
         .await
         .expect("Set failed");
     client

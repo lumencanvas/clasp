@@ -340,6 +340,9 @@ impl Router {
             self.start_gesture_flush_task(Arc::clone(registry));
         }
 
+        // Start state cleanup task (removes stale params and signals)
+        self.start_state_cleanup_task();
+
         while *self.running.read() {
             match server.accept().await {
                 Ok((sender, receiver, addr)) => {
@@ -456,6 +459,37 @@ impl Router {
             }
 
             debug!("Session cleanup task stopped");
+        });
+    }
+
+    /// Start background task to clean up stale state entries
+    fn start_state_cleanup_task(&self) {
+        let state = Arc::clone(&self.state);
+        let running = Arc::clone(&self.running);
+
+        tokio::spawn(async move {
+            // Clean up every 60 seconds
+            let cleanup_interval = std::time::Duration::from_secs(60);
+
+            loop {
+                tokio::time::sleep(cleanup_interval).await;
+
+                if !*running.read() {
+                    break;
+                }
+
+                // Run cleanup on state store
+                let (params_removed, signals_removed) = state.cleanup_stale();
+
+                if params_removed > 0 || signals_removed > 0 {
+                    debug!(
+                        "State cleanup: removed {} stale params, {} stale signals",
+                        params_removed, signals_removed
+                    );
+                }
+            }
+
+            debug!("State cleanup task stopped");
         });
     }
 
@@ -649,9 +683,9 @@ impl Router {
             protocol_names.push("WebSocket");
             let router = self.clone_internal();
             let addr = addr.clone();
-            handles.push(tokio::spawn(async move {
-                router.serve_websocket(&addr).await
-            }));
+            handles.push(tokio::spawn(
+                async move { router.serve_websocket(&addr).await },
+            ));
         }
 
         // QUIC server
@@ -679,9 +713,7 @@ impl Router {
                 Arc::clone(&self.subscriptions),
                 Arc::clone(&self.state),
             );
-            handles.push(tokio::spawn(async move {
-                adapter.serve().await
-            }));
+            handles.push(tokio::spawn(async move { adapter.serve().await }));
         }
 
         // OSC server adapter
@@ -695,9 +727,7 @@ impl Router {
                 Arc::clone(&self.subscriptions),
                 Arc::clone(&self.state),
             );
-            handles.push(tokio::spawn(async move {
-                adapter.serve().await
-            }));
+            handles.push(tokio::spawn(async move { adapter.serve().await }));
         }
 
         if handles.is_empty() {
@@ -721,6 +751,9 @@ impl Router {
         if let Some(ref registry) = self.gesture_registry {
             self.start_gesture_flush_task(Arc::clone(registry));
         }
+
+        // Start state cleanup task (removes stale params and signals)
+        self.start_state_cleanup_task();
 
         // Wait for any server to complete (usually due to error or shutdown)
         loop {
@@ -821,7 +854,10 @@ impl Router {
                                         return Some(data);
                                     } else {
                                         // Non-Hello message before handshake
-                                        warn!("Received non-Hello message before handshake from {}", addr);
+                                        warn!(
+                                            "Received non-Hello message before handshake from {}",
+                                            addr
+                                        );
                                         return None;
                                     }
                                 }
@@ -852,7 +888,10 @@ impl Router {
                     return;
                 }
                 Err(_) => {
-                    warn!("Handshake timeout for {} after {:?}", addr, HANDSHAKE_TIMEOUT);
+                    warn!(
+                        "Handshake timeout for {} after {:?}",
+                        addr, HANDSHAKE_TIMEOUT
+                    );
                     return;
                 }
             };
@@ -884,7 +923,10 @@ impl Router {
                             let _ = sender.send(bytes).await;
                         }
                         MessageResult::Disconnect => {
-                            info!("Disconnecting client {} due to auth failure during handshake", addr);
+                            info!(
+                                "Disconnecting client {} due to auth failure during handshake",
+                                addr
+                            );
                             return;
                         }
                         _ => {}
@@ -1529,7 +1571,8 @@ async fn handle_message(
                                         if sub_session_id != session.id {
                                             if let Some(sub_session) = sessions.get(&sub_session_id)
                                             {
-                                                if let Err(e) = sub_session.try_send(bytes.clone()) {
+                                                if let Err(e) = sub_session.try_send(bytes.clone())
+                                                {
                                                     warn!(
                                                         "Failed to send gesture to {}: {} (buffer full)",
                                                         sub_session_id, e

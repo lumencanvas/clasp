@@ -34,7 +34,6 @@ use {
     std::sync::atomic::{AtomicBool, AtomicU32, Ordering},
 };
 
-
 // ============================================================================
 // Constants
 // ============================================================================
@@ -112,7 +111,11 @@ impl TestClient {
         let hello = Message::Hello(HelloMessage {
             version: 2,
             name: self.name.clone(),
-            features: vec!["param".to_string(), "event".to_string(), "stream".to_string()],
+            features: vec![
+                "param".to_string(),
+                "event".to_string(),
+                "stream".to_string(),
+            ],
             capabilities: None,
             token: None,
         });
@@ -352,7 +355,9 @@ async fn test_wildcard_subscription() -> TestResult {
 
         let mut subscriber = TestClient::connect("WildcardSub").await?;
         subscriber.handshake().await?;
-        subscriber.subscribe(&format!("{}/*/brightness", base), 1).await?;
+        subscriber
+            .subscribe(&format!("{}/*/brightness", base), 1)
+            .await?;
 
         tokio::time::sleep(Duration::from_millis(100)).await;
 
@@ -402,7 +407,10 @@ async fn test_multiple_subscribers() -> TestResult {
         let mut publisher = TestClient::connect("MultiPub").await?;
         publisher.handshake().await?;
         publisher
-            .set(&format!("{}/message", base), Value::String("hello".to_string()))
+            .set(
+                &format!("{}/message", base),
+                Value::String("hello".to_string()),
+            )
             .await?;
 
         // All should receive
@@ -441,7 +449,7 @@ async fn test_value_types() -> TestResult {
 
         let values = vec![
             ("int", Value::Int(42)),
-            ("float", Value::Float(3.14159)),
+            ("float", Value::Float(1.2345)),
             ("bool", Value::Bool(true)),
             ("string", Value::String("hello world".to_string())),
             ("null", Value::Null),
@@ -483,7 +491,9 @@ async fn test_rapid_messages() -> TestResult {
 
         // Send 50 rapid messages
         for i in 0..50 {
-            client.set(&format!("{}/{}", base, i), Value::Int(i)).await?;
+            client
+                .set(&format!("{}/{}", base, i), Value::Int(i))
+                .await?;
         }
 
         // Should receive ACKs (or SETs for own messages)
@@ -590,7 +600,9 @@ async fn test_high_level_client() -> TestResult {
             .map_err(|e| format!("Connect failed: {}", e))?;
 
         // Verify we got a session
-        let session = client.session_id().ok_or_else(|| "No session ID".to_string())?;
+        let session = client
+            .session_id()
+            .ok_or_else(|| "No session ID".to_string())?;
         info!("High-level client session: {}", session);
 
         // Set a value
@@ -700,7 +712,10 @@ async fn test_event_publish() -> TestResult {
         match msg {
             Message::Publish(pub_msg) if pub_msg.address == addr => Ok(()),
             Message::Set(set) if set.address == addr => Ok(()), // Router may convert to SET
-            other => Err(format!("Expected PUBLISH or SET for event, got {:?}", other)),
+            other => Err(format!(
+                "Expected PUBLISH or SET for event, got {:?}",
+                other
+            )),
         }
     }
     .await;
@@ -736,7 +751,9 @@ async fn test_p2p_announcement() -> TestResult {
             .await
             .map_err(|e| format!("Connect failed: {}", e))?;
 
-        let session = client.session_id().ok_or_else(|| "No session ID".to_string())?;
+        let session = client
+            .session_id()
+            .ok_or_else(|| "No session ID".to_string())?;
         info!("P2P client session: {}", session);
 
         // The client should have announced P2P capability
@@ -782,8 +799,12 @@ async fn test_p2p_connection() -> TestResult {
             .await
             .map_err(|e| format!("Client B connect failed: {}", e))?;
 
-        let session_a = client_a.session_id().ok_or_else(|| "No session A".to_string())?;
-        let session_b = client_b.session_id().ok_or_else(|| "No session B".to_string())?;
+        let session_a = client_a
+            .session_id()
+            .ok_or_else(|| "No session A".to_string())?;
+        let session_b = client_b
+            .session_id()
+            .ok_or_else(|| "No session B".to_string())?;
 
         info!("P2P Client A: {}", session_a);
         info!("P2P Client B: {}", session_b);
@@ -802,7 +823,10 @@ async fn test_p2p_connection() -> TestResult {
                     connected_clone.store(true, Ordering::SeqCst);
                 }
             }
-            P2PEvent::ConnectionFailed { peer_session_id, reason } => {
+            P2PEvent::ConnectionFailed {
+                peer_session_id,
+                reason,
+            } => {
                 info!("P2P connection to {} failed: {}", peer_session_id, reason);
                 failed_clone.store(true, Ordering::SeqCst);
             }
@@ -930,9 +954,7 @@ async fn test_p2p_peer_discovery() -> TestResult {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter("info")
-        .init();
+    tracing_subscriber::fmt().with_env_filter("info").init();
 
     println!("\n{}", "=".repeat(70));
     println!("           CLASP Public Relay Tests (relay.clasp.to)");
@@ -962,30 +984,42 @@ async fn main() {
 
     // Core functionality tests
     let tests = vec![
-        ("Core Functionality", vec![
-            test_connection().await,
-            test_set_and_ack().await,
-            test_value_types().await,
-            test_rapid_messages().await,
-        ]),
-        ("Subscriptions", vec![
-            test_subscription_delivery().await,
-            test_wildcard_subscription().await,
-            test_multiple_subscribers().await,
-        ]),
-        ("Multi-Client", vec![
-            test_concurrent_clients().await,
-            test_state_persistence().await,
-        ]),
-        ("High-Level API", vec![
-            test_high_level_client().await,
-            test_event_publish().await,
-        ]),
-        ("P2P (WebRTC)", vec![
-            test_p2p_announcement().await,
-            test_p2p_peer_discovery().await,
-            test_p2p_connection().await,
-        ]),
+        (
+            "Core Functionality",
+            vec![
+                test_connection().await,
+                test_set_and_ack().await,
+                test_value_types().await,
+                test_rapid_messages().await,
+            ],
+        ),
+        (
+            "Subscriptions",
+            vec![
+                test_subscription_delivery().await,
+                test_wildcard_subscription().await,
+                test_multiple_subscribers().await,
+            ],
+        ),
+        (
+            "Multi-Client",
+            vec![
+                test_concurrent_clients().await,
+                test_state_persistence().await,
+            ],
+        ),
+        (
+            "High-Level API",
+            vec![test_high_level_client().await, test_event_publish().await],
+        ),
+        (
+            "P2P (WebRTC)",
+            vec![
+                test_p2p_announcement().await,
+                test_p2p_peer_discovery().await,
+                test_p2p_connection().await,
+            ],
+        ),
     ];
 
     let mut total_passed = 0;
@@ -1009,10 +1043,7 @@ async fn main() {
                 "\x1b[31mFAIL\x1b[0m"
             };
 
-            println!(
-                "{:<40} {:>8} {:>8}ms",
-                test.name, status, test.duration_ms
-            );
+            println!("{:<40} {:>8} {:>8}ms", test.name, status, test.duration_ms);
 
             if !test.passed && !test.message.starts_with("SKIP") {
                 println!("  └─ {}", test.message);

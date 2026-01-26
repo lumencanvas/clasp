@@ -235,10 +235,7 @@ impl OscServerAdapter {
 
         self.osc_sessions
             .insert(peer_addr, Arc::clone(&osc_session));
-        info!(
-            "New OSC session from {} -> {}",
-            peer_addr, clasp_session_id
-        );
+        info!("New OSC session from {} -> {}", peer_addr, clasp_session_id);
 
         osc_session
     }
@@ -277,7 +274,10 @@ impl OscServerAdapter {
             unlock: false,
         };
 
-        if let Ok(revision) = self.state.apply_set(&set_msg, &osc_session.clasp_session_id) {
+        if let Ok(revision) = self
+            .state
+            .apply_set(&set_msg, &osc_session.clasp_session_id)
+        {
             // Broadcast to CLASP subscribers
             let subscribers = self
                 .subscriptions
@@ -458,8 +458,7 @@ impl OscTransportSender {
 impl clasp_transport::TransportSender for OscTransportSender {
     async fn send(&self, data: Bytes) -> std::result::Result<(), clasp_transport::TransportError> {
         let socket = self.socket.read().clone();
-        let socket = socket
-            .ok_or_else(|| clasp_transport::TransportError::NotConnected)?;
+        let socket = socket.ok_or_else(|| clasp_transport::TransportError::NotConnected)?;
 
         // Decode CLASP message and convert to OSC
         if let Ok((msg, _)) = codec::decode(&data) {
@@ -513,10 +512,7 @@ fn clasp_to_osc(msg: &Message) -> Option<Vec<u8>> {
     };
 
     // Strip /osc prefix to get OSC address
-    let osc_addr = address
-        .strip_prefix("/osc")
-        .unwrap_or(address)
-        .to_string();
+    let osc_addr = address.strip_prefix("/osc").unwrap_or(address).to_string();
 
     let args = value_to_osc_args(value);
     let msg = OscMessage {
@@ -539,7 +535,11 @@ mod tests {
         assert!(matches!(value, Value::Int(42)));
 
         // Multiple args become array
-        let args = vec![OscType::Float(1.0), OscType::Float(2.0), OscType::Float(3.0)];
+        let args = vec![
+            OscType::Float(1.0),
+            OscType::Float(2.0),
+            OscType::Float(3.0),
+        ];
         let value = osc_args_to_value(&args);
         assert!(matches!(value, Value::Array(_)));
     }

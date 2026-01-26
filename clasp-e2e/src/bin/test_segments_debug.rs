@@ -2,14 +2,9 @@ use clasp_core::address::Pattern;
 
 fn main() {
     println!("=== Testing segment parsing ===\n");
-    
-    let patterns = vec![
-        "/stress-test/patterns/**",
-        "/test/**",
-        "/**",
-        "/a/b/c/**",
-    ];
-    
+
+    let patterns = vec!["/stress-test/patterns/**", "/test/**", "/**", "/a/b/c/**"];
+
     for pattern_str in patterns {
         match Pattern::compile(pattern_str) {
             Ok(pattern) => {

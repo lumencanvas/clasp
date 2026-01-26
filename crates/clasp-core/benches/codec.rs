@@ -6,7 +6,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 fn encode_benchmark(c: &mut Criterion) {
     let msg = Message::Set(SetMessage {
         address: "/test/benchmark/value".to_string(),
-        value: Value::Float(3.14159),
+        value: Value::Float(1.2345),
         revision: Some(1),
         lock: false,
         unlock: false,
@@ -20,7 +20,7 @@ fn encode_benchmark(c: &mut Criterion) {
 fn decode_benchmark(c: &mut Criterion) {
     let msg = Message::Set(SetMessage {
         address: "/test/benchmark/value".to_string(),
-        value: Value::Float(3.14159),
+        value: Value::Float(1.2345),
         revision: Some(1),
         lock: false,
         unlock: false,

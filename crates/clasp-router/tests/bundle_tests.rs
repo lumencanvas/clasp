@@ -167,7 +167,7 @@ async fn test_bundle_mixed_message_types() {
     let messages = vec![
         Message::Set(SetMessage {
             address: "/mixed/set".to_string(),
-            value: Value::Float(3.14),
+            value: Value::Float(1.25),
             revision: None,
             lock: false,
             unlock: false,
@@ -213,8 +213,8 @@ async fn test_bundle_mixed_message_types() {
     match set_values.first() {
         Some((_, Value::Float(f))) => {
             assert!(
-                (f - 3.14).abs() < 0.01,
-                "SET value should be approximately 3.14"
+                (f - 1.25).abs() < 0.01,
+                "SET value should be approximately 1.25"
             );
         }
         _ => panic!("SET value type incorrect"),

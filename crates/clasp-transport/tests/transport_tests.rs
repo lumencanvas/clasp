@@ -598,7 +598,7 @@ async fn test_value_roundtrip_all_types() {
         ("int_pos", Value::Int(42)),
         ("int_neg", Value::Int(-999)),
         ("int_zero", Value::Int(0)),
-        ("float", Value::Float(3.14159)),
+        ("float", Value::Float(1.2345)),
         ("string", Value::String("hello".to_string())),
         ("string_empty", Value::String("".to_string())),
         ("bytes", Value::Bytes(vec![0x00, 0xFF, 0x42])),

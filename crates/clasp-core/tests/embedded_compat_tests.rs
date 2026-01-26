@@ -12,19 +12,23 @@ fn test_embedded_set_to_core_decode() {
     let mut buf = [0u8; 128];
 
     // Encode a SET message using embedded
-    let len = embedded::encode_set_frame(&mut buf, "/test/value", &embedded::Value::Float(3.14));
+    let len = embedded::encode_set_frame(&mut buf, "/test/value", &embedded::Value::Float(1.25));
     assert!(len > 0);
 
     // Decode using core
     let result = codec::decode(&buf[..len]);
-    assert!(result.is_ok(), "Failed to decode embedded SET: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Failed to decode embedded SET: {:?}",
+        result
+    );
 
     let (msg, _frame) = result.unwrap();
     match msg {
         Message::Set(set_msg) => {
             assert_eq!(set_msg.address, "/test/value");
             match set_msg.value {
-                Value::Float(f) => assert!((f - 3.14).abs() < 0.001),
+                Value::Float(f) => assert!((f - 1.25).abs() < 0.001),
                 _ => panic!("Expected Float value, got {:?}", set_msg.value),
             }
         }
@@ -78,7 +82,7 @@ fn test_value_types_roundtrip() {
         ("/test/int_pos", embedded::Value::Int(42)),
         ("/test/int_neg", embedded::Value::Int(-999)),
         ("/test/int_large", embedded::Value::Int(i64::MAX)),
-        ("/test/float_pos", embedded::Value::Float(3.14159)),
+        ("/test/float_pos", embedded::Value::Float(1.2345)),
         ("/test/float_neg", embedded::Value::Float(-273.15)),
         ("/test/float_zero", embedded::Value::Float(0.0)),
     ];
@@ -90,7 +94,8 @@ fn test_value_types_roundtrip() {
         assert!(len > 0, "Failed to encode {}", address);
 
         // Decode with core
-        let (msg, _) = codec::decode(&buf[..len]).expect(&format!("Core failed to decode {}", address));
+        let (msg, _) =
+            codec::decode(&buf[..len]).expect(&format!("Core failed to decode {}", address));
 
         // Verify the message
         match msg {

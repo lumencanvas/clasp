@@ -242,8 +242,8 @@ async fn test_max_sessions_limit() {
         max_subscriptions_per_session: 1000,
         gesture_coalescing: true,
         gesture_coalesce_interval_ms: 0,
-            max_messages_per_second: 0,
-            rate_limiting_enabled: false,
+        max_messages_per_second: 0,
+        rate_limiting_enabled: false,
     })
     .await;
 

@@ -36,7 +36,7 @@ fn test_encoding_compatibility() {
 
     // Test SET message encoding
     let mut embedded_buf = [0u8; 256];
-    let embedded_len = encode_set_frame(&mut embedded_buf, "/test/value", &Value::Float(3.14));
+    let embedded_len = encode_set_frame(&mut embedded_buf, "/test/value", &Value::Float(1.25));
 
     // Decode with full codec
     let result = codec::decode(&embedded_buf[..embedded_len]);
@@ -46,7 +46,7 @@ fn test_encoding_compatibility() {
                 assert_eq!(set.address, "/test/value");
                 match set.value {
                     CoreValue::Float(f) => {
-                        assert!((f - 3.14).abs() < 0.001, "Float value mismatch");
+                        assert!((f - 1.25).abs() < 0.001, "Float value mismatch");
                         println!("  ✓ SET Float encoding matches");
                     }
                     _ => panic!("Expected Float value"),
@@ -203,8 +203,8 @@ async fn test_embedded_to_router() {
         max_subscriptions_per_session: 10,
         gesture_coalescing: true,
         gesture_coalesce_interval_ms: 0,
-            max_messages_per_second: 0,
-            rate_limiting_enabled: false,
+        max_messages_per_second: 0,
+        rate_limiting_enabled: false,
     });
 
     let addr = format!("127.0.0.1:{}", port);
@@ -362,8 +362,8 @@ async fn test_round_trip() {
         max_subscriptions_per_session: 10,
         gesture_coalescing: true,
         gesture_coalesce_interval_ms: 0,
-            max_messages_per_second: 0,
-            rate_limiting_enabled: false,
+        max_messages_per_second: 0,
+        rate_limiting_enabled: false,
     });
 
     let addr = format!("127.0.0.1:{}", port);

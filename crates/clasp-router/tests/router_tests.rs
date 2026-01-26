@@ -31,8 +31,8 @@ async fn test_router_custom_config() {
         max_subscriptions_per_session: 1000,
         gesture_coalescing: true,
         gesture_coalesce_interval_ms: 0,
-            max_messages_per_second: 0,
-            rate_limiting_enabled: false,
+        max_messages_per_second: 0,
+        rate_limiting_enabled: false,
     };
     let router = Router::new(config);
     assert_eq!(router.session_count(), 0);

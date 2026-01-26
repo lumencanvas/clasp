@@ -389,7 +389,14 @@ mod tests {
 
         // Add a param and signal
         state
-            .set("/test/param", Value::Float(1.0), &"s1".to_string(), None, false, false)
+            .set(
+                "/test/param",
+                Value::Float(1.0),
+                &"s1".to_string(),
+                None,
+                false,
+                false,
+            )
             .unwrap();
 
         let signals = vec![SignalDefinition {

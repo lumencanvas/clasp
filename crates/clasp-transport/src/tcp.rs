@@ -79,7 +79,8 @@ impl TcpTransport {
 
         let connected = Arc::new(Mutex::new(true));
         let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<Bytes>(DEFAULT_CHANNEL_BUFFER_SIZE);
-        let (incoming_tx, incoming_rx) = mpsc::channel::<TransportEvent>(DEFAULT_CHANNEL_BUFFER_SIZE);
+        let (incoming_tx, incoming_rx) =
+            mpsc::channel::<TransportEvent>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let sender = TcpSender {
             tx: outgoing_tx,
@@ -285,7 +286,8 @@ impl TransportServer for TcpServer {
 
         let connected = Arc::new(Mutex::new(true));
         let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<Bytes>(DEFAULT_CHANNEL_BUFFER_SIZE);
-        let (incoming_tx, incoming_rx) = mpsc::channel::<TransportEvent>(DEFAULT_CHANNEL_BUFFER_SIZE);
+        let (incoming_tx, incoming_rx) =
+            mpsc::channel::<TransportEvent>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let sender = TcpSender {
             tx: outgoing_tx,

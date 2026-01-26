@@ -300,8 +300,14 @@ mod tests {
 
         // Root globstar
         manager.add(
-            Subscription::new(1, "global".to_string(), "/**", vec![], SubscribeOptions::default())
-                .unwrap(),
+            Subscription::new(
+                1,
+                "global".to_string(),
+                "/**",
+                vec![],
+                SubscribeOptions::default(),
+            )
+            .unwrap(),
         );
 
         // Specific prefix globstar

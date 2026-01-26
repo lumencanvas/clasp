@@ -422,6 +422,102 @@ export class Clasp {
   }
 
   /**
+   * Send gesture input (touch/pen/motion).
+   *
+   * Gesture messages track multi-touch or pen input through phases:
+   * - 'start': Finger/pen touches the surface
+   * - 'move': Finger/pen moves while touching
+   * - 'end': Finger/pen lifts off
+   * - 'cancel': Gesture was interrupted
+   *
+   * Uses QoS.Fire for minimal latency (suitable for high-frequency move events).
+   *
+   * @param address - The gesture address (e.g., '/input/touch/0')
+   * @param gestureId - Unique identifier for this gesture stream
+   * @param phase - Phase of the gesture ('start', 'move', 'end', 'cancel')
+   * @param payload - Optional gesture data (e.g., position, pressure)
+   *
+   * @example
+   * ```typescript
+   * // Touch start
+   * clasp.gesture('/input/touch/0', 1, 'start', { x: 100, y: 200 });
+   *
+   * // Touch move (high frequency)
+   * clasp.gesture('/input/touch/0', 1, 'move', { x: 105, y: 210, pressure: 0.8 });
+   *
+   * // Touch end
+   * clasp.gesture('/input/touch/0', 1, 'end', { x: 110, y: 220 });
+   * ```
+   */
+  gesture(
+    address: string,
+    gestureId: number,
+    phase: 'start' | 'move' | 'end' | 'cancel',
+    payload?: Value
+  ): void {
+    const msg: PublishMessage = {
+      type: 'PUBLISH',
+      address,
+      signal: 'gesture',
+      phase,
+      id: gestureId,
+      payload: payload ?? null,
+      timestamp: this.time(),
+    };
+    this.send(msg, QoS.Fire);
+  }
+
+  /**
+   * Send timeline automation data.
+   *
+   * Timeline messages define keyframe animations that the router can interpolate.
+   * Each keyframe specifies a time offset (in microseconds) and target value.
+   *
+   * @param address - The parameter address to animate
+   * @param keyframes - Array of keyframes with time and value
+   * @param options - Optional timeline options
+   * @param options.loop - Whether the timeline should loop (default: false)
+   * @param options.startTime - Start time in microseconds (defaults to current time)
+   *
+   * @example
+   * ```typescript
+   * // Fade opacity from 0 to 1 over 1 second
+   * clasp.timeline('/lumen/layer/0/opacity', [
+   *   { time: 0, value: 0.0 },
+   *   { time: 1000000, value: 1.0 },  // 1 second = 1,000,000 microseconds
+   * ]);
+   *
+   * // Looping animation
+   * clasp.timeline('/effect/pulse', [
+   *   { time: 0, value: 0.0 },
+   *   { time: 500000, value: 1.0 },
+   *   { time: 1000000, value: 0.0 },
+   * ], { loop: true });
+   *
+   * // Scheduled start
+   * clasp.timeline('/cue/fade', [
+   *   { time: 0, value: 1.0 },
+   *   { time: 2000000, value: 0.0 },
+   * ], { startTime: clasp.time() + 5000000 });  // Start 5 seconds from now
+   * ```
+   */
+  timeline(
+    address: string,
+    keyframes: Array<{ time: number; value: Value; easing?: 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'step' }>,
+    options?: { loop?: boolean; startTime?: number }
+  ): void {
+    const msg: PublishMessage = {
+      type: 'PUBLISH',
+      address,
+      signal: 'timeline',
+      keyframes,
+      loop: options?.loop ?? false,
+      timestamp: options?.startTime ?? this.time(),
+    };
+    this.send(msg, QoS.Confirm);
+  }
+
+  /**
    * Send an atomic bundle of messages.
    *
    * All messages in a bundle are delivered together, ensuring consistency.

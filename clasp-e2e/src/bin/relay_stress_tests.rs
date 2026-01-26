@@ -144,14 +144,22 @@ impl RawClient {
         let (sender, receiver) = WebSocketTransport::connect(PUBLIC_RELAY_URL)
             .await
             .map_err(|e| format!("Connection failed: {}", e))?;
-        Ok(Self { sender, receiver, session_id: None })
+        Ok(Self {
+            sender,
+            receiver,
+            session_id: None,
+        })
     }
 
     async fn handshake(&mut self, name: &str) -> Result<(), String> {
         let hello = Message::Hello(HelloMessage {
             version: 2,
             name: name.to_string(),
-            features: vec!["param".to_string(), "event".to_string(), "stream".to_string()],
+            features: vec![
+                "param".to_string(),
+                "event".to_string(),
+                "stream".to_string(),
+            ],
             capabilities: None,
             token: None,
         });
@@ -192,7 +200,10 @@ impl RawClient {
 
     async fn send(&mut self, msg: &Message) -> Result<(), String> {
         let data = codec::encode(msg).map_err(|e| e.to_string())?;
-        self.sender.send(data).await.map_err(|e| format!("Send failed: {}", e))
+        self.sender
+            .send(data)
+            .await
+            .map_err(|e| format!("Send failed: {}", e))
     }
 
     async fn recv(&mut self, timeout_ms: u64) -> Result<Message, String> {
@@ -256,9 +267,15 @@ async fn bench_set_ack_latency() -> TestResult {
         // Warmup
         for i in 0..10 {
             let addr = format!("{}/warmup/{}", base, i);
-            client.send(&Message::Set(SetMessage {
-                address: addr, value: Value::Int(i), revision: None, lock: false, unlock: false,
-            })).await?;
+            client
+                .send(&Message::Set(SetMessage {
+                    address: addr,
+                    value: Value::Int(i),
+                    revision: None,
+                    lock: false,
+                    unlock: false,
+                }))
+                .await?;
             client.recv(5000).await?;
         }
 
@@ -266,9 +283,15 @@ async fn bench_set_ack_latency() -> TestResult {
         for i in 0..100 {
             let addr = format!("{}/measure/{}", base, i);
             let send_time = Instant::now();
-            client.send(&Message::Set(SetMessage {
-                address: addr.clone(), value: Value::Int(i), revision: None, lock: false, unlock: false,
-            })).await?;
+            client
+                .send(&Message::Set(SetMessage {
+                    address: addr.clone(),
+                    value: Value::Int(i),
+                    revision: None,
+                    lock: false,
+                    unlock: false,
+                }))
+                .await?;
 
             match client.recv(5000).await? {
                 Message::Ack(ack) if ack.address == Some(addr) => {
@@ -286,7 +309,8 @@ async fn bench_set_ack_latency() -> TestResult {
             details.push(format!("WARNING: p99 latency {:.2}ms exceeds 500ms", p99));
         }
         Ok(details)
-    }.await;
+    }
+    .await;
 
     match result {
         Ok(details) => TestResult::pass_with_details(name, start.elapsed().as_millis(), details),
@@ -303,9 +327,14 @@ async fn bench_pubsub_latency() -> TestResult {
 
         let mut subscriber = RawClient::connect().await?;
         subscriber.handshake("LatencySub").await?;
-        subscriber.send(&Message::Subscribe(SubscribeMessage {
-            id: 1, pattern: format!("{}/**", base), types: vec![], options: None,
-        })).await?;
+        subscriber
+            .send(&Message::Subscribe(SubscribeMessage {
+                id: 1,
+                pattern: format!("{}/**", base),
+                types: vec![],
+                options: None,
+            }))
+            .await?;
 
         tokio::time::sleep(Duration::from_millis(100)).await;
 
@@ -318,9 +347,15 @@ async fn bench_pubsub_latency() -> TestResult {
             let addr = format!("{}/measure/{}", base, i);
             let send_time = Instant::now();
 
-            publisher.send(&Message::Set(SetMessage {
-                address: addr.clone(), value: Value::Int(i), revision: None, lock: false, unlock: false,
-            })).await?;
+            publisher
+                .send(&Message::Set(SetMessage {
+                    address: addr.clone(),
+                    value: Value::Int(i),
+                    revision: None,
+                    lock: false,
+                    unlock: false,
+                }))
+                .await?;
 
             let deadline = Instant::now() + Duration::from_secs(5);
             while Instant::now() < deadline {
@@ -338,7 +373,8 @@ async fn bench_pubsub_latency() -> TestResult {
         subscriber.close().await;
         publisher.close().await;
         Ok(vec![stats.report()])
-    }.await;
+    }
+    .await;
 
     match result {
         Ok(details) => TestResult::pass_with_details(name, start.elapsed().as_millis(), details),
@@ -368,9 +404,17 @@ async fn bench_throughput() -> TestResult {
 
         while start_time.elapsed() < duration {
             let addr = format!("{}/{}", base, i);
-            if client.send(&Message::Set(SetMessage {
-                address: addr, value: Value::Int(i as i64), revision: None, lock: false, unlock: false,
-            })).await.is_ok() {
+            if client
+                .send(&Message::Set(SetMessage {
+                    address: addr,
+                    value: Value::Int(i as i64),
+                    revision: None,
+                    lock: false,
+                    unlock: false,
+                }))
+                .await
+                .is_ok()
+            {
                 send_count.fetch_add(1, Ordering::Relaxed);
             }
             i += 1;
@@ -386,7 +430,9 @@ async fn bench_throughput() -> TestResult {
         let drain_deadline = Instant::now() + Duration::from_secs(5);
         while Instant::now() < drain_deadline {
             match client.recv(100).await {
-                Ok(Message::Ack(_)) => { ack_count.fetch_add(1, Ordering::Relaxed); }
+                Ok(Message::Ack(_)) => {
+                    ack_count.fetch_add(1, Ordering::Relaxed);
+                }
                 _ => break,
             }
         }
@@ -395,12 +441,19 @@ async fn bench_throughput() -> TestResult {
         let acked = ack_count.load(Ordering::Relaxed);
         let elapsed = start_time.elapsed().as_secs_f64();
         let send_rate = sent as f64 / elapsed;
-        let ack_ratio = if sent > 0 { acked as f64 / sent as f64 * 100.0 } else { 0.0 };
+        let ack_ratio = if sent > 0 {
+            acked as f64 / sent as f64 * 100.0
+        } else {
+            0.0
+        };
 
         client.close().await;
 
         let details = vec![
-            format!("Sent: {} messages in {:.2}s = {:.0} msg/s", sent, elapsed, send_rate),
+            format!(
+                "Sent: {} messages in {:.2}s = {:.0} msg/s",
+                sent, elapsed, send_rate
+            ),
             format!("ACKed: {} ({:.1}%)", acked, ack_ratio),
         ];
 
@@ -408,7 +461,8 @@ async fn bench_throughput() -> TestResult {
             return Err(format!("ACK ratio {:.1}% too low", ack_ratio));
         }
         Ok(details)
-    }.await;
+    }
+    .await;
 
     match result {
         Ok(details) => TestResult::pass_with_details(name, start.elapsed().as_millis(), details),
@@ -430,8 +484,12 @@ async fn bench_fanout_throughput() -> TestResult {
             let mut sub = RawClient::connect().await?;
             sub.handshake(&format!("FanoutSub{}", i)).await?;
             sub.send(&Message::Subscribe(SubscribeMessage {
-                id: 1, pattern: format!("{}/**", base), types: vec![], options: None,
-            })).await?;
+                id: 1,
+                pattern: format!("{}/**", base),
+                types: vec![],
+                options: None,
+            }))
+            .await?;
             subscribers.push(sub);
         }
 
@@ -442,9 +500,15 @@ async fn bench_fanout_throughput() -> TestResult {
 
         let publish_start = Instant::now();
         for i in 0..message_count {
-            publisher.send(&Message::Set(SetMessage {
-                address: format!("{}/{}", base, i), value: Value::Int(i as i64), revision: None, lock: false, unlock: false,
-            })).await?;
+            publisher
+                .send(&Message::Set(SetMessage {
+                    address: format!("{}/{}", base, i),
+                    value: Value::Int(i as i64),
+                    revision: None,
+                    lock: false,
+                    unlock: false,
+                }))
+                .await?;
         }
 
         let mut received_counts = vec![0usize; subscriber_count];
@@ -452,7 +516,9 @@ async fn bench_fanout_throughput() -> TestResult {
 
         while Instant::now() < timeout_deadline {
             let total: usize = received_counts.iter().sum();
-            if total >= subscriber_count * message_count { break; }
+            if total >= subscriber_count * message_count {
+                break;
+            }
             for (idx, sub) in subscribers.iter_mut().enumerate() {
                 if let Ok(Message::Set(_)) = sub.recv(10).await {
                     received_counts[idx] += 1;
@@ -464,19 +530,33 @@ async fn bench_fanout_throughput() -> TestResult {
         let total_received: usize = received_counts.iter().sum();
         let expected = subscriber_count * message_count;
 
-        for sub in subscribers { sub.close().await; }
+        for sub in subscribers {
+            sub.close().await;
+        }
         publisher.close().await;
 
         let details = vec![
-            format!("Published {} to {} subscribers", message_count, subscriber_count),
-            format!("Received: {}/{} ({:.1}%)", total_received, expected, total_received as f64 / expected as f64 * 100.0),
+            format!(
+                "Published {} to {} subscribers",
+                message_count, subscriber_count
+            ),
+            format!(
+                "Received: {}/{} ({:.1}%)",
+                total_received,
+                expected,
+                total_received as f64 / expected as f64 * 100.0
+            ),
         ];
 
         if total_received < expected * 90 / 100 {
-            return Err(format!("Fanout delivery too low: {}/{}", total_received, expected));
+            return Err(format!(
+                "Fanout delivery too low: {}/{}",
+                total_received, expected
+            ));
         }
         Ok(details)
-    }.await;
+    }
+    .await;
 
     match result {
         Ok(details) => TestResult::pass_with_details(name, start.elapsed().as_millis(), details),
@@ -516,31 +596,53 @@ async fn stress_concurrent_clients() -> TestResult {
                         match client.handshake(&format!("StressClient{}", i)).await {
                             Ok(()) => {
                                 let addr = unique_addr(&format!("stress/{}", i));
-                                if client.send(&Message::Set(SetMessage {
-                                    address: addr, value: Value::Int(i as i64), revision: None, lock: false, unlock: false,
-                                })).await.is_ok() {
+                                if client
+                                    .send(&Message::Set(SetMessage {
+                                        address: addr,
+                                        value: Value::Int(i as i64),
+                                        revision: None,
+                                        lock: false,
+                                        unlock: false,
+                                    }))
+                                    .await
+                                    .is_ok()
+                                {
                                     if let Ok(Message::Ack(_)) = client.recv(5000).await {
                                         success.fetch_add(1, Ordering::Relaxed);
                                         times.lock().await.push(conn_time.as_millis() as u64);
-                                    } else { failure.fetch_add(1, Ordering::Relaxed); }
-                                } else { failure.fetch_add(1, Ordering::Relaxed); }
+                                    } else {
+                                        failure.fetch_add(1, Ordering::Relaxed);
+                                    }
+                                } else {
+                                    failure.fetch_add(1, Ordering::Relaxed);
+                                }
                                 client.close().await;
                             }
-                            Err(_) => { failure.fetch_add(1, Ordering::Relaxed); }
+                            Err(_) => {
+                                failure.fetch_add(1, Ordering::Relaxed);
+                            }
                         }
                     }
-                    Err(_) => { failure.fetch_add(1, Ordering::Relaxed); }
+                    Err(_) => {
+                        failure.fetch_add(1, Ordering::Relaxed);
+                    }
                 }
             }));
         }
 
-        for handle in handles { let _ = handle.await; }
+        for handle in handles {
+            let _ = handle.await;
+        }
 
         let successes = success_count.load(Ordering::Relaxed);
         let failures = failure_count.load(Ordering::Relaxed);
         let success_rate = successes as f64 / client_count as f64 * 100.0;
         let times = connection_times.lock().await;
-        let avg_conn_time = if times.is_empty() { 0.0 } else { times.iter().sum::<u64>() as f64 / times.len() as f64 };
+        let avg_conn_time = if times.is_empty() {
+            0.0
+        } else {
+            times.iter().sum::<u64>() as f64 / times.len() as f64
+        };
 
         let details = vec![
             format!("Clients: {} attempted", client_count),
@@ -553,7 +655,8 @@ async fn stress_concurrent_clients() -> TestResult {
             return Err(format!("Success rate {:.1}% too low", success_rate));
         }
         Ok(details)
-    }.await;
+    }
+    .await;
 
     match result {
         Ok(details) => TestResult::pass_with_details(name, start.elapsed().as_millis(), details),
@@ -580,15 +683,30 @@ async fn stress_concurrent_writes() -> TestResult {
             let acks = ack_counts.clone();
 
             handles.push(tokio::spawn(async move {
-                let mut client = match RawClient::connect().await { Ok(c) => c, Err(_) => return };
-                if client.handshake(&format!("Writer{}", writer_id)).await.is_err() { return; }
+                let mut client = match RawClient::connect().await {
+                    Ok(c) => c,
+                    Err(_) => return,
+                };
+                if client
+                    .handshake(&format!("Writer{}", writer_id))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
 
                 for i in 0..writes_per_writer {
-                    if client.send(&Message::Set(SetMessage {
-                        address: addr.clone(),
-                        value: Value::String(format!("w{}:{}", writer_id, i)),
-                        revision: None, lock: false, unlock: false,
-                    })).await.is_ok() {
+                    if client
+                        .send(&Message::Set(SetMessage {
+                            address: addr.clone(),
+                            value: Value::String(format!("w{}:{}", writer_id, i)),
+                            revision: None,
+                            lock: false,
+                            unlock: false,
+                        }))
+                        .await
+                        .is_ok()
+                    {
                         writes.fetch_add(1, Ordering::Relaxed);
                         if let Ok(Message::Ack(_)) = client.recv(2000).await {
                             acks.fetch_add(1, Ordering::Relaxed);
@@ -599,14 +717,19 @@ async fn stress_concurrent_writes() -> TestResult {
             }));
         }
 
-        for handle in handles { let _ = handle.await; }
+        for handle in handles {
+            let _ = handle.await;
+        }
 
         let total_writes = write_counts.load(Ordering::Relaxed);
         let total_acks = ack_counts.load(Ordering::Relaxed);
         let expected = (writer_count * writes_per_writer) as u32;
 
         let details = vec![
-            format!("Writers: {}, writes each: {}", writer_count, writes_per_writer),
+            format!(
+                "Writers: {}, writes each: {}",
+                writer_count, writes_per_writer
+            ),
             format!("Total writes: {}/{}", total_writes, expected),
             format!("ACKs received: {}", total_acks),
         ];
@@ -615,7 +738,8 @@ async fn stress_concurrent_writes() -> TestResult {
             return Err(format!("ACK rate too low: {}/{}", total_acks, expected));
         }
         Ok(details)
-    }.await;
+    }
+    .await;
 
     match result {
         Ok(details) => TestResult::pass_with_details(name, start.elapsed().as_millis(), details),
@@ -634,12 +758,13 @@ async fn stress_connection_churn() -> TestResult {
 
         for i in 0..cycles {
             match RawClient::connect().await {
-                Ok(mut client) => {
-                    match client.handshake(&format!("ChurnClient{}", i)).await {
-                        Ok(()) => { client.close().await; success_count += 1; }
-                        Err(_) => failure_count += 1,
+                Ok(mut client) => match client.handshake(&format!("ChurnClient{}", i)).await {
+                    Ok(()) => {
+                        client.close().await;
+                        success_count += 1;
                     }
-                }
+                    Err(_) => failure_count += 1,
+                },
                 Err(_) => failure_count += 1,
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -652,9 +777,12 @@ async fn stress_connection_churn() -> TestResult {
             format!("Failures: {}", failure_count),
         ];
 
-        if success_rate < 95.0 { return Err(format!("Churn success rate {:.1}% too low", success_rate)); }
+        if success_rate < 95.0 {
+            return Err(format!("Churn success rate {:.1}% too low", success_rate));
+        }
         Ok(details)
-    }.await;
+    }
+    .await;
 
     match result {
         Ok(details) => TestResult::pass_with_details(name, start.elapsed().as_millis(), details),
@@ -675,31 +803,55 @@ async fn test_subscription_patterns() -> TestResult {
         let mut details = Vec::new();
 
         let test_cases = vec![
-            (format!("{}/exact", base), vec![(format!("{}/exact", base), true), (format!("{}/other", base), false)]),
-            (format!("{}/wild/*/end", base), vec![
-                (format!("{}/wild/foo/end", base), true),
-                (format!("{}/wild/bar/end", base), true),
-                (format!("{}/wild/foo/bar/end", base), false),
-            ]),
-            (format!("{}/**", base), vec![
-                (format!("{}/a", base), true),
-                (format!("{}/a/b/c", base), true),
-            ]),
+            (
+                format!("{}/exact", base),
+                vec![
+                    (format!("{}/exact", base), true),
+                    (format!("{}/other", base), false),
+                ],
+            ),
+            (
+                format!("{}/wild/*/end", base),
+                vec![
+                    (format!("{}/wild/foo/end", base), true),
+                    (format!("{}/wild/bar/end", base), true),
+                    (format!("{}/wild/foo/bar/end", base), false),
+                ],
+            ),
+            (
+                format!("{}/**", base),
+                vec![
+                    (format!("{}/a", base), true),
+                    (format!("{}/a/b/c", base), true),
+                ],
+            ),
         ];
 
         for (pattern, addresses) in test_cases {
             let mut sub = RawClient::connect().await?;
             sub.handshake("PatternTest").await?;
-            sub.send(&Message::Subscribe(SubscribeMessage { id: 1, pattern: pattern.clone(), types: vec![], options: None })).await?;
+            sub.send(&Message::Subscribe(SubscribeMessage {
+                id: 1,
+                pattern: pattern.clone(),
+                types: vec![],
+                options: None,
+            }))
+            .await?;
             tokio::time::sleep(Duration::from_millis(50)).await;
 
             let mut pub_client = RawClient::connect().await?;
             pub_client.handshake("PatternPub").await?;
 
             for (addr, should_match) in addresses {
-                pub_client.send(&Message::Set(SetMessage {
-                    address: addr.clone(), value: Value::Bool(true), revision: None, lock: false, unlock: false,
-                })).await?;
+                pub_client
+                    .send(&Message::Set(SetMessage {
+                        address: addr.clone(),
+                        value: Value::Bool(true),
+                        revision: None,
+                        lock: false,
+                        unlock: false,
+                    }))
+                    .await?;
                 let _ = pub_client.recv(500).await;
 
                 let received = match sub.recv(200).await {
@@ -708,7 +860,10 @@ async fn test_subscription_patterns() -> TestResult {
                 };
 
                 if received != should_match {
-                    return Err(format!("Pattern '{}': '{}' should_match={} but received={}", pattern, addr, should_match, received));
+                    return Err(format!(
+                        "Pattern '{}': '{}' should_match={} but received={}",
+                        pattern, addr, should_match, received
+                    ));
                 }
             }
 
@@ -717,7 +872,8 @@ async fn test_subscription_patterns() -> TestResult {
             details.push(format!("Pattern '{}': OK", pattern));
         }
         Ok(details)
-    }.await;
+    }
+    .await;
 
     match result {
         Ok(details) => TestResult::pass_with_details(name, start.elapsed().as_millis(), details),
@@ -735,23 +891,37 @@ async fn test_message_ordering() -> TestResult {
 
         let mut sub = RawClient::connect().await?;
         sub.handshake("OrderingSub").await?;
-        sub.send(&Message::Subscribe(SubscribeMessage { id: 1, pattern: format!("{}/**", base), types: vec![], options: None })).await?;
+        sub.send(&Message::Subscribe(SubscribeMessage {
+            id: 1,
+            pattern: format!("{}/**", base),
+            types: vec![],
+            options: None,
+        }))
+        .await?;
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         let mut pub_client = RawClient::connect().await?;
         pub_client.handshake("OrderingPub").await?;
 
         for i in 0..message_count {
-            pub_client.send(&Message::Set(SetMessage {
-                address: format!("{}/seq", base), value: Value::Int(i), revision: None, lock: false, unlock: false,
-            })).await?;
+            pub_client
+                .send(&Message::Set(SetMessage {
+                    address: format!("{}/seq", base),
+                    value: Value::Int(i),
+                    revision: None,
+                    lock: false,
+                    unlock: false,
+                }))
+                .await?;
         }
 
         let mut received = Vec::new();
         let deadline = Instant::now() + Duration::from_secs(10);
         while received.len() < message_count as usize && Instant::now() < deadline {
             if let Ok(Message::Set(set)) = sub.recv(500).await {
-                if let Value::Int(n) = set.value { received.push(n); }
+                if let Value::Int(n) = set.value {
+                    received.push(n);
+                }
             }
         }
 
@@ -760,7 +930,9 @@ async fn test_message_ordering() -> TestResult {
 
         let mut out_of_order = 0;
         for i in 1..received.len() {
-            if received[i] < received[i - 1] { out_of_order += 1; }
+            if received[i] < received[i - 1] {
+                out_of_order += 1;
+            }
         }
 
         let details = vec![
@@ -770,13 +942,22 @@ async fn test_message_ordering() -> TestResult {
         ];
 
         if received.len() < (message_count as usize * 90 / 100) {
-            return Err(format!("Received only {}/{}", received.len(), message_count));
+            return Err(format!(
+                "Received only {}/{}",
+                received.len(),
+                message_count
+            ));
         }
         if out_of_order > received.len() / 10 {
-            return Err(format!("Too many out-of-order: {}/{}", out_of_order, received.len()));
+            return Err(format!(
+                "Too many out-of-order: {}/{}",
+                out_of_order,
+                received.len()
+            ));
         }
         Ok(details)
-    }.await;
+    }
+    .await;
 
     match result {
         Ok(details) => TestResult::pass_with_details(name, start.elapsed().as_millis(), details),
@@ -797,15 +978,27 @@ async fn test_state_consistency() -> TestResult {
         let addr = format!("{}/param", base);
 
         for i in 0..10 {
-            setter.send(&Message::Set(SetMessage {
-                address: addr.clone(), value: Value::Int(i), revision: None, lock: false, unlock: false,
-            })).await?;
+            setter
+                .send(&Message::Set(SetMessage {
+                    address: addr.clone(),
+                    value: Value::Int(i),
+                    revision: None,
+                    lock: false,
+                    unlock: false,
+                }))
+                .await?;
             let _ = setter.recv(1000).await;
         }
 
-        setter.send(&Message::Set(SetMessage {
-            address: addr.clone(), value: final_value.clone(), revision: None, lock: false, unlock: false,
-        })).await?;
+        setter
+            .send(&Message::Set(SetMessage {
+                address: addr.clone(),
+                value: final_value.clone(),
+                revision: None,
+                lock: false,
+                unlock: false,
+            }))
+            .await?;
         let _ = setter.recv(1000).await;
         setter.close().await;
 
@@ -813,18 +1006,33 @@ async fn test_state_consistency() -> TestResult {
 
         let mut joiner = RawClient::connect().await?;
         joiner.handshake("LateJoiner").await?;
-        joiner.send(&Message::Subscribe(SubscribeMessage { id: 1, pattern: addr.clone(), types: vec![], options: None })).await?;
+        joiner
+            .send(&Message::Subscribe(SubscribeMessage {
+                id: 1,
+                pattern: addr.clone(),
+                types: vec![],
+                options: None,
+            }))
+            .await?;
 
         let mut found_value = None;
         let deadline = Instant::now() + Duration::from_secs(5);
         while Instant::now() < deadline {
             match joiner.recv(500).await {
-                Ok(Message::Set(set)) if set.address == addr => { found_value = Some(set.value); break; }
+                Ok(Message::Set(set)) if set.address == addr => {
+                    found_value = Some(set.value);
+                    break;
+                }
                 Ok(Message::Snapshot(snap)) => {
                     for param in snap.params {
-                        if param.address == addr { found_value = Some(param.value); break; }
+                        if param.address == addr {
+                            found_value = Some(param.value);
+                            break;
+                        }
                     }
-                    if found_value.is_some() { break; }
+                    if found_value.is_some() {
+                        break;
+                    }
                 }
                 _ => continue,
             }
@@ -832,11 +1040,14 @@ async fn test_state_consistency() -> TestResult {
         joiner.close().await;
 
         match found_value {
-            Some(value) if value == final_value => Ok(vec!["Late joiner received correct final value".to_string()]),
+            Some(value) if value == final_value => {
+                Ok(vec!["Late joiner received correct final value".to_string()])
+            }
             Some(value) => Err(format!("Wrong value: {:?}", value)),
             None => Err("Late joiner did not receive state".to_string()),
         }
-    }.await;
+    }
+    .await;
 
     match result {
         Ok(details) => TestResult::pass_with_details(name, start.elapsed().as_millis(), details),
@@ -853,32 +1064,70 @@ async fn test_bundle_atomicity() -> TestResult {
 
         let mut sub = RawClient::connect().await?;
         sub.handshake("BundleSub").await?;
-        sub.send(&Message::Subscribe(SubscribeMessage { id: 1, pattern: format!("{}/**", base), types: vec![], options: None })).await?;
+        sub.send(&Message::Subscribe(SubscribeMessage {
+            id: 1,
+            pattern: format!("{}/**", base),
+            types: vec![],
+            options: None,
+        }))
+        .await?;
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         let mut pub_client = RawClient::connect().await?;
         pub_client.handshake("BundlePub").await?;
 
         let bundle_messages = vec![
-            Message::Set(SetMessage { address: format!("{}/a", base), value: Value::Int(1), revision: None, lock: false, unlock: false }),
-            Message::Set(SetMessage { address: format!("{}/b", base), value: Value::Int(2), revision: None, lock: false, unlock: false }),
-            Message::Set(SetMessage { address: format!("{}/c", base), value: Value::Int(3), revision: None, lock: false, unlock: false }),
+            Message::Set(SetMessage {
+                address: format!("{}/a", base),
+                value: Value::Int(1),
+                revision: None,
+                lock: false,
+                unlock: false,
+            }),
+            Message::Set(SetMessage {
+                address: format!("{}/b", base),
+                value: Value::Int(2),
+                revision: None,
+                lock: false,
+                unlock: false,
+            }),
+            Message::Set(SetMessage {
+                address: format!("{}/c", base),
+                value: Value::Int(3),
+                revision: None,
+                lock: false,
+                unlock: false,
+            }),
         ];
 
-        pub_client.send(&Message::Bundle(BundleMessage { messages: bundle_messages, timestamp: None })).await?;
+        pub_client
+            .send(&Message::Bundle(BundleMessage {
+                messages: bundle_messages,
+                timestamp: None,
+            }))
+            .await?;
 
         let mut received = 0;
         let deadline = Instant::now() + Duration::from_secs(5);
         while received < 3 && Instant::now() < deadline {
-            if let Ok(Message::Set(_)) = sub.recv(500).await { received += 1; }
+            if let Ok(Message::Set(_)) = sub.recv(500).await {
+                received += 1;
+            }
         }
 
         sub.close().await;
         pub_client.close().await;
 
-        if received == 3 { Ok(vec![format!("Bundle delivered atomically: {} messages", received)]) }
-        else { Err(format!("Bundle partially delivered: {}/3", received)) }
-    }.await;
+        if received == 3 {
+            Ok(vec![format!(
+                "Bundle delivered atomically: {} messages",
+                received
+            )])
+        } else {
+            Err(format!("Bundle partially delivered: {}/3", received))
+        }
+    }
+    .await;
 
     match result {
         Ok(details) => TestResult::pass_with_details(name, start.elapsed().as_millis(), details),
@@ -906,22 +1155,35 @@ async fn test_large_payloads() -> TestResult {
             let addr = format!("{}/size_{}", base, size);
             let send_start = Instant::now();
 
-            if client.send(&Message::Set(SetMessage {
-                address: addr.clone(), value: Value::Bytes(payload), revision: None, lock: false, unlock: false,
-            })).await.is_err() {
+            if client
+                .send(&Message::Set(SetMessage {
+                    address: addr.clone(),
+                    value: Value::Bytes(payload),
+                    revision: None,
+                    lock: false,
+                    unlock: false,
+                }))
+                .await
+                .is_err()
+            {
                 details.push(format!("{}B: SEND FAILED", size));
                 continue;
             }
 
             match client.recv(10000).await {
-                Ok(Message::Ack(_)) => details.push(format!("{}B: OK ({:.0}ms)", size, send_start.elapsed().as_millis())),
+                Ok(Message::Ack(_)) => details.push(format!(
+                    "{}B: OK ({:.0}ms)",
+                    size,
+                    send_start.elapsed().as_millis()
+                )),
                 Ok(Message::Error(e)) => details.push(format!("{}B: ERROR {:?}", size, e.message)),
                 other => details.push(format!("{}B: UNEXPECTED {:?}", size, other)),
             }
         }
         client.close().await;
         Ok(details)
-    }.await;
+    }
+    .await;
 
     match result {
         Ok(details) => TestResult::pass_with_details(name, start.elapsed().as_millis(), details),
@@ -937,26 +1199,41 @@ async fn test_special_characters() -> TestResult {
         let base = unique_addr("special");
         let mut details = Vec::new();
 
-        let test_suffixes = vec!["with-dashes", "with_underscores", "UPPERCASE", "numbers123", "unicode_日本語"];
+        let test_suffixes = vec![
+            "with-dashes",
+            "with_underscores",
+            "UPPERCASE",
+            "numbers123",
+            "unicode_日本語",
+        ];
 
         let mut client = RawClient::connect().await?;
         client.handshake("SpecialChars").await?;
 
         for suffix in test_suffixes {
             let addr = format!("{}/{}", base, suffix);
-            client.send(&Message::Set(SetMessage {
-                address: addr, value: Value::String(format!("test_{}", suffix)), revision: None, lock: false, unlock: false,
-            })).await?;
+            client
+                .send(&Message::Set(SetMessage {
+                    address: addr,
+                    value: Value::String(format!("test_{}", suffix)),
+                    revision: None,
+                    lock: false,
+                    unlock: false,
+                }))
+                .await?;
 
             match client.recv(2000).await {
                 Ok(Message::Ack(_)) => details.push(format!("'{}': OK", suffix)),
-                Ok(Message::Error(e)) => details.push(format!("'{}': REJECTED ({:?})", suffix, e.message)),
+                Ok(Message::Error(e)) => {
+                    details.push(format!("'{}': REJECTED ({:?})", suffix, e.message))
+                }
                 other => details.push(format!("'{}': UNEXPECTED {:?}", suffix, other)),
             }
         }
         client.close().await;
         Ok(details)
-    }.await;
+    }
+    .await;
 
     match result {
         Ok(details) => TestResult::pass_with_details(name, start.elapsed().as_millis(), details),
@@ -973,28 +1250,41 @@ async fn test_empty_null_values() -> TestResult {
         let mut details = Vec::new();
 
         let test_values = vec![
-            ("null", Value::Null), ("empty_string", Value::String(String::new())),
-            ("empty_bytes", Value::Bytes(vec![])), ("empty_array", Value::Array(vec![])),
-            ("zero_int", Value::Int(0)), ("zero_float", Value::Float(0.0)), ("false_bool", Value::Bool(false)),
+            ("null", Value::Null),
+            ("empty_string", Value::String(String::new())),
+            ("empty_bytes", Value::Bytes(vec![])),
+            ("empty_array", Value::Array(vec![])),
+            ("zero_int", Value::Int(0)),
+            ("zero_float", Value::Float(0.0)),
+            ("false_bool", Value::Bool(false)),
         ];
 
         let mut client = RawClient::connect().await?;
         client.handshake("NullEmpty").await?;
 
         for (name, value) in test_values {
-            client.send(&Message::Set(SetMessage {
-                address: format!("{}/{}", base, name), value, revision: None, lock: false, unlock: false,
-            })).await?;
+            client
+                .send(&Message::Set(SetMessage {
+                    address: format!("{}/{}", base, name),
+                    value,
+                    revision: None,
+                    lock: false,
+                    unlock: false,
+                }))
+                .await?;
 
             match client.recv(2000).await {
                 Ok(Message::Ack(_)) => details.push(format!("'{}': OK", name)),
-                Ok(Message::Error(e)) => details.push(format!("'{}': REJECTED ({:?})", name, e.message)),
+                Ok(Message::Error(e)) => {
+                    details.push(format!("'{}': REJECTED ({:?})", name, e.message))
+                }
                 other => details.push(format!("'{}': UNEXPECTED {:?}", name, other)),
             }
         }
         client.close().await;
         Ok(details)
-    }.await;
+    }
+    .await;
 
     match result {
         Ok(details) => TestResult::pass_with_details(name, start.elapsed().as_millis(), details),
@@ -1022,9 +1312,21 @@ async fn test_sustained_load() -> TestResult {
         let sub_running = running.clone();
         let sub_base = base.clone();
         let sub_handle = tokio::spawn(async move {
-            let mut sub = match RawClient::connect().await { Ok(s) => s, Err(_) => return };
-            if sub.handshake("SustainedSub").await.is_err() { return; }
-            let _ = sub.send(&Message::Subscribe(SubscribeMessage { id: 1, pattern: format!("{}/**", sub_base), types: vec![], options: None })).await;
+            let mut sub = match RawClient::connect().await {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+            if sub.handshake("SustainedSub").await.is_err() {
+                return;
+            }
+            let _ = sub
+                .send(&Message::Subscribe(SubscribeMessage {
+                    id: 1,
+                    pattern: format!("{}/**", sub_base),
+                    types: vec![],
+                    options: None,
+                }))
+                .await;
 
             while sub_running.load(Ordering::Relaxed) {
                 if let Ok(Message::Set(_)) = sub.recv(100).await {
@@ -1042,15 +1344,25 @@ async fn test_sustained_load() -> TestResult {
 
         let mut i = 0u64;
         while start_time.elapsed() < duration {
-            if client.send(&Message::Set(SetMessage {
-                address: format!("{}/{}", base, i), value: Value::Int(i as i64), revision: None, lock: false, unlock: false,
-            })).await.is_ok() {
+            if client
+                .send(&Message::Set(SetMessage {
+                    address: format!("{}/{}", base, i),
+                    value: Value::Int(i as i64),
+                    revision: None,
+                    lock: false,
+                    unlock: false,
+                }))
+                .await
+                .is_ok()
+            {
                 sent.fetch_add(1, Ordering::Relaxed);
             }
 
             while let Some(_) = client.recv_non_blocking().await {}
             i += 1;
-            if i % 10 == 0 { tokio::time::sleep(Duration::from_millis(10)).await; }
+            if i % 10 == 0 {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
         }
 
         running.store(false, Ordering::Relaxed);
@@ -1060,17 +1372,31 @@ async fn test_sustained_load() -> TestResult {
         let total_sent = sent.load(Ordering::Relaxed);
         let total_received = received.load(Ordering::Relaxed);
         let elapsed = start_time.elapsed().as_secs_f64();
-        let delivery_rate = if total_sent > 0 { total_received as f64 / total_sent as f64 * 100.0 } else { 0.0 };
+        let delivery_rate = if total_sent > 0 {
+            total_received as f64 / total_sent as f64 * 100.0
+        } else {
+            0.0
+        };
 
         let details = vec![
             format!("Duration: {:.1}s", elapsed),
-            format!("Sent: {} ({:.0} msg/s)", total_sent, total_sent as f64 / elapsed),
-            format!("Received: {} ({:.1}% delivery)", total_received, delivery_rate),
+            format!(
+                "Sent: {} ({:.0} msg/s)",
+                total_sent,
+                total_sent as f64 / elapsed
+            ),
+            format!(
+                "Received: {} ({:.1}% delivery)",
+                total_received, delivery_rate
+            ),
         ];
 
-        if delivery_rate < 80.0 { return Err(format!("Delivery rate {:.1}% too low", delivery_rate)); }
+        if delivery_rate < 80.0 {
+            return Err(format!("Delivery rate {:.1}% too low", delivery_rate));
+        }
         Ok(details)
-    }.await;
+    }
+    .await;
 
     match result {
         Ok(details) => TestResult::pass_with_details(name, start.elapsed().as_millis(), details),
@@ -1093,8 +1419,18 @@ async fn test_p2p_connection() -> TestResult {
             ..Default::default()
         };
 
-        let client_a = Clasp::builder(PUBLIC_RELAY_URL).name("P2PA").p2p_config(p2p_config.clone()).connect().await.map_err(|e| e.to_string())?;
-        let client_b = Clasp::builder(PUBLIC_RELAY_URL).name("P2PB").p2p_config(p2p_config).connect().await.map_err(|e| e.to_string())?;
+        let client_a = Clasp::builder(PUBLIC_RELAY_URL)
+            .name("P2PA")
+            .p2p_config(p2p_config.clone())
+            .connect()
+            .await
+            .map_err(|e| e.to_string())?;
+        let client_b = Clasp::builder(PUBLIC_RELAY_URL)
+            .name("P2PB")
+            .p2p_config(p2p_config)
+            .connect()
+            .await
+            .map_err(|e| e.to_string())?;
 
         let session_a = client_a.session_id().ok_or("No session A")?;
         let session_b = client_b.session_id().ok_or("No session B")?;
@@ -1104,12 +1440,17 @@ async fn test_p2p_connection() -> TestResult {
         let sess_a = session_a.clone();
         client_b.on_p2p_event(move |event| {
             if let P2PEvent::Connected { peer_session_id } = event {
-                if peer_session_id == sess_a { conn_clone.store(true, Ordering::SeqCst); }
+                if peer_session_id == sess_a {
+                    conn_clone.store(true, Ordering::SeqCst);
+                }
             }
         });
 
         tokio::time::sleep(Duration::from_millis(500)).await;
-        client_a.connect_to_peer(&session_b).await.map_err(|e| e.to_string())?;
+        client_a
+            .connect_to_peer(&session_b)
+            .await
+            .map_err(|e| e.to_string())?;
 
         let deadline = Instant::now() + Duration::from_secs(15);
         while Instant::now() < deadline && !connected.load(Ordering::SeqCst) {
@@ -1117,8 +1458,12 @@ async fn test_p2p_connection() -> TestResult {
         }
 
         let p2p_ok = connected.load(Ordering::SeqCst);
-        Ok(vec![format!("P2P connected: {} (may fail due to NAT)", p2p_ok)])
-    }.await;
+        Ok(vec![format!(
+            "P2P connected: {} (may fail due to NAT)",
+            p2p_ok
+        )])
+    }
+    .await;
 
     match result {
         Ok(details) => TestResult::pass_with_details(name, start.elapsed().as_millis(), details),
@@ -1128,7 +1473,13 @@ async fn test_p2p_connection() -> TestResult {
 
 #[cfg(not(feature = "p2p"))]
 async fn test_p2p_connection() -> TestResult {
-    TestResult { name: "p2p/connection".to_string(), passed: true, message: "SKIP: P2P not enabled".to_string(), duration_ms: 0, details: vec![] }
+    TestResult {
+        name: "p2p/connection".to_string(),
+        passed: true,
+        message: "SKIP: P2P not enabled".to_string(),
+        duration_ms: 0,
+        details: vec![],
+    }
 }
 
 // ============================================================================
@@ -1137,7 +1488,9 @@ async fn test_p2p_connection() -> TestResult {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt().with_env_filter("info,webrtc=warn,webrtc_ice=warn").init();
+    tracing_subscriber::fmt()
+        .with_env_filter("info,webrtc=warn,webrtc_ice=warn")
+        .init();
 
     println!("\n{}", "=".repeat(80));
     println!("          CLASP RELAY STRESS TESTS & CRITICAL BENCHMARKS");
@@ -1147,38 +1500,98 @@ async fn main() {
     println!("\nVerifying relay connectivity...");
     match RawClient::connect().await {
         Ok(mut client) => match client.handshake("Check").await {
-            Ok(()) => { println!("  Relay OK: {}", client.session_id.as_ref().unwrap()); client.close().await; }
-            Err(e) => { eprintln!("  FATAL: {}", e); std::process::exit(1); }
+            Ok(()) => {
+                println!("  Relay OK: {}", client.session_id.as_ref().unwrap());
+                client.close().await;
+            }
+            Err(e) => {
+                eprintln!("  FATAL: {}", e);
+                std::process::exit(1);
+            }
         },
-        Err(e) => { eprintln!("  FATAL: {}", e); std::process::exit(1); }
+        Err(e) => {
+            eprintln!("  FATAL: {}", e);
+            std::process::exit(1);
+        }
     }
 
     let categories = vec![
-        ("LATENCY", vec![bench_set_ack_latency().await, bench_pubsub_latency().await]),
-        ("THROUGHPUT", vec![bench_throughput().await, bench_fanout_throughput().await]),
-        ("CONCURRENCY", vec![stress_concurrent_clients().await, stress_concurrent_writes().await, stress_connection_churn().await]),
-        ("PROTOCOL", vec![test_subscription_patterns().await, test_message_ordering().await, test_state_consistency().await, test_bundle_atomicity().await]),
-        ("EDGE CASES", vec![test_large_payloads().await, test_special_characters().await, test_empty_null_values().await]),
+        (
+            "LATENCY",
+            vec![bench_set_ack_latency().await, bench_pubsub_latency().await],
+        ),
+        (
+            "THROUGHPUT",
+            vec![bench_throughput().await, bench_fanout_throughput().await],
+        ),
+        (
+            "CONCURRENCY",
+            vec![
+                stress_concurrent_clients().await,
+                stress_concurrent_writes().await,
+                stress_connection_churn().await,
+            ],
+        ),
+        (
+            "PROTOCOL",
+            vec![
+                test_subscription_patterns().await,
+                test_message_ordering().await,
+                test_state_consistency().await,
+                test_bundle_atomicity().await,
+            ],
+        ),
+        (
+            "EDGE CASES",
+            vec![
+                test_large_payloads().await,
+                test_special_characters().await,
+                test_empty_null_values().await,
+            ],
+        ),
         ("SUSTAINED", vec![test_sustained_load().await]),
         ("P2P", vec![test_p2p_connection().await]),
     ];
 
-    let mut passed = 0; let mut failed = 0; let mut skipped = 0;
+    let mut passed = 0;
+    let mut failed = 0;
+    let mut skipped = 0;
 
     for (cat, tests) in &categories {
         println!("\n{}\n  {}\n{}", "-".repeat(80), cat, "-".repeat(80));
         for t in tests {
-            let status = if t.message.starts_with("SKIP") { "\x1b[33mSKIP\x1b[0m" } else if t.passed { "\x1b[32mPASS\x1b[0m" } else { "\x1b[31mFAIL\x1b[0m" };
+            let status = if t.message.starts_with("SKIP") {
+                "\x1b[33mSKIP\x1b[0m"
+            } else if t.passed {
+                "\x1b[32mPASS\x1b[0m"
+            } else {
+                "\x1b[31mFAIL\x1b[0m"
+            };
             println!("  {:<45} {} {:>8}ms", t.name, status, t.duration_ms);
-            for d in &t.details { println!("    {}", d); }
-            if !t.passed && !t.message.starts_with("SKIP") { println!("    \x1b[31m{}\x1b[0m", t.message); }
-            if t.message.starts_with("SKIP") { skipped += 1; } else if t.passed { passed += 1; } else { failed += 1; }
+            for d in &t.details {
+                println!("    {}", d);
+            }
+            if !t.passed && !t.message.starts_with("SKIP") {
+                println!("    \x1b[31m{}\x1b[0m", t.message);
+            }
+            if t.message.starts_with("SKIP") {
+                skipped += 1;
+            } else if t.passed {
+                passed += 1;
+            } else {
+                failed += 1;
+            }
         }
     }
 
     println!("\n{}", "=".repeat(80));
-    println!("  RESULTS: {} passed, {} failed, {} skipped", passed, failed, skipped);
+    println!(
+        "  RESULTS: {} passed, {} failed, {} skipped",
+        passed, failed, skipped
+    );
     println!("{}", "=".repeat(80));
 
-    if failed > 0 { std::process::exit(1); }
+    if failed > 0 {
+        std::process::exit(1);
+    }
 }

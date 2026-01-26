@@ -549,7 +549,7 @@ async fn test_value_types() -> TestResult {
         // Test all value types
         let values = vec![
             ("/type/int", Value::Int(42)),
-            ("/type/float", Value::Float(3.14159)),
+            ("/type/float", Value::Float(1.2345)),
             ("/type/bool", Value::Bool(true)),
             ("/type/string", Value::String("hello world".to_string())),
             ("/type/null", Value::Null),

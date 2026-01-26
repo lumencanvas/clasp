@@ -29,7 +29,7 @@ async fn test_set_message(config: &ConformanceConfig, report: &mut ConformanceRe
 
         // Test SET with different value types
         client.set("/msg/test/int", Value::Int(42)).await?;
-        client.set("/msg/test/float", Value::Float(3.14)).await?;
+        client.set("/msg/test/float", Value::Float(1.25)).await?;
         client
             .set("/msg/test/string", Value::String("hello".to_string()))
             .await?;

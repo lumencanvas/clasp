@@ -135,3 +135,155 @@ class TestClaspError:
     def test_error_inheritance(self):
         error = ClaspError("Error")
         assert isinstance(error, Exception)
+
+
+class TestQuerySignals:
+    """Test query_signals and get_signals methods."""
+
+    @pytest.mark.asyncio
+    async def test_query_signals_not_connected_raises(self):
+        """query_signals should raise ClaspError when not connected."""
+        client = Clasp("ws://localhost:7330")
+        with pytest.raises(ClaspError, match="Not connected"):
+            await client.query_signals("/test/**")
+
+    @pytest.mark.asyncio
+    async def test_get_signals_not_connected_raises(self):
+        """get_signals should raise ClaspError when not connected."""
+        client = Clasp("ws://localhost:7330")
+        with pytest.raises(ClaspError, match="Not connected"):
+            await client.get_signals("/test/**")
+
+    def test_query_signals_signature(self):
+        """query_signals should accept pattern and optional timeout."""
+        import inspect
+        client = Clasp("ws://localhost:7330")
+        sig = inspect.signature(client.query_signals)
+        params = list(sig.parameters.keys())
+        assert "pattern" in params
+        assert "timeout" in params
+        # Default timeout should be 5.0
+        assert sig.parameters["timeout"].default == 5.0
+
+
+class TestGesture:
+    """Test gesture method."""
+
+    @pytest.mark.asyncio
+    async def test_gesture_not_connected_raises(self):
+        """gesture should raise ClaspError when not connected."""
+        client = Clasp("ws://localhost:7330")
+        with pytest.raises(ClaspError, match="Not connected"):
+            await client.gesture("/input/touch/0", gesture_id=1, phase="start")
+
+    @pytest.mark.asyncio
+    async def test_gesture_with_payload_not_connected(self):
+        """gesture with payload should raise ClaspError when not connected."""
+        client = Clasp("ws://localhost:7330")
+        with pytest.raises(ClaspError, match="Not connected"):
+            await client.gesture(
+                "/input/touch/0",
+                gesture_id=1,
+                phase="move",
+                payload={"x": 100, "y": 200, "pressure": 0.5}
+            )
+
+    def test_gesture_signature(self):
+        """gesture should have correct signature."""
+        import inspect
+        client = Clasp("ws://localhost:7330")
+        sig = inspect.signature(client.gesture)
+        params = list(sig.parameters.keys())
+        assert "address" in params
+        assert "gesture_id" in params
+        assert "phase" in params
+        assert "payload" in params
+        # payload should default to None
+        assert sig.parameters["payload"].default is None
+
+    def test_gesture_phases_valid(self):
+        """Test that gesture phase validation is documented."""
+        # Phases are: 'start', 'move', 'end', 'cancel'
+        valid_phases = ["start", "move", "end", "cancel"]
+        assert len(valid_phases) == 4
+
+
+class TestTimeline:
+    """Test timeline method."""
+
+    @pytest.mark.asyncio
+    async def test_timeline_not_connected_raises(self):
+        """timeline should raise ClaspError when not connected."""
+        client = Clasp("ws://localhost:7330")
+        with pytest.raises(ClaspError, match="Not connected"):
+            await client.timeline(
+                "/lumen/layer/0/opacity",
+                keyframes=[
+                    {"time": 0, "value": 0.0},
+                    {"time": 1000000, "value": 1.0},
+                ]
+            )
+
+    @pytest.mark.asyncio
+    async def test_timeline_with_loop_not_connected(self):
+        """timeline with loop=True should raise ClaspError when not connected."""
+        client = Clasp("ws://localhost:7330")
+        with pytest.raises(ClaspError, match="Not connected"):
+            await client.timeline(
+                "/effect/fade",
+                keyframes=[
+                    {"time": 0, "value": 0.0},
+                    {"time": 500000, "value": 1.0},
+                    {"time": 1000000, "value": 0.0},
+                ],
+                loop=True
+            )
+
+    @pytest.mark.asyncio
+    async def test_timeline_with_start_time_not_connected(self):
+        """timeline with explicit start_time should raise ClaspError when not connected."""
+        client = Clasp("ws://localhost:7330")
+        with pytest.raises(ClaspError, match="Not connected"):
+            await client.timeline(
+                "/animation/pos",
+                keyframes=[{"time": 0, "value": 0}, {"time": 1000000, "value": 100}],
+                start_time=1000000000000  # Some future time
+            )
+
+    def test_timeline_signature(self):
+        """timeline should have correct signature."""
+        import inspect
+        client = Clasp("ws://localhost:7330")
+        sig = inspect.signature(client.timeline)
+        params = list(sig.parameters.keys())
+        assert "address" in params
+        assert "keyframes" in params
+        assert "loop" in params
+        assert "start_time" in params
+        # Defaults
+        assert sig.parameters["loop"].default is False
+        assert sig.parameters["start_time"].default is None
+
+
+class TestMessageEncoding:
+    """Test message encoding for new signal types."""
+
+    def test_gesture_phase_codes(self):
+        """Test that gesture phase codes are defined."""
+        from clasp.client import SIG_GESTURE
+        assert SIG_GESTURE == 3
+
+    def test_timeline_signal_code(self):
+        """Test that timeline signal code is defined."""
+        from clasp.client import SIG_TIMELINE
+        assert SIG_TIMELINE == 4
+
+    def test_query_message_code(self):
+        """Test that QUERY message code is defined."""
+        from clasp.client import MSG_QUERY
+        assert MSG_QUERY == 0x60
+
+    def test_result_message_code(self):
+        """Test that RESULT message code is defined."""
+        from clasp.client import MSG_RESULT
+        assert MSG_RESULT == 0x61

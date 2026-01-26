@@ -1442,11 +1442,11 @@ mod tests {
         let mut buf = [0u8; 16];
 
         // Float
-        let n = encode_value(&mut buf, &Value::Float(3.14));
+        let n = encode_value(&mut buf, &Value::Float(1.25));
         assert_eq!(n, 9);
         let (v, consumed) = decode_value(&buf).unwrap();
         assert_eq!(consumed, 9);
-        assert!((v.as_float().unwrap() - 3.14).abs() < 0.001);
+        assert!((v.as_float().unwrap() - 1.25).abs() < 0.001);
 
         // Int
         let n = encode_value(&mut buf, &Value::Int(-42));
@@ -1661,7 +1661,14 @@ mod tests {
         // Test SYNC message decoding
         let sync_payload = [
             msg::SYNC,
-            0x00, 0x00, 0x01, 0x90, 0x9F, 0x8D, 0x80, 0x00, // timestamp
+            0x00,
+            0x00,
+            0x01,
+            0x90,
+            0x9F,
+            0x8D,
+            0x80,
+            0x00, // timestamp
         ];
         let msg = decode_message(&sync_payload).unwrap();
         match msg {
@@ -1740,9 +1747,9 @@ mod tests {
     #[test]
     fn test_value_ext_conversion() {
         // Convert Value to ValueExt
-        let v = Value::Float(3.14);
+        let v = Value::Float(1.25);
         let ve = ValueExt::from_value(v);
-        assert!((ve.as_float().unwrap() - 3.14).abs() < 0.001);
+        assert!((ve.as_float().unwrap() - 1.25).abs() < 0.001);
 
         // Convert ValueExt to Value (for non-heap types)
         let ve = ValueExt::Int(42);
