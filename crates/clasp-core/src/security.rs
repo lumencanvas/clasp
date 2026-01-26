@@ -307,28 +307,10 @@ impl CpskValidator {
         self.tokens.read().unwrap().keys().cloned().collect()
     }
 
-    /// Generate a new CPSK token string
+    /// Generate a new CPSK token string using cryptographically secure randomness
     pub fn generate_token() -> String {
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        // Use time-based seed for randomness (fallback to 0 if time is before epoch)
-        let seed = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
-
-        // Simple LCG-based random generator
-        let mut state = seed as u64;
-        let mut chars = String::with_capacity(32);
-        const ALPHABET: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-
-        for _ in 0..32 {
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-            let idx = ((state >> 33) as usize) % ALPHABET.len();
-            chars.push(ALPHABET[idx] as char);
-        }
-
-        format!("{}{}", Self::PREFIX, chars)
+        let uuid = uuid::Uuid::new_v4();
+        format!("{}{}", Self::PREFIX, uuid.as_simple())
     }
 }
 
@@ -688,5 +670,32 @@ mod tests {
             SecurityMode::from_str("auth").unwrap(),
             SecurityMode::Authenticated
         );
+    }
+
+    #[test]
+    fn test_cpsk_token_uniqueness() {
+        use std::collections::HashSet;
+
+        let mut tokens = HashSet::new();
+        for _ in 0..10_000 {
+            let token = CpskValidator::generate_token();
+            assert!(
+                tokens.insert(token.clone()),
+                "duplicate token generated: {}",
+                token
+            );
+        }
+        assert_eq!(tokens.len(), 10_000);
+    }
+
+    #[test]
+    fn test_cpsk_token_format() {
+        let token = CpskValidator::generate_token();
+        assert!(token.starts_with("cpsk_"));
+        // UUID simple format is 32 hex chars, so total is 37 chars
+        assert_eq!(token.len(), 37);
+        // Verify the UUID part is valid hex
+        let uuid_part = &token[5..];
+        assert!(uuid_part.chars().all(|c| c.is_ascii_hexdigit()));
     }
 }

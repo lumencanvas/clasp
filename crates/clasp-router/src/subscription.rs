@@ -100,7 +100,29 @@ impl SubscriptionManager {
     /// Remove a subscription
     pub fn remove(&self, session_id: &SessionId, id: u32) -> Option<Subscription> {
         let key = (session_id.clone(), id);
-        self.subscriptions.remove(&key).map(|(_, sub)| sub)
+        if let Some((_, sub)) = self.subscriptions.remove(&key) {
+            // Clean up the by_prefix index
+            let prefix = sub
+                .pattern
+                .address()
+                .segments()
+                .first()
+                .map(|s| format!("/{}", s))
+                .unwrap_or_else(|| "/".to_string());
+
+            // Remove from prefix index and clean up empty entries
+            self.by_prefix.alter(&prefix, |_, mut vec| {
+                vec.retain(|k| k != &key);
+                vec
+            });
+
+            // Remove empty prefix entries to prevent memory accumulation
+            self.by_prefix.retain(|_, v| !v.is_empty());
+
+            Some(sub)
+        } else {
+            None
+        }
     }
 
     /// Remove all subscriptions for a session
@@ -112,9 +134,17 @@ impl SubscriptionManager {
             .map(|entry| entry.key().clone())
             .collect();
 
-        for key in keys {
-            self.subscriptions.remove(&key);
+        for key in &keys {
+            self.subscriptions.remove(key);
         }
+
+        // Clean up by_prefix index - remove entries referencing this session
+        for mut entry in self.by_prefix.iter_mut() {
+            entry.value_mut().retain(|k| k.0 != *session_id);
+        }
+
+        // Remove empty prefix entries
+        self.by_prefix.retain(|_, v| !v.is_empty());
     }
 
     /// Find all sessions subscribed to an address
@@ -309,5 +339,99 @@ mod tests {
         assert!(subscribers.contains(&"global".to_string()));
         assert!(subscribers.contains(&"other".to_string()));
         assert!(!subscribers.contains(&"lumen".to_string()));
+    }
+
+    #[test]
+    fn test_remove_cleans_up_by_prefix() {
+        let manager = SubscriptionManager::new();
+
+        // Add a subscription
+        let sub = Subscription::new(
+            1,
+            "session1".to_string(),
+            "/test/**",
+            vec![],
+            SubscribeOptions::default(),
+        )
+        .unwrap();
+
+        manager.add(sub);
+        assert_eq!(manager.len(), 1);
+
+        // Remove the subscription
+        let removed = manager.remove(&"session1".to_string(), 1);
+        assert!(removed.is_some());
+        assert_eq!(manager.len(), 0);
+
+        // by_prefix should be cleaned up (empty entries removed)
+        // We can verify this indirectly by checking that a new subscription
+        // to the same prefix works correctly
+        let sub2 = Subscription::new(
+            2,
+            "session2".to_string(),
+            "/test/**",
+            vec![],
+            SubscribeOptions::default(),
+        )
+        .unwrap();
+
+        manager.add(sub2);
+        let subscribers = manager.find_subscribers("/test/foo", None);
+        assert_eq!(subscribers.len(), 1);
+        assert!(subscribers.contains(&"session2".to_string()));
+    }
+
+    #[test]
+    fn test_remove_session_cleans_up_by_prefix() {
+        let manager = SubscriptionManager::new();
+
+        // Add multiple subscriptions for one session
+        manager.add(
+            Subscription::new(
+                1,
+                "session1".to_string(),
+                "/test/**",
+                vec![],
+                SubscribeOptions::default(),
+            )
+            .unwrap(),
+        );
+        manager.add(
+            Subscription::new(
+                2,
+                "session1".to_string(),
+                "/other/**",
+                vec![],
+                SubscribeOptions::default(),
+            )
+            .unwrap(),
+        );
+
+        // Add subscription for different session
+        manager.add(
+            Subscription::new(
+                1,
+                "session2".to_string(),
+                "/test/**",
+                vec![],
+                SubscribeOptions::default(),
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(manager.len(), 3);
+
+        // Remove all subscriptions for session1
+        manager.remove_session(&"session1".to_string());
+        assert_eq!(manager.len(), 1);
+
+        // Session2 should still get messages
+        let subscribers = manager.find_subscribers("/test/foo", None);
+        assert_eq!(subscribers.len(), 1);
+        assert!(subscribers.contains(&"session2".to_string()));
+
+        // /other/** should have no subscribers
+        let subscribers = manager.find_subscribers("/other/foo", None);
+        assert_eq!(subscribers.len(), 0);
     }
 }

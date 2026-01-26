@@ -169,6 +169,7 @@ class Clasp:
         self._next_sub_id = 1
         self._server_time_offset = 0
         self._pending_gets: Dict[str, asyncio.Future] = {}
+        self._pending_queries: Dict[str, asyncio.Future] = {}
         self._receive_task: Optional[asyncio.Task] = None
 
         # Callbacks
@@ -378,6 +379,93 @@ class Clasp:
             "type": "BUNDLE",
             "timestamp": at,
             "messages": formatted,
+        })
+
+    async def query_signals(self, pattern: str, timeout: float = 5.0) -> List[Dict[str, Any]]:
+        """
+        Query available signals matching a pattern.
+
+        Args:
+            pattern: Address pattern (e.g., '/lumen/**')
+            timeout: Timeout in seconds
+
+        Returns:
+            List of signal definitions with address, type, datatype, etc.
+        """
+        future = asyncio.get_event_loop().create_future()
+        self._pending_queries[pattern] = future
+
+        await self._send({
+            "type": "QUERY",
+            "pattern": pattern,
+        })
+
+        try:
+            return await asyncio.wait_for(future, timeout=timeout)
+        except asyncio.TimeoutError:
+            if pattern in self._pending_queries:
+                del self._pending_queries[pattern]
+            raise ClaspError("Query timeout")
+
+    async def get_signals(self, pattern: str, timeout: float = 5.0) -> List[Dict[str, Any]]:
+        """Alias for query_signals"""
+        return await self.query_signals(pattern, timeout)
+
+    async def gesture(
+        self,
+        address: str,
+        gesture_id: int,
+        phase: str,
+        payload: Optional[Value] = None,
+    ) -> None:
+        """
+        Send gesture input (touch/pen/motion).
+
+        Args:
+            address: Signal address (e.g., '/input/touch/0')
+            gesture_id: Unique identifier for this gesture stream
+            phase: Phase of gesture ('start', 'move', 'end', 'cancel')
+            payload: Gesture data (e.g., position, pressure)
+        """
+        await self._send({
+            "type": "PUBLISH",
+            "address": address,
+            "signal": "gesture",
+            "phase": phase,
+            "id": gesture_id,
+            "payload": payload,
+            "timestamp": self.time(),
+        })
+
+    async def timeline(
+        self,
+        address: str,
+        keyframes: List[Dict[str, Any]],
+        loop: bool = False,
+        start_time: Optional[int] = None,
+    ) -> None:
+        """
+        Send timeline automation data.
+
+        Args:
+            address: Signal address (e.g., '/lumen/layer/0/opacity')
+            keyframes: List of keyframes, each with 'time' and 'value'
+            loop: Whether the timeline should loop
+            start_time: Start time in microseconds (defaults to current time)
+
+        Example:
+            await client.timeline('/lumen/layer/0/opacity', [
+                {'time': 0, 'value': 0.0},
+                {'time': 1000000, 'value': 1.0},  # 1 second
+            ])
+        """
+        await self._send({
+            "type": "PUBLISH",
+            "address": address,
+            "signal": "timeline",
+            "keyframes": keyframes,
+            "loop": loop,
+            "timestamp": start_time or self.time(),
         })
 
     def cached(self, address: str) -> Optional[Value]:
@@ -704,6 +792,36 @@ class Clasp:
                 address, offset = self._decode_string(data, offset)
             return {"type": "ERROR", "code": code, "message": message, "address": address}
 
+        elif msg_type == MSG_RESULT:
+            # RESULT format: signal_count(2) + signals...
+            count = struct.unpack_from('>H', data, offset)[0]
+            offset += 2
+            signals = []
+            for _ in range(count):
+                address, offset = self._decode_string(data, offset)
+                sig_type = data[offset]
+                offset += 1
+                datatype = None
+                access = None
+                # Decode optional fields if present
+                opt_flags = data[offset] if offset < len(data) else 0
+                offset += 1
+                if opt_flags & 0x01:
+                    datatype, offset = self._decode_string(data, offset)
+                if opt_flags & 0x02:
+                    access, offset = self._decode_string(data, offset)
+                signals.append({
+                    "address": address,
+                    "type": self._signal_type_from_code(sig_type),
+                    "datatype": datatype,
+                    "access": access,
+                })
+            return {"type": "RESULT", "signals": signals}
+
+        elif msg_type == MSG_QUERY:
+            pattern, offset = self._decode_string(data, offset)
+            return {"type": "QUERY", "pattern": pattern}
+
         else:
             raise ClaspError(f"Unknown message type: 0x{msg_type:02x}")
 
@@ -898,6 +1016,16 @@ class Clasp:
 
         elif msg_type == "PING":
             asyncio.create_task(self._send({"type": "PONG"}))
+
+        elif msg_type == "RESULT":
+            # Handle signal query results
+            signals = msg.get("signals", [])
+            # Try to match with pending queries
+            for pattern, future in list(self._pending_queries.items()):
+                if not future.done():
+                    future.set_result(signals)
+                    del self._pending_queries[pattern]
+                    break
 
         elif msg_type == "ERROR":
             print(f"CLASP error: {msg.get('code')} - {msg.get('message')}")

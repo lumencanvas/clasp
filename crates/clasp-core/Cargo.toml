@@ -23,6 +23,7 @@ thiserror = { workspace = true }
 bytes = { workspace = true }
 glob-match = { workspace = true }
 regex-lite = "0.1"
+uuid = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
@@ -31,6 +32,7 @@ clasp-router = { workspace = true }
 clasp-client = { workspace = true }
 clasp-transport = { workspace = true }
 clasp-test-utils = { workspace = true }
+clasp-embedded = { workspace = true, features = ["alloc"] }
 rosc = { workspace = true }
 midir = { workspace = true }
 

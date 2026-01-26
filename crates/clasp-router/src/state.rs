@@ -1,11 +1,55 @@
 //! Router state management
 
-use clasp_core::state::{ParamState, StateStore, UpdateError};
+use clasp_core::state::{ParamState, StateStore, StateStoreConfig, UpdateError};
 use clasp_core::{ParamValue, SetMessage, SignalDefinition, SnapshotMessage, Value};
 use dashmap::DashMap;
 use parking_lot::RwLock;
+use std::time::{Duration, Instant};
 
 use crate::SessionId;
+
+/// Signal entry with registration time for cleanup
+#[derive(Debug, Clone)]
+pub struct SignalEntry {
+    /// The signal definition
+    pub definition: SignalDefinition,
+    /// When this signal was registered
+    pub registered_at: Instant,
+    /// Last time this signal was accessed or updated
+    pub last_accessed: Instant,
+}
+
+/// Configuration for router state management
+#[derive(Debug, Clone)]
+pub struct RouterStateConfig {
+    /// Parameter store configuration
+    pub param_config: StateStoreConfig,
+    /// TTL for signal definitions (None = never expire)
+    pub signal_ttl: Option<Duration>,
+    /// Maximum number of signals (None = unlimited)
+    pub max_signals: Option<usize>,
+}
+
+impl Default for RouterStateConfig {
+    fn default() -> Self {
+        Self {
+            param_config: StateStoreConfig::default(),
+            signal_ttl: Some(Duration::from_secs(3600)), // 1 hour
+            max_signals: Some(10_000),
+        }
+    }
+}
+
+impl RouterStateConfig {
+    /// Create config with no limits (for backwards compatibility)
+    pub fn unlimited() -> Self {
+        Self {
+            param_config: StateStoreConfig::unlimited(),
+            signal_ttl: None,
+            max_signals: None,
+        }
+    }
+}
 
 /// Global router state
 pub struct RouterState {
@@ -13,23 +57,40 @@ pub struct RouterState {
     params: RwLock<StateStore>,
     /// Change listeners (for reactive updates)
     listeners: DashMap<String, Vec<Box<dyn Fn(&str, &Value) + Send + Sync>>>,
-    /// Signal registry (announced signals from clients)
-    pub signals: DashMap<String, SignalDefinition>,
+    /// Signal registry (announced signals from clients) with timestamps
+    signals: DashMap<String, SignalEntry>,
+    /// Configuration
+    config: RouterStateConfig,
 }
 
 impl RouterState {
     pub fn new() -> Self {
+        Self::with_config(RouterStateConfig::unlimited())
+    }
+
+    /// Create with specific configuration
+    pub fn with_config(config: RouterStateConfig) -> Self {
         Self {
-            params: RwLock::new(StateStore::new()),
+            params: RwLock::new(StateStore::with_config(config.param_config.clone())),
             listeners: DashMap::new(),
             signals: DashMap::new(),
+            config,
         }
     }
 
     /// Register signals from an ANNOUNCE message
     pub fn register_signals(&self, signals: Vec<SignalDefinition>) {
+        let now = Instant::now();
         for signal in signals {
-            self.signals.insert(signal.address.clone(), signal);
+            let address = signal.address.clone();
+            self.signals.insert(
+                address,
+                SignalEntry {
+                    definition: signal,
+                    registered_at: now,
+                    last_accessed: now,
+                },
+            );
         }
     }
 
@@ -38,7 +99,7 @@ impl RouterState {
         self.signals
             .iter()
             .filter(|entry| clasp_core::address::glob_match(pattern, entry.key()))
-            .map(|entry| entry.value().clone())
+            .map(|entry| entry.value().definition.clone())
             .collect()
     }
 
@@ -46,8 +107,47 @@ impl RouterState {
     pub fn all_signals(&self) -> Vec<SignalDefinition> {
         self.signals
             .iter()
-            .map(|entry| entry.value().clone())
+            .map(|entry| entry.value().definition.clone())
             .collect()
+    }
+
+    /// Get signal count
+    pub fn signal_count(&self) -> usize {
+        self.signals.len()
+    }
+
+    /// Remove stale signals that haven't been accessed within the TTL
+    /// Returns the number of signals removed
+    pub fn cleanup_stale_signals(&self, ttl: Duration) -> usize {
+        let now = Instant::now();
+        let before = self.signals.len();
+        self.signals
+            .retain(|_, entry| now.duration_since(entry.last_accessed) < ttl);
+        before - self.signals.len()
+    }
+
+    /// Remove stale params using the configured TTL
+    /// Returns the number of params removed
+    pub fn cleanup_stale_params(&self, ttl: Duration) -> usize {
+        self.params.write().cleanup_stale(ttl)
+    }
+
+    /// Run all cleanup operations using configured TTLs
+    /// Returns (params_removed, signals_removed)
+    pub fn cleanup_stale(&self) -> (usize, usize) {
+        let params_removed = if let Some(ttl) = self.config.param_config.param_ttl {
+            self.params.write().cleanup_stale(ttl)
+        } else {
+            0
+        };
+
+        let signals_removed = if let Some(ttl) = self.config.signal_ttl {
+            self.cleanup_stale_signals(ttl)
+        } else {
+            0
+        };
+
+        (params_removed, signals_removed)
     }
 
     /// Get a parameter value
@@ -211,5 +311,107 @@ mod tests {
 
         let snapshot = state.snapshot("/test/**");
         assert_eq!(snapshot.params.len(), 2);
+    }
+
+    #[test]
+    fn test_register_signals() {
+        use clasp_core::SignalType;
+
+        let state = RouterState::new();
+
+        let signals = vec![
+            SignalDefinition {
+                address: "/test/signal1".to_string(),
+                signal_type: SignalType::Param,
+                datatype: Some("float".to_string()),
+                access: None,
+                meta: None,
+            },
+            SignalDefinition {
+                address: "/test/signal2".to_string(),
+                signal_type: SignalType::Event,
+                datatype: Some("bool".to_string()),
+                access: None,
+                meta: None,
+            },
+        ];
+
+        state.register_signals(signals);
+        assert_eq!(state.signal_count(), 2);
+
+        let queried = state.query_signals("/test/**");
+        assert_eq!(queried.len(), 2);
+    }
+
+    #[test]
+    fn test_cleanup_stale_signals() {
+        use clasp_core::SignalType;
+
+        let config = RouterStateConfig {
+            param_config: StateStoreConfig::unlimited(),
+            signal_ttl: Some(Duration::from_millis(10)),
+            max_signals: None,
+        };
+        let state = RouterState::with_config(config);
+
+        let signals = vec![SignalDefinition {
+            address: "/test/signal".to_string(),
+            signal_type: SignalType::Param,
+            datatype: Some("float".to_string()),
+            access: None,
+            meta: None,
+        }];
+
+        state.register_signals(signals);
+        assert_eq!(state.signal_count(), 1);
+
+        // Immediate cleanup should remove nothing
+        let removed = state.cleanup_stale_signals(Duration::from_millis(10));
+        assert_eq!(removed, 0);
+
+        // Wait and cleanup
+        std::thread::sleep(Duration::from_millis(15));
+        let removed = state.cleanup_stale_signals(Duration::from_millis(10));
+        assert_eq!(removed, 1);
+        assert_eq!(state.signal_count(), 0);
+    }
+
+    #[test]
+    fn test_cleanup_stale_all() {
+        use clasp_core::SignalType;
+
+        let config = RouterStateConfig {
+            param_config: StateStoreConfig::with_limits(1000, 1), // 1 second TTL
+            signal_ttl: Some(Duration::from_millis(10)),
+            max_signals: None,
+        };
+        let state = RouterState::with_config(config);
+
+        // Add a param and signal
+        state
+            .set("/test/param", Value::Float(1.0), &"s1".to_string(), None, false, false)
+            .unwrap();
+
+        let signals = vec![SignalDefinition {
+            address: "/test/signal".to_string(),
+            signal_type: SignalType::Param,
+            datatype: Some("float".to_string()),
+            access: None,
+            meta: None,
+        }];
+        state.register_signals(signals);
+
+        assert_eq!(state.len(), 1);
+        assert_eq!(state.signal_count(), 1);
+
+        // Wait for signal TTL to expire
+        std::thread::sleep(Duration::from_millis(15));
+        let (params_removed, signals_removed) = state.cleanup_stale();
+
+        // Signal should be removed, param should still be there (1 second TTL)
+        assert_eq!(signals_removed, 1);
+        assert_eq!(params_removed, 0);
+        assert_eq!(state.signal_count(), 0);
+        assert_eq!(state.len(), 1);
     }
 }

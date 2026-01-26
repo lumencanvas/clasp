@@ -4,7 +4,60 @@
 
 use crate::{ConflictStrategy, Value};
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+/// Eviction strategy when the state store reaches capacity
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EvictionStrategy {
+    /// Evict least recently accessed entries (default)
+    #[default]
+    Lru,
+    /// Evict oldest entries by creation time
+    OldestFirst,
+    /// Reject new entries when at capacity
+    RejectNew,
+}
+
+/// Configuration for state store limits
+#[derive(Debug, Clone)]
+pub struct StateStoreConfig {
+    /// Maximum number of parameters (None = unlimited)
+    pub max_params: Option<usize>,
+    /// Time-to-live for parameters without access (None = never expire)
+    pub param_ttl: Option<Duration>,
+    /// Strategy for eviction when at capacity
+    pub eviction: EvictionStrategy,
+}
+
+impl Default for StateStoreConfig {
+    fn default() -> Self {
+        Self {
+            max_params: Some(10_000),
+            param_ttl: Some(Duration::from_secs(3600)), // 1 hour
+            eviction: EvictionStrategy::Lru,
+        }
+    }
+}
+
+impl StateStoreConfig {
+    /// Create config with no limits (for backwards compatibility)
+    pub fn unlimited() -> Self {
+        Self {
+            max_params: None,
+            param_ttl: None,
+            eviction: EvictionStrategy::Lru,
+        }
+    }
+
+    /// Create config with custom limits
+    pub fn with_limits(max_params: usize, ttl_secs: u64) -> Self {
+        Self {
+            max_params: Some(max_params),
+            param_ttl: Some(Duration::from_secs(ttl_secs)),
+            eviction: EvictionStrategy::Lru,
+        }
+    }
+}
 
 /// State of a single parameter
 #[derive(Debug, Clone)]
@@ -17,6 +70,8 @@ pub struct ParamState {
     pub writer: String,
     /// Timestamp of last write (microseconds)
     pub timestamp: u64,
+    /// Timestamp of last access (microseconds) - for TTL eviction
+    pub last_accessed: u64,
     /// Conflict resolution strategy
     pub strategy: ConflictStrategy,
     /// Lock holder (if locked)
@@ -36,15 +91,22 @@ pub struct ParamMeta {
 impl ParamState {
     /// Create a new param state
     pub fn new(value: Value, writer: String) -> Self {
+        let now = current_timestamp();
         Self {
             value,
             revision: 1,
             writer,
-            timestamp: current_timestamp(),
+            timestamp: now,
+            last_accessed: now,
             strategy: ConflictStrategy::Lww,
             lock_holder: None,
             meta: None,
         }
+    }
+
+    /// Update the last_accessed timestamp
+    pub fn touch(&mut self) {
+        self.last_accessed = current_timestamp();
     }
 
     /// Create with specific strategy
@@ -139,6 +201,7 @@ impl ParamState {
         self.revision += 1;
         self.writer = writer.to_string();
         self.timestamp = timestamp;
+        self.last_accessed = timestamp;
 
         Ok(self.revision)
     }
@@ -163,6 +226,7 @@ pub enum UpdateError {
     LockHeld { holder: String },
     ConflictRejected,
     OutOfRange,
+    AtCapacity,
 }
 
 impl std::fmt::Display for UpdateError {
@@ -184,31 +248,84 @@ impl std::fmt::Display for UpdateError {
             Self::OutOfRange => {
                 write!(f, "Value out of allowed range")
             }
+            Self::AtCapacity => {
+                write!(f, "State store at capacity")
+            }
         }
     }
 }
 
 impl std::error::Error for UpdateError {}
 
+/// Error returned when state store is at capacity
+#[derive(Debug, Clone)]
+pub struct CapacityError;
+
+impl std::fmt::Display for CapacityError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "State store at capacity")
+    }
+}
+
+impl std::error::Error for CapacityError {}
+
 /// State store for multiple params
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct StateStore {
     params: HashMap<String, ParamState>,
+    config: StateStoreConfig,
+}
+
+impl Default for StateStore {
+    fn default() -> Self {
+        Self {
+            params: HashMap::new(),
+            config: StateStoreConfig::unlimited(), // Backwards compatible default
+        }
+    }
 }
 
 impl StateStore {
+    /// Create a new state store with default (unlimited) config
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Get a param's current state
+    /// Create a new state store with the specified config
+    pub fn with_config(config: StateStoreConfig) -> Self {
+        Self {
+            params: HashMap::new(),
+            config,
+        }
+    }
+
+    /// Get the current configuration
+    pub fn config(&self) -> &StateStoreConfig {
+        &self.config
+    }
+
+    /// Get a param's current state (does not update last_accessed)
     pub fn get(&self, address: &str) -> Option<&ParamState> {
         self.params.get(address)
     }
 
-    /// Get a param's current value
+    /// Get a param's current state and update last_accessed
+    pub fn get_mut(&mut self, address: &str) -> Option<&mut ParamState> {
+        let param = self.params.get_mut(address)?;
+        param.touch();
+        Some(param)
+    }
+
+    /// Get a param's current value (does not update last_accessed)
     pub fn get_value(&self, address: &str) -> Option<&Value> {
         self.params.get(address).map(|p| &p.value)
+    }
+
+    /// Get a param's current value and update last_accessed
+    pub fn get_value_mut(&mut self, address: &str) -> Option<&Value> {
+        let param = self.params.get_mut(address)?;
+        param.touch();
+        Some(&param.value)
     }
 
     /// Set a param value, creating if necessary
@@ -224,6 +341,23 @@ impl StateStore {
         if let Some(param) = self.params.get_mut(address) {
             param.try_update(value, writer, revision, lock, unlock)
         } else {
+            // Check capacity before creating new param
+            if let Some(max) = self.config.max_params {
+                if self.params.len() >= max {
+                    match self.config.eviction {
+                        EvictionStrategy::RejectNew => {
+                            return Err(UpdateError::AtCapacity);
+                        }
+                        EvictionStrategy::Lru => {
+                            self.evict_lru();
+                        }
+                        EvictionStrategy::OldestFirst => {
+                            self.evict_oldest();
+                        }
+                    }
+                }
+            }
+
             // Create new param
             let mut param = ParamState::new(value, writer.to_string());
             if lock {
@@ -232,6 +366,52 @@ impl StateStore {
             let rev = param.revision;
             self.params.insert(address.to_string(), param);
             Ok(rev)
+        }
+    }
+
+    /// Evict the least recently accessed param
+    fn evict_lru(&mut self) {
+        if let Some(oldest_key) = self
+            .params
+            .iter()
+            .min_by_key(|(_, v)| v.last_accessed)
+            .map(|(k, _)| k.clone())
+        {
+            self.params.remove(&oldest_key);
+        }
+    }
+
+    /// Evict the oldest param by creation time (lowest revision is oldest)
+    fn evict_oldest(&mut self) {
+        if let Some(oldest_key) = self
+            .params
+            .iter()
+            .min_by_key(|(_, v)| v.timestamp)
+            .map(|(k, _)| k.clone())
+        {
+            self.params.remove(&oldest_key);
+        }
+    }
+
+    /// Remove params that haven't been accessed within the TTL
+    /// Returns the number of params removed
+    pub fn cleanup_stale(&mut self, ttl: Duration) -> usize {
+        let now = current_timestamp();
+        let ttl_micros = ttl.as_micros() as u64;
+        let cutoff = now.saturating_sub(ttl_micros);
+
+        let before = self.params.len();
+        self.params.retain(|_, v| v.last_accessed >= cutoff);
+        before - self.params.len()
+    }
+
+    /// Run cleanup using the configured TTL (if any)
+    /// Returns the number of params removed
+    pub fn cleanup_stale_with_config(&mut self) -> usize {
+        if let Some(ttl) = self.config.param_ttl {
+            self.cleanup_stale(ttl)
+        } else {
+            0
         }
     }
 
@@ -369,5 +549,150 @@ mod tests {
 
         let matching = store.get_matching("/test/*");
         assert_eq!(matching.len(), 2);
+    }
+
+    #[test]
+    fn test_state_store_capacity_reject() {
+        let config = StateStoreConfig {
+            max_params: Some(2),
+            param_ttl: None,
+            eviction: EvictionStrategy::RejectNew,
+        };
+        let mut store = StateStore::with_config(config);
+
+        store
+            .set("/test/a", Value::Float(1.0), "s1", None, false, false)
+            .unwrap();
+        store
+            .set("/test/b", Value::Float(2.0), "s1", None, false, false)
+            .unwrap();
+
+        // Third should fail
+        let result = store.set("/test/c", Value::Float(3.0), "s1", None, false, false);
+        assert!(matches!(result, Err(UpdateError::AtCapacity)));
+        assert_eq!(store.len(), 2);
+
+        // Updating existing should still work
+        store
+            .set("/test/a", Value::Float(1.5), "s1", None, false, false)
+            .unwrap();
+        assert_eq!(store.get_value("/test/a"), Some(&Value::Float(1.5)));
+    }
+
+    #[test]
+    fn test_state_store_capacity_lru_eviction() {
+        let config = StateStoreConfig {
+            max_params: Some(2),
+            param_ttl: None,
+            eviction: EvictionStrategy::Lru,
+        };
+        let mut store = StateStore::with_config(config);
+
+        store
+            .set("/test/a", Value::Float(1.0), "s1", None, false, false)
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        store
+            .set("/test/b", Value::Float(2.0), "s1", None, false, false)
+            .unwrap();
+
+        // Access /test/a to make it more recent
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        store.get_mut("/test/a");
+
+        // Third should evict /test/b (least recently accessed)
+        store
+            .set("/test/c", Value::Float(3.0), "s1", None, false, false)
+            .unwrap();
+
+        assert_eq!(store.len(), 2);
+        assert!(store.get("/test/a").is_some());
+        assert!(store.get("/test/b").is_none()); // Evicted
+        assert!(store.get("/test/c").is_some());
+    }
+
+    #[test]
+    fn test_state_store_capacity_oldest_eviction() {
+        let config = StateStoreConfig {
+            max_params: Some(2),
+            param_ttl: None,
+            eviction: EvictionStrategy::OldestFirst,
+        };
+        let mut store = StateStore::with_config(config);
+
+        store
+            .set("/test/a", Value::Float(1.0), "s1", None, false, false)
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        store
+            .set("/test/b", Value::Float(2.0), "s1", None, false, false)
+            .unwrap();
+
+        // Third should evict /test/a (oldest)
+        store
+            .set("/test/c", Value::Float(3.0), "s1", None, false, false)
+            .unwrap();
+
+        assert_eq!(store.len(), 2);
+        assert!(store.get("/test/a").is_none()); // Evicted
+        assert!(store.get("/test/b").is_some());
+        assert!(store.get("/test/c").is_some());
+    }
+
+    #[test]
+    fn test_state_store_cleanup_stale() {
+        let mut store = StateStore::new();
+
+        store
+            .set("/test/a", Value::Float(1.0), "s1", None, false, false)
+            .unwrap();
+        store
+            .set("/test/b", Value::Float(2.0), "s1", None, false, false)
+            .unwrap();
+
+        // Sleep a bit, then access /test/a
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        store.get_mut("/test/a");
+
+        // Cleanup with a very short TTL - should remove /test/b but not /test/a
+        let removed = store.cleanup_stale(Duration::from_millis(5));
+        assert_eq!(removed, 1);
+        assert!(store.get("/test/a").is_some());
+        assert!(store.get("/test/b").is_none());
+    }
+
+    #[test]
+    fn test_state_store_cleanup_stale_with_config() {
+        let config = StateStoreConfig {
+            max_params: None,
+            param_ttl: Some(Duration::from_millis(5)),
+            eviction: EvictionStrategy::Lru,
+        };
+        let mut store = StateStore::with_config(config);
+
+        store
+            .set("/test/a", Value::Float(1.0), "s1", None, false, false)
+            .unwrap();
+
+        // Immediate cleanup should remove nothing
+        let removed = store.cleanup_stale_with_config();
+        assert_eq!(removed, 0);
+
+        // Wait and cleanup
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let removed = store.cleanup_stale_with_config();
+        assert_eq!(removed, 1);
+        assert!(store.is_empty());
+    }
+
+    #[test]
+    fn test_last_accessed_tracking() {
+        let mut state = ParamState::new(Value::Float(0.5), "session1".to_string());
+        let initial_accessed = state.last_accessed;
+
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        state.touch();
+
+        assert!(state.last_accessed > initial_accessed);
     }
 }

@@ -1,14 +1,14 @@
 //! OSC (Open Sound Control) bridge
 
 use async_trait::async_trait;
-use clasp_core::{Message, PublishMessage, SetMessage, SignalType, Value};
+use clasp_core::{Message, PublishMessage, QoS, SetMessage, SignalType, Value};
 use parking_lot::Mutex;
 use rosc::{OscMessage, OscPacket, OscType};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use crate::{Bridge, BridgeConfig, BridgeError, BridgeEvent, Result};
 
@@ -208,6 +208,21 @@ impl Bridge for OscBridge {
         let remote_addr: SocketAddr = remote
             .parse()
             .map_err(|e| BridgeError::Send(format!("Invalid remote address: {}", e)))?;
+
+        // Check for QoS degradation - OSC is always Fire (UDP, no guarantees)
+        let original_qos = message.default_qos();
+        if original_qos != QoS::Fire {
+            let address = match &message {
+                Message::Set(set) => &set.address,
+                Message::Publish(pub_msg) => &pub_msg.address,
+                _ => "",
+            };
+            warn!(
+                address = %address,
+                original_qos = ?original_qos,
+                "CLASP->OSC: QoS downgraded to Fire (UDP has no delivery guarantees)"
+            );
+        }
 
         if let Some(packet) = self.clasp_to_osc(&message) {
             let bytes = rosc::encoder::encode(&packet)

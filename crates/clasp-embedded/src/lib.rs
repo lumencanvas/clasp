@@ -47,16 +47,21 @@ pub const VERSION: u8 = 1;
 pub mod msg {
     pub const HELLO: u8 = 0x01;
     pub const WELCOME: u8 = 0x02;
+    pub const ANNOUNCE: u8 = 0x03;
     pub const SUBSCRIBE: u8 = 0x10;
     pub const UNSUBSCRIBE: u8 = 0x11;
     pub const PUBLISH: u8 = 0x20;
     pub const SET: u8 = 0x21;
     pub const GET: u8 = 0x22;
     pub const SNAPSHOT: u8 = 0x23;
+    pub const BUNDLE: u8 = 0x30;
+    pub const SYNC: u8 = 0x40;
     pub const PING: u8 = 0x41;
     pub const PONG: u8 = 0x42;
     pub const ACK: u8 = 0x50;
     pub const ERROR: u8 = 0x51;
+    pub const QUERY: u8 = 0x60;
+    pub const RESULT: u8 = 0x61;
 }
 
 /// Value type codes (standard CLASP binary format)
@@ -69,6 +74,8 @@ pub mod val {
     pub const F64: u8 = 0x07;
     pub const STRING: u8 = 0x08;
     pub const BYTES: u8 = 0x09;
+    pub const ARRAY: u8 = 0x0A;
+    pub const MAP: u8 = 0x0B;
 }
 
 // ============================================================================
@@ -112,13 +119,86 @@ pub fn encode_header(buf: &mut [u8], _flags: u8, payload_len: usize) -> usize {
 // Value Encoding/Decoding (compact binary format)
 // ============================================================================
 
-/// Simple value type for embedded
+/// Simple value type for embedded (core types, no allocation needed)
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Value {
     Null,
     Bool(bool),
     Int(i64),
     Float(f64),
+}
+
+/// Extended value type with heap-allocated String and Bytes (requires alloc feature)
+#[cfg(feature = "alloc")]
+#[derive(Clone, Debug, PartialEq)]
+pub enum ValueExt {
+    Null,
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    String(String),
+    Bytes(Vec<u8>),
+}
+
+#[cfg(feature = "alloc")]
+impl ValueExt {
+    pub fn as_int(&self) -> Option<i64> {
+        match self {
+            ValueExt::Int(i) => Some(*i),
+            ValueExt::Float(f) => Some(*f as i64),
+            _ => None,
+        }
+    }
+
+    pub fn as_float(&self) -> Option<f64> {
+        match self {
+            ValueExt::Float(f) => Some(*f),
+            ValueExt::Int(i) => Some(*i as f64),
+            _ => None,
+        }
+    }
+
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            ValueExt::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            ValueExt::String(s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
+
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        match self {
+            ValueExt::Bytes(b) => Some(b.as_slice()),
+            _ => None,
+        }
+    }
+
+    /// Convert from core Value to extended Value
+    pub fn from_value(v: Value) -> Self {
+        match v {
+            Value::Null => ValueExt::Null,
+            Value::Bool(b) => ValueExt::Bool(b),
+            Value::Int(i) => ValueExt::Int(i),
+            Value::Float(f) => ValueExt::Float(f),
+        }
+    }
+
+    /// Try to convert to core Value (fails for String/Bytes)
+    pub fn to_value(&self) -> Option<Value> {
+        match self {
+            ValueExt::Null => Some(Value::Null),
+            ValueExt::Bool(b) => Some(Value::Bool(*b)),
+            ValueExt::Int(i) => Some(Value::Int(*i)),
+            ValueExt::Float(f) => Some(Value::Float(*f)),
+            ValueExt::String(_) | ValueExt::Bytes(_) => None,
+        }
+    }
 }
 
 impl Value {
@@ -184,6 +264,7 @@ pub fn encode_value(buf: &mut [u8], value: &Value) -> usize {
 }
 
 /// Decode a value, returns (value, bytes_consumed)
+/// Note: For String/Bytes types, use decode_value_ext with alloc feature
 pub fn decode_value(buf: &[u8]) -> Option<(Value, usize)> {
     if buf.is_empty() {
         return None;
@@ -228,7 +309,154 @@ pub fn decode_value(buf: &[u8]) -> Option<(Value, usize)> {
             ]);
             Some((Value::Float(f), 9))
         }
+        // Skip over string/bytes (return None for non-alloc since we can't store them)
+        val::STRING | val::BYTES => {
+            // Calculate size but return None since we can't represent these without alloc
+            if buf.len() < 3 {
+                return None;
+            }
+            let len = u16::from_be_bytes([buf[1], buf[2]]) as usize;
+            if buf.len() < 3 + len {
+                return None;
+            }
+            None // Can't represent String/Bytes in Value without alloc
+        }
+        // Skip over array/map (return None since we don't support them)
+        val::ARRAY | val::MAP => None,
         _ => None,
+    }
+}
+
+/// Decode extended value (with alloc support for String/Bytes)
+#[cfg(feature = "alloc")]
+pub fn decode_value_ext(buf: &[u8]) -> Option<(ValueExt, usize)> {
+    if buf.is_empty() {
+        return None;
+    }
+    match buf[0] {
+        val::NULL => Some((ValueExt::Null, 1)),
+        val::BOOL => {
+            if buf.len() < 2 {
+                return None;
+            }
+            Some((ValueExt::Bool(buf[1] != 0), 2))
+        }
+        val::I32 => {
+            if buf.len() < 5 {
+                return None;
+            }
+            let i = i32::from_be_bytes([buf[1], buf[2], buf[3], buf[4]]);
+            Some((ValueExt::Int(i as i64), 5))
+        }
+        val::I64 => {
+            if buf.len() < 9 {
+                return None;
+            }
+            let i = i64::from_be_bytes([
+                buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8],
+            ]);
+            Some((ValueExt::Int(i), 9))
+        }
+        val::F32 => {
+            if buf.len() < 5 {
+                return None;
+            }
+            let f = f32::from_be_bytes([buf[1], buf[2], buf[3], buf[4]]);
+            Some((ValueExt::Float(f as f64), 5))
+        }
+        val::F64 => {
+            if buf.len() < 9 {
+                return None;
+            }
+            let f = f64::from_be_bytes([
+                buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8],
+            ]);
+            Some((ValueExt::Float(f), 9))
+        }
+        val::STRING => {
+            if buf.len() < 3 {
+                return None;
+            }
+            let len = u16::from_be_bytes([buf[1], buf[2]]) as usize;
+            if buf.len() < 3 + len {
+                return None;
+            }
+            let s = core::str::from_utf8(&buf[3..3 + len]).ok()?;
+            Some((ValueExt::String(String::from(s)), 3 + len))
+        }
+        val::BYTES => {
+            if buf.len() < 3 {
+                return None;
+            }
+            let len = u16::from_be_bytes([buf[1], buf[2]]) as usize;
+            if buf.len() < 3 + len {
+                return None;
+            }
+            let bytes = buf[3..3 + len].to_vec();
+            Some((ValueExt::Bytes(bytes), 3 + len))
+        }
+        _ => None,
+    }
+}
+
+/// Encode extended value (with alloc support for String/Bytes)
+#[cfg(feature = "alloc")]
+pub fn encode_value_ext(buf: &mut [u8], value: &ValueExt) -> usize {
+    match value {
+        ValueExt::Null => {
+            if buf.is_empty() {
+                return 0;
+            }
+            buf[0] = val::NULL;
+            1
+        }
+        ValueExt::Bool(b) => {
+            if buf.len() < 2 {
+                return 0;
+            }
+            buf[0] = val::BOOL;
+            buf[1] = if *b { 1 } else { 0 };
+            2
+        }
+        ValueExt::Int(i) => {
+            if buf.len() < 9 {
+                return 0;
+            }
+            buf[0] = val::I64;
+            buf[1..9].copy_from_slice(&i.to_be_bytes());
+            9
+        }
+        ValueExt::Float(f) => {
+            if buf.len() < 9 {
+                return 0;
+            }
+            buf[0] = val::F64;
+            buf[1..9].copy_from_slice(&f.to_be_bytes());
+            9
+        }
+        ValueExt::String(s) => {
+            let bytes = s.as_bytes();
+            if buf.len() < 3 + bytes.len() {
+                return 0;
+            }
+            buf[0] = val::STRING;
+            let len = (bytes.len() as u16).to_be_bytes();
+            buf[1] = len[0];
+            buf[2] = len[1];
+            buf[3..3 + bytes.len()].copy_from_slice(bytes);
+            3 + bytes.len()
+        }
+        ValueExt::Bytes(b) => {
+            if buf.len() < 3 + b.len() {
+                return 0;
+            }
+            buf[0] = val::BYTES;
+            let len = (b.len() as u16).to_be_bytes();
+            buf[1] = len[0];
+            buf[2] = len[1];
+            buf[3..3 + b.len()].copy_from_slice(b);
+            3 + b.len()
+        }
     }
 }
 
@@ -345,6 +573,7 @@ pub fn encode_set_frame(buf: &mut [u8], address: &str, value: &Value) -> usize {
 }
 
 /// Encode a SUBSCRIBE message
+/// Format: msg_type(1) + id(4) + pattern + type_mask(1) + opt_flags(1)
 pub fn encode_subscribe(buf: &mut [u8], pattern: &str) -> usize {
     if buf.is_empty() {
         return 0;
@@ -362,7 +591,13 @@ pub fn encode_subscribe(buf: &mut [u8], pattern: &str) -> usize {
     // pattern
     offset += encode_string(&mut buf[offset..], pattern);
 
-    // signal types count (0 = all)
+    // Type mask (0xFF = all types)
+    if buf.len() > offset {
+        buf[offset] = 0xFF;
+        offset += 1;
+    }
+
+    // Option flags (0 = no options)
     if buf.len() > offset {
         buf[offset] = 0;
         offset += 1;
@@ -453,11 +688,17 @@ pub fn encode_pong_frame(buf: &mut [u8]) -> usize {
 pub enum Message<'a> {
     Hello { name: &'a str, version: u8 },
     Welcome { session: &'a str },
+    Announce { signal_count: u16 },
     Set { address: &'a str, value: Value },
     Subscribe { id: u32, pattern: &'a str },
     Unsubscribe { id: u32 },
+    Publish { address: &'a str },
+    Bundle { message_count: u16 },
+    Sync { timestamp: u64 },
     Ping,
     Pong,
+    Query { pattern: &'a str },
+    Result { signal_count: u16 },
     Error { code: u16, message: &'a str },
     Unknown(u8),
 }
@@ -579,6 +820,57 @@ pub fn decode_message(payload: &[u8]) -> Option<Message<'_>> {
             let code = u16::from_be_bytes([data[0], data[1]]);
             let (message, _) = decode_string(&data[2..]).unwrap_or(("", 0));
             Some(Message::Error { code, message })
+        }
+        msg::ANNOUNCE => {
+            // ANNOUNCE format: signal_count(2) + signals...
+            // We just extract the count for minimal embedded support
+            if data.len() < 2 {
+                return None;
+            }
+            let signal_count = u16::from_be_bytes([data[0], data[1]]);
+            Some(Message::Announce { signal_count })
+        }
+        msg::PUBLISH => {
+            // PUBLISH format: flags(1) + address + payload
+            // Extract just the address for minimal embedded support
+            if data.is_empty() {
+                return None;
+            }
+            let _flags = data[0];
+            let (address, _) = decode_string(&data[1..])?;
+            Some(Message::Publish { address })
+        }
+        msg::BUNDLE => {
+            // BUNDLE format: flags(1) + message_count(2) + messages...
+            if data.len() < 3 {
+                return None;
+            }
+            let _flags = data[0];
+            let message_count = u16::from_be_bytes([data[1], data[2]]);
+            Some(Message::Bundle { message_count })
+        }
+        msg::SYNC => {
+            // SYNC format: timestamp(8) + optional snapshot
+            if data.len() < 8 {
+                return None;
+            }
+            let timestamp = u64::from_be_bytes([
+                data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7],
+            ]);
+            Some(Message::Sync { timestamp })
+        }
+        msg::QUERY => {
+            // QUERY format: pattern
+            let (pattern, _) = decode_string(data)?;
+            Some(Message::Query { pattern })
+        }
+        msg::RESULT => {
+            // RESULT format: signal_count(2) + signals...
+            if data.len() < 2 {
+                return None;
+            }
+            let signal_count = u16::from_be_bytes([data[0], data[1]]);
+            Some(Message::Result { signal_count })
         }
         _ => Some(Message::Unknown(msg_type)),
     }
@@ -1354,5 +1646,111 @@ mod tests {
         // Test that sender doesn't receive their own broadcast
         let targets = router.get_broadcast_targets("/light/brightness", 0);
         assert_eq!(targets.count, 0); // Client 0 sent it, so no one else matches
+    }
+
+    #[test]
+    fn test_new_message_types() {
+        // Test ANNOUNCE message decoding
+        let announce_payload = [msg::ANNOUNCE, 0x00, 0x03]; // 3 signals
+        let msg = decode_message(&announce_payload).unwrap();
+        match msg {
+            Message::Announce { signal_count } => assert_eq!(signal_count, 3),
+            _ => panic!("Expected Announce message"),
+        }
+
+        // Test SYNC message decoding
+        let sync_payload = [
+            msg::SYNC,
+            0x00, 0x00, 0x01, 0x90, 0x9F, 0x8D, 0x80, 0x00, // timestamp
+        ];
+        let msg = decode_message(&sync_payload).unwrap();
+        match msg {
+            Message::Sync { timestamp } => assert!(timestamp > 0),
+            _ => panic!("Expected Sync message"),
+        }
+
+        // Test BUNDLE message decoding
+        let bundle_payload = [msg::BUNDLE, 0x00, 0x00, 0x05]; // flags + 5 messages
+        let msg = decode_message(&bundle_payload).unwrap();
+        match msg {
+            Message::Bundle { message_count } => assert_eq!(message_count, 5),
+            _ => panic!("Expected Bundle message"),
+        }
+
+        // Test QUERY message decoding
+        let mut query_payload = [0u8; 32];
+        query_payload[0] = msg::QUERY;
+        let pattern = "/test/**";
+        let len = (pattern.len() as u16).to_be_bytes();
+        query_payload[1] = len[0];
+        query_payload[2] = len[1];
+        query_payload[3..3 + pattern.len()].copy_from_slice(pattern.as_bytes());
+
+        let msg = decode_message(&query_payload[..3 + pattern.len()]).unwrap();
+        match msg {
+            Message::Query { pattern: p } => assert_eq!(p, "/test/**"),
+            _ => panic!("Expected Query message"),
+        }
+
+        // Test RESULT message decoding
+        let result_payload = [msg::RESULT, 0x00, 0x0A]; // 10 signals
+        let msg = decode_message(&result_payload).unwrap();
+        match msg {
+            Message::Result { signal_count } => assert_eq!(signal_count, 10),
+            _ => panic!("Expected Result message"),
+        }
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn test_value_ext_string() {
+        let mut buf = [0u8; 64];
+
+        // Encode string
+        let value = ValueExt::String("hello world".into());
+        let n = encode_value_ext(&mut buf, &value);
+        assert!(n > 0);
+
+        // Decode string
+        let (decoded, consumed) = decode_value_ext(&buf).unwrap();
+        assert_eq!(consumed, n);
+        assert_eq!(decoded.as_str(), Some("hello world"));
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn test_value_ext_bytes() {
+        use alloc::vec;
+
+        let mut buf = [0u8; 64];
+
+        // Encode bytes
+        let data = vec![0x01, 0x02, 0x03, 0x04];
+        let value = ValueExt::Bytes(data.clone());
+        let n = encode_value_ext(&mut buf, &value);
+        assert!(n > 0);
+
+        // Decode bytes
+        let (decoded, consumed) = decode_value_ext(&buf).unwrap();
+        assert_eq!(consumed, n);
+        assert_eq!(decoded.as_bytes(), Some(data.as_slice()));
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn test_value_ext_conversion() {
+        // Convert Value to ValueExt
+        let v = Value::Float(3.14);
+        let ve = ValueExt::from_value(v);
+        assert!((ve.as_float().unwrap() - 3.14).abs() < 0.001);
+
+        // Convert ValueExt to Value (for non-heap types)
+        let ve = ValueExt::Int(42);
+        let v = ve.to_value().unwrap();
+        assert_eq!(v.as_int(), Some(42));
+
+        // String/Bytes can't convert to Value
+        let ve = ValueExt::String("test".into());
+        assert!(ve.to_value().is_none());
     }
 }
