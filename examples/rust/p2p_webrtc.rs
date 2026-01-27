@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     let connect_to = env::var("CONNECT_TO").ok();
     let rendezvous_url =
-        env::var("RENDEZVOUS_URL").unwrap_or_else(|_| "wss://rendezvous.clasp.to".to_string());
+        env::var("RENDEZVOUS_URL").unwrap_or_else(|_| "https://relay.clasp.to".to_string());
 
     println!("Peer ID: {}", peer_id);
 

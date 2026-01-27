@@ -15,7 +15,7 @@
 
 import { Clasp, P2PManager } from '@clasp-to/core';
 
-const RENDEZVOUS_URL = process.env.RENDEZVOUS_URL || 'wss://rendezvous.clasp.to';
+const RENDEZVOUS_URL = process.env.RENDEZVOUS_URL || 'https://relay.clasp.to';
 const PEER_ID = process.env.PEER_ID || `peer-${Date.now()}`;
 const CONNECT_TO = process.env.CONNECT_TO;
 

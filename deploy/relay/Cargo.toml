@@ -18,22 +18,25 @@ name = "clasp-relay"
 path = "src/main.rs"
 
 [features]
-default = ["websocket"]
+default = ["websocket", "rendezvous"]
 # WebSocket (default, works everywhere)
 websocket = ["clasp-router/websocket"]
 # QUIC (high-performance, requires UDP and TLS certificates)
 quic = ["clasp-router/quic", "rustls-pemfile"]
 # Full protocol support
-full = ["websocket", "quic", "mqtt-server", "osc-server"]
+full = ["websocket", "quic", "mqtt-server", "osc-server", "rendezvous"]
 # MQTT server adapter (accept MQTT clients)
 mqtt-server = ["clasp-router/mqtt-server"]
 # OSC server adapter (accept OSC clients)
 osc-server = ["clasp-router/osc-server"]
+# Rendezvous server for WAN discovery (enabled by default)
+rendezvous = ["clasp-discovery"]
 
 [dependencies]
 # Published crates from crates.io
 clasp-core = "3.3"
 clasp-router = "3.3"
+clasp-discovery = { version = "3.3", features = ["rendezvous"], optional = true }
 
 # Runtime
 tokio = { version = "1", features = ["full"] }

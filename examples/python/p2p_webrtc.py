@@ -16,7 +16,7 @@ import os
 import math
 from clasp_to import Clasp, P2PManager
 
-RENDEZVOUS_URL = os.environ.get("RENDEZVOUS_URL", "wss://rendezvous.clasp.to")
+RENDEZVOUS_URL = os.environ.get("RENDEZVOUS_URL", "https://relay.clasp.to")
 PEER_ID = os.environ.get("PEER_ID", f"peer-{int(asyncio.get_event_loop().time() * 1000)}")
 CONNECT_TO = os.environ.get("CONNECT_TO")
 

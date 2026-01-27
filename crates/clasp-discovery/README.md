@@ -55,7 +55,7 @@ For discovery across the internet, use the rendezvous feature:
 
 ```toml
 [dependencies]
-clasp-discovery = { version = "3.2", features = ["rendezvous"] }
+clasp-discovery = { version = "3.3", features = ["rendezvous"] }
 ```
 
 ```rust
@@ -63,7 +63,8 @@ use clasp_discovery::{Discovery, DiscoveryConfig, DeviceRegistration};
 use std::time::Duration;
 
 let config = DiscoveryConfig {
-    rendezvous_url: Some("https://rendezvous.example.com".into()),
+    // Use the public CLASP relay (includes rendezvous)
+    rendezvous_url: Some("https://relay.clasp.to".into()),
     rendezvous_refresh_interval: Duration::from_secs(120),
     rendezvous_tag: Some("studio".into()),
     ..Default::default()
@@ -88,7 +89,17 @@ let wan_devices = discovery.discover_wan().await?;
 
 ## Rendezvous Server
 
-Run a rendezvous server for WAN discovery:
+The rendezvous server is **built into the CLASP relay server** by default. When you run `clasp-relay`, rendezvous is automatically available on port 7340.
+
+```bash
+# Start relay with rendezvous (default)
+clasp-relay --ws-port 7330 --rendezvous-port 7340
+
+# Disable rendezvous
+clasp-relay --rendezvous-port 0
+```
+
+You can also run a standalone rendezvous server:
 
 ```rust
 use clasp_discovery::rendezvous::{RendezvousServer, RendezvousConfig};

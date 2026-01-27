@@ -63,7 +63,7 @@ pub struct DiscoveryConfig {
     pub broadcast_port: u16,
     /// Discovery timeout
     pub timeout: Duration,
-    /// Rendezvous server URL for WAN discovery (e.g., "https://rendezvous.example.com")
+    /// Rendezvous server URL for WAN discovery (e.g., "https://relay.clasp.to")
     pub rendezvous_url: Option<String>,
     /// Rendezvous refresh interval (how often to re-register, should be < TTL)
     pub rendezvous_refresh_interval: Duration,

@@ -29,7 +29,7 @@
 //! use clasp_discovery::rendezvous::{RendezvousClient, DeviceRegistration};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let client = RendezvousClient::new("https://rendezvous.example.com");
+//! let client = RendezvousClient::new("https://relay.clasp.to");
 //!
 //! // Register this device
 //! client.register(DeviceRegistration {

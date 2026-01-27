@@ -16,11 +16,28 @@ Routers and desktop tools can advertise themselves over mDNS and/or UDP; embedde
 
 ### WAN Discovery (Rendezvous)
 
-For devices across the internet, CLASP provides a **rendezvous server** for WAN discovery:
+For devices across the internet, CLASP provides a **rendezvous server** for WAN discovery. The rendezvous server is **built into the relay server** by default.
 
 - **REST API**: Register, discover, refresh, and unregister devices via HTTP.
 - **Automatic keepalive**: Clients automatically refresh their registration before TTL expires.
 - **Tag filtering**: Discover devices by tag (e.g., "studio", "live", "dev").
+
+#### Public Rendezvous Endpoint
+
+The official CLASP relay at `relay.clasp.to` includes rendezvous:
+
+- **WebSocket**: `wss://relay.clasp.to` (port 443)
+- **Rendezvous API**: `https://relay.clasp.to/api/v1/*` (port 443)
+
+For self-hosted relays, the rendezvous server runs on port 7340 by default:
+
+```bash
+# Start relay with rendezvous enabled (default)
+clasp-relay --ws-port 7330 --rendezvous-port 7340
+
+# Disable rendezvous
+clasp-relay --rendezvous-port 0
+```
 
 #### Rendezvous Configuration
 
@@ -31,7 +48,7 @@ use std::time::Duration;
 let config = DiscoveryConfig {
     mdns: true,
     broadcast: true,
-    rendezvous_url: Some("https://rendezvous.example.com".into()),
+    rendezvous_url: Some("https://relay.clasp.to".into()),
     rendezvous_refresh_interval: Duration::from_secs(120), // Refresh every 2 minutes
     rendezvous_tag: Some("studio".into()), // Filter by tag
     ..Default::default()

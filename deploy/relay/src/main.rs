@@ -33,6 +33,9 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
+#[cfg(feature = "rendezvous")]
+use clasp_discovery::rendezvous::{RendezvousConfig, RendezvousServer};
+
 #[derive(Parser)]
 #[command(name = "clasp-relay")]
 #[command(about = "CLASP Multi-Protocol Relay Server")]
@@ -107,6 +110,15 @@ struct Cli {
     /// Disable all TTL expiration (parameters and signals persist indefinitely)
     #[arg(long)]
     no_ttl: bool,
+
+    /// Rendezvous server port for WAN discovery (default: same as ws-port, serves /api/v1/*)
+    /// Set to 0 to disable rendezvous server.
+    #[arg(long, default_value = "7340")]
+    rendezvous_port: u16,
+
+    /// Rendezvous TTL in seconds (how long device registrations last)
+    #[arg(long, default_value = "300")]
+    rendezvous_ttl: u64,
 }
 
 #[tokio::main]
@@ -297,11 +309,7 @@ async fn main() -> Result<()> {
     if cli.no_ttl {
         tracing::info!("TTL: disabled (unlimited parameter lifetime)");
     } else {
-        tracing::info!(
-            "TTL: param={}s, signal={}s",
-            cli.param_ttl,
-            cli.signal_ttl
-        );
+        tracing::info!("TTL: param={}s, signal={}s", cli.param_ttl, cli.signal_ttl);
     }
     tracing::info!("────────────────────────────────────────────────────────────────");
 
@@ -318,6 +326,31 @@ async fn main() -> Result<()> {
     };
 
     tracing::info!("Router initialized, accepting connections...");
+
+    // Start rendezvous server if enabled
+    #[cfg(feature = "rendezvous")]
+    if cli.rendezvous_port > 0 {
+        let rendezvous_addr = format!("{}:{}", cli.host, cli.rendezvous_port);
+        tracing::info!(
+            "Rendezvous: http://{} (TTL: {}s)",
+            rendezvous_addr,
+            cli.rendezvous_ttl
+        );
+
+        let rendezvous_config = RendezvousConfig {
+            ttl: cli.rendezvous_ttl,
+            ..Default::default()
+        };
+        let rendezvous = RendezvousServer::new(rendezvous_config);
+
+        // Spawn rendezvous server in background
+        let rendezvous_addr_clone = rendezvous_addr.clone();
+        tokio::spawn(async move {
+            if let Err(e) = rendezvous.serve(&rendezvous_addr_clone).await {
+                tracing::error!("Rendezvous server error: {}", e);
+            }
+        });
+    }
 
     // Serve all protocols
     router.serve_all(multi_config).await?;
