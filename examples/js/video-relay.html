@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CLASP Video Relay Example</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #111; color: #eee; padding: 1rem; }
+  h1 { font-size: 1.2rem; margin-bottom: 1rem; font-weight: 400; letter-spacing: 0.1em; }
+  .controls { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; }
+  input, select { background: #222; color: #eee; border: 1px solid #444; padding: 0.5rem 0.75rem; font-family: inherit; font-size: 0.85rem; }
+  input:focus, select:focus { outline: none; border-color: #ff5f1f; }
+  button { background: #333; color: #eee; border: 1px solid #555; padding: 0.5rem 1rem; cursor: pointer; font-family: inherit; font-size: 0.85rem; transition: background 0.15s; }
+  button:hover:not(:disabled) { background: #444; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.active { background: #ff5f1f; border-color: #ff5f1f; color: #fff; }
+  button.danger { background: #c62828; border-color: #c62828; }
+  .video-area { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+  .video-box { background: #1a1a1a; border: 1px solid #333; padding: 0.5rem; }
+  .video-box h3 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.5; margin-bottom: 0.5rem; }
+  video, canvas { width: 100%; aspect-ratio: 4/3; background: #000; display: block; }
+  video { transform: scaleX(-1); }
+  #log { margin-top: 1rem; background: #1a1a1a; border: 1px solid #333; padding: 0.75rem; font-family: monospace; font-size: 0.75rem; max-height: 200px; overflow-y: auto; white-space: pre-wrap; color: #aaa; }
+  .stats { display: flex; gap: 1rem; margin-top: 0.5rem; font-size: 0.75rem; opacity: 0.6; font-family: monospace; }
+  .label { font-size: 0.7rem; opacity: 0.4; text-transform: uppercase; letter-spacing: 0.05em; }
+  @media (max-width: 600px) { .video-area { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<h1>CLASP Video Relay</h1>
+
+<div class="controls">
+  <label class="label">Server</label>
+  <input id="url" type="text" value="ws://localhost:7330" placeholder="ws://host:port" style="width: 220px" />
+  <label class="label">Room</label>
+  <input id="room" type="text" value="test" placeholder="room name" style="width: 100px" />
+  <button id="connectBtn" onclick="toggleConnect()">Connect</button>
+  <button id="cameraBtn" onclick="toggleCamera()" disabled>Start Camera</button>
+  <button id="broadcastBtn" onclick="toggleBroadcast()" disabled>Broadcast</button>
+</div>
+
+<div class="video-area">
+  <div class="video-box">
+    <h3>Local Preview</h3>
+    <video id="localVideo" autoplay muted playsinline></video>
+  </div>
+  <div class="video-box">
+    <h3>Remote Stream</h3>
+    <canvas id="remoteCanvas" width="640" height="480"></canvas>
+  </div>
+</div>
+
+<div class="stats">
+  <span>Sent: <span id="statSent">0</span> frames</span>
+  <span>Received: <span id="statRecv">0</span> frames</span>
+  <span>BW: <span id="statBw">0</span> Kbps</span>
+</div>
+
+<div id="log">Waiting to connect...</div>
+
+<script type="module">
+// ============================================================================
+// CLASP Video Relay Example
+//
+// Demonstrates: camera capture -> WebCodecs H.264 encode -> chunk -> CLASP stream
+//               -> reassemble -> WebCodecs decode -> canvas render
+//
+// Requirements:
+//   - A running CLASP router (e.g. cargo run -p clasp-router-server)
+//   - A browser with WebCodecs support (Chrome 94+, Edge 94+)
+//   - Serve this file over localhost (camera requires secure context)
+// ============================================================================
+
+import { ClaspBuilder } from '../../bindings/js/packages/clasp-core/dist/index.js';
+
+// ---- State ----
+let client = null;
+let localStream = null;
+let encoder = null;
+let encoderConfigured = false;
+let broadcasting = false;
+let codecDescription = null;
+let frameSeq = 0;
+let framesSent = 0;
+let framesReceived = 0;
+let bytesSent = 0;
+let trackProcessor = null;
+let frameReader = null;
+let lastKeyFrameTime = 0;
+
+// Remote decoder state
+let decoder = null;
+let decoderConfigured = false;
+let waitingForKeyframe = true;
+let remoteCodecDescription = null;
+const frameBuffers = new Map(); // seq -> { chunks, totalChunks, frameType, timestamp, totalSize, description }
+
+const CHUNK_SIZE = 16000;
+
+const remoteCanvas = document.getElementById('remoteCanvas');
+const remoteCtx = remoteCanvas.getContext('2d');
+
+// ---- Logging ----
+function log(msg) {
+  const el = document.getElementById('log');
+  el.textContent += '\n' + msg;
+  el.scrollTop = el.scrollHeight;
+}
+
+// ---- Stats ----
+setInterval(() => {
+  document.getElementById('statSent').textContent = framesSent;
+  document.getElementById('statRecv').textContent = framesReceived;
+  document.getElementById('statBw').textContent = Math.round(bytesSent * 8 / 1000);
+  bytesSent = 0;
+}, 1000);
+
+// ---- Connect / Disconnect ----
+window.toggleConnect = async function() {
+  if (client) {
+    client.close();
+    client = null;
+    document.getElementById('connectBtn').textContent = 'Connect';
+    document.getElementById('connectBtn').classList.remove('active');
+    document.getElementById('cameraBtn').disabled = true;
+    document.getElementById('broadcastBtn').disabled = true;
+    log('Disconnected');
+    return;
+  }
+
+  const url = document.getElementById('url').value;
+  try {
+    const builder = new ClaspBuilder(url);
+    builder.name('video-relay-example');
+    builder.features(['param', 'event', 'stream']);
+    builder.reconnect(true);
+    client = await builder.connect();
+    log(`Connected: session=${client.session}`);
+    document.getElementById('connectBtn').textContent = 'Disconnect';
+    document.getElementById('connectBtn').classList.add('active');
+    document.getElementById('cameraBtn').disabled = false;
+
+    // Subscribe to presence
+    const room = document.getElementById('room').value;
+    client.on(`/video/relay/${room}/presence/*`, (data, addr) => {
+      const peerId = addr.split('/').pop();
+      if (peerId === client.session) return;
+      if (data?.isBroadcaster) {
+        log(`Broadcaster joined: ${data.name || peerId.slice(0,8)}`);
+        subscribeToStream(peerId);
+      }
+    });
+
+    // Subscribe to keyframe requests
+    client.on(`/video/relay/${room}/request-keyframe/${client.session}`, () => {
+      lastKeyFrameTime = 0; // Force next keyframe
+    });
+
+  } catch (e) {
+    log(`Connection failed: ${e.message}`);
+  }
+};
+
+// ---- Camera ----
+window.toggleCamera = async function() {
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+    document.getElementById('localVideo').srcObject = null;
+    document.getElementById('cameraBtn').textContent = 'Start Camera';
+    document.getElementById('cameraBtn').classList.remove('active');
+    document.getElementById('broadcastBtn').disabled = true;
+    return;
+  }
+
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } },
+      audio: false,
+    });
+    document.getElementById('localVideo').srcObject = localStream;
+    document.getElementById('cameraBtn').textContent = 'Stop Camera';
+    document.getElementById('cameraBtn').classList.add('active');
+    document.getElementById('broadcastBtn').disabled = false;
+    log('Camera started');
+  } catch (e) {
+    log(`Camera error: ${e.message}`);
+  }
+};
+
+// ---- Broadcast ----
+window.toggleBroadcast = async function() {
+  if (broadcasting) {
+    stopBroadcasting();
+    return;
+  }
+  if (!localStream || !client) return;
+
+  // Create encoder
+  encoder = new VideoEncoder({
+    output: handleEncodedFrame,
+    error: (e) => log(`Encoder error: ${e.message}`),
+  });
+
+  const config = {
+    codec: 'avc1.42001e',
+    width: 640,
+    height: 480,
+    bitrate: 400000,
+    framerate: 24,
+    latencyMode: 'realtime',
+    hardwareAcceleration: 'prefer-hardware',
+    avc: { format: 'annexb' },
+  };
+
+  try {
+    const support = await VideoEncoder.isConfigSupported(config);
+    if (!support.supported) {
+      config.hardwareAcceleration = 'prefer-software';
+      const sw = await VideoEncoder.isConfigSupported(config);
+      if (!sw.supported) { log('H.264 not supported'); return; }
+    }
+    encoder.configure(config);
+    encoderConfigured = true;
+  } catch (e) {
+    log(`Encoder config error: ${e.message}`);
+    return;
+  }
+
+  broadcasting = true;
+  document.getElementById('broadcastBtn').textContent = 'Stop';
+  document.getElementById('broadcastBtn').classList.add('danger');
+
+  // Announce presence
+  const room = document.getElementById('room').value;
+  client.set(`/video/relay/${room}/presence/${client.session}`, {
+    name: 'relay-example',
+    isBroadcaster: true,
+    joinedAt: Date.now(),
+  });
+
+  // Process frames
+  const videoTrack = localStream.getVideoTracks()[0];
+  if (typeof MediaStreamTrackProcessor !== 'undefined') {
+    trackProcessor = new MediaStreamTrackProcessor({ track: videoTrack });
+    frameReader = trackProcessor.readable.getReader();
+    processFrames();
+  }
+
+  log('Broadcasting started');
+};
+
+async function processFrames() {
+  while (broadcasting) {
+    try {
+      const { value: frame, done } = await frameReader.read();
+      if (done || !broadcasting) { frame?.close(); break; }
+      if (encoder && encoderConfigured && encoder.encodeQueueSize < 5) {
+        const now = Date.now();
+        const keyFrame = now - lastKeyFrameTime > 3000;
+        if (keyFrame) lastKeyFrameTime = now;
+        encoder.encode(frame, { keyFrame });
+      }
+      frame.close();
+    } catch (e) {
+      if (broadcasting) log(`Frame error: ${e.message}`);
+      break;
+    }
+  }
+}
+
+function handleEncodedFrame(chunk, metadata) {
+  if (!client || !broadcasting) return;
+
+  if (metadata?.decoderConfig?.description) {
+    const desc = metadata.decoderConfig.description;
+    codecDescription = (desc instanceof ArrayBuffer) ? new Uint8Array(desc) : new Uint8Array(desc.buffer || desc);
+  }
+
+  const data = new Uint8Array(chunk.byteLength);
+  chunk.copyTo(data);
+  bytesSent += data.byteLength;
+  framesSent++;
+
+  const seq = frameSeq++;
+  const totalChunks = Math.ceil(data.byteLength / CHUNK_SIZE);
+  const room = document.getElementById('room').value;
+  const address = `/video/relay/${room}/stream/${client.session}`;
+
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, data.byteLength);
+    const chunkData = data.slice(start, end);
+
+    const msg = {
+      seq, chunkIndex: i, totalChunks,
+      frameType: chunk.type,
+      timestamp: chunk.timestamp,
+      data: chunkData,
+    };
+
+    // Attach codec description to first chunk of keyframes
+    if (chunk.type === 'key' && codecDescription && i === 0) {
+      msg.description = codecDescription;
+    }
+
+    client.stream(address, msg);
+  }
+}
+
+function stopBroadcasting() {
+  broadcasting = false;
+  if (frameReader) { try { frameReader.releaseLock(); } catch(e) {} frameReader = null; }
+  if (encoder?.state !== 'closed') { try { encoder.close(); } catch(e) {} }
+  encoder = null; encoderConfigured = false; codecDescription = null;
+  trackProcessor = null;
+
+  const room = document.getElementById('room').value;
+  if (client) {
+    client.set(`/video/relay/${room}/presence/${client.session}`, {
+      name: 'relay-example', isBroadcaster: false, joinedAt: Date.now(),
+    });
+  }
+
+  document.getElementById('broadcastBtn').textContent = 'Broadcast';
+  document.getElementById('broadcastBtn').classList.remove('danger');
+  log('Broadcasting stopped');
+}
+
+// ---- Receive & Decode ----
+function subscribeToStream(peerId) {
+  if (!client) return;
+
+  decoder = new VideoDecoder({
+    output: (frame) => {
+      if (remoteCanvas.width !== frame.displayWidth || remoteCanvas.height !== frame.displayHeight) {
+        remoteCanvas.width = frame.displayWidth;
+        remoteCanvas.height = frame.displayHeight;
+      }
+      remoteCtx.drawImage(frame, 0, 0);
+      frame.close();
+      framesReceived++;
+    },
+    error: (e) => {
+      log(`Decoder error: ${e.message}`);
+      decoderConfigured = false;
+      waitingForKeyframe = true;
+      try { decoder.reset(); } catch(err) {}
+    },
+  });
+
+  const room = document.getElementById('room').value;
+  const pattern = `/video/relay/${room}/stream/${peerId}`;
+  log(`Subscribing to ${pattern}`);
+
+  client.on(pattern, (data) => {
+    if (!data?.data) return;
+    try {
+      // Ensure data is Uint8Array
+      let chunkData = data.data;
+      if (!(chunkData instanceof Uint8Array)) {
+        if (chunkData instanceof ArrayBuffer) chunkData = new Uint8Array(chunkData);
+        else if (chunkData.buffer instanceof ArrayBuffer) chunkData = new Uint8Array(chunkData.buffer, chunkData.byteOffset, chunkData.byteLength);
+      }
+
+      const { seq, chunkIndex, totalChunks, frameType, timestamp, description } = data;
+
+      if (!frameBuffers.has(seq)) {
+        frameBuffers.set(seq, { chunks: new Map(), totalChunks, frameType, timestamp, totalSize: 0, description: null });
+      }
+      const buf = frameBuffers.get(seq);
+      if (buf.chunks.has(chunkIndex)) return;
+      buf.chunks.set(chunkIndex, chunkData);
+      buf.totalSize += chunkData.byteLength;
+      if (description && chunkIndex === 0) buf.description = description;
+
+      if (buf.chunks.size === buf.totalChunks) {
+        // Assemble
+        const assembled = new Uint8Array(buf.totalSize);
+        let offset = 0;
+        for (let i = 0; i < buf.totalChunks; i++) {
+          const c = buf.chunks.get(i);
+          if (!c) { frameBuffers.delete(seq); return; }
+          assembled.set(c, offset);
+          offset += c.byteLength;
+        }
+        frameBuffers.delete(seq);
+
+        // Store description
+        if (buf.description) remoteCodecDescription = buf.description;
+
+        // Configure decoder on keyframe
+        if (!decoderConfigured && buf.frameType === 'key') {
+          const cfg = { codec: 'avc1.42001e', optimizeForLatency: true, hardwareAcceleration: 'prefer-software' };
+          if (remoteCodecDescription) cfg.description = remoteCodecDescription;
+          decoder.configure(cfg);
+          decoderConfigured = true;
+          waitingForKeyframe = false;
+        }
+
+        if (waitingForKeyframe && buf.frameType !== 'key') return;
+
+        if (decoderConfigured) {
+          decoder.decode(new EncodedVideoChunk({
+            type: buf.frameType, timestamp: buf.timestamp, data: assembled,
+          }));
+        }
+      }
+
+      // Prune old buffers
+      if (frameBuffers.size > 30) {
+        const seqs = Array.from(frameBuffers.keys()).sort((a, b) => a - b);
+        seqs.slice(0, frameBuffers.size - 20).forEach(s => frameBuffers.delete(s));
+      }
+    } catch (e) {
+      // silently drop corrupt chunks
+    }
+  });
+}
+</script>
+</body>
+</html>

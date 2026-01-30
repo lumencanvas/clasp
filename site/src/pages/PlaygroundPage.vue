@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import ConnectionPanel from '../components/playground/ConnectionPanel.vue'
 import ExplorerTab from '../components/playground/ExplorerTab.vue'
 import ChatTab from '../components/playground/ChatTab.vue'
+import VideoTab from '../components/playground/VideoTab.vue'
 import SensorsTab from '../components/playground/SensorsTab.vue'
 import SecurityTab from '../components/playground/SecurityTab.vue'
 import DiscoveryTab from '../components/playground/DiscoveryTab.vue'
@@ -14,6 +15,7 @@ const consoleOpen = ref(true)
 const tabs = [
   { id: 'explorer', label: 'Explorer' },
   { id: 'chat', label: 'Chat' },
+  { id: 'video', label: 'Video' },
   { id: 'sensors', label: 'Sensors' },
   { id: 'security', label: 'Security' },
   { id: 'discovery', label: 'Discovery' },
@@ -47,6 +49,7 @@ const tabs = [
         <div class="tab-content">
           <ExplorerTab v-if="activeTab === 'explorer'" />
           <ChatTab v-if="activeTab === 'chat'" />
+          <VideoTab v-if="activeTab === 'video'" />
           <SensorsTab v-if="activeTab === 'sensors'" />
           <SecurityTab v-if="activeTab === 'security'" />
           <DiscoveryTab v-if="activeTab === 'discovery'" />

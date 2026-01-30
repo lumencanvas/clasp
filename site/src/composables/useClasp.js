@@ -11,10 +11,15 @@ const serverName = ref(null)
 const params = reactive(new Map())
 const messageLog = ref([])
 
+// Generate random suffix for client name
+function randomSuffix() {
+  return Math.random().toString(36).substring(2, 6).toUpperCase()
+}
+
 // Connection settings
 const settings = reactive({
   url: 'ws://localhost:7330',
-  name: 'Playground Client',
+  name: `Playground ${randomSuffix()}`,
   token: '',
   features: ['param', 'event', 'stream', 'gesture', 'timeline'],
 })
@@ -99,6 +104,11 @@ function subscribe(pattern, callback) {
     addLogEntry('received', 'PUBLISH', { address, value })
     callback?.(value, address, meta)
   })
+}
+
+function subscribeRaw(pattern, callback) {
+  if (!client.value) return () => {}
+  return client.value.on(pattern, callback)
 }
 
 function set(address, value) {
@@ -247,6 +257,7 @@ export function useClasp() {
     connect,
     disconnect,
     subscribe,
+    subscribeRaw,
     set,
     emit,
     stream,

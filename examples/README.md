@@ -33,6 +33,8 @@ npm install @clasp-to/core
 | `security-tokens.js` | CPSK tokens, scoped permissions, authentication |
 | `p2p-webrtc.js` | Peer-to-peer via WebRTC DataChannels |
 | `embedded-server.js` | Integrating CLASP into your Node.js app |
+| `video-relay.html` | Video streaming via CLASP relay (WebCodecs H.264) |
+| `video-p2p.html` | Video calling via WebRTC with CLASP signaling |
 
 ### Run an Example
 
@@ -41,6 +43,28 @@ node signal-types.js
 node bundles-and-scheduling.js
 # etc.
 ```
+
+### Video Examples (Browser)
+
+The video examples are standalone HTML files. Serve them over localhost (camera requires secure context):
+
+```bash
+# Using Python
+python3 -m http.server 8000 --directory examples/js
+
+# Or any static file server, then open:
+# http://localhost:8000/video-relay.html
+# http://localhost:8000/video-p2p.html
+```
+
+**video-relay.html** - Demonstrates CLASP relay mode video streaming:
+camera capture, WebCodecs H.264 encoding, frame chunking, CLASP stream
+transport, chunk reassembly, WebCodecs decoding, and canvas rendering.
+Requires a browser with WebCodecs support (Chrome 94+).
+
+**video-p2p.html** - Demonstrates P2P video calling using WebRTC with
+CLASP for signaling (offer/answer/ICE exchange). Room-based presence
+via CLASP params. Works in any modern browser with WebRTC support.
 
 ## Python Examples
 
@@ -115,6 +139,8 @@ cargo run --example bundles_and_scheduling
 | Security Tokens | security-tokens | security_tokens | security_tokens |
 | P2P WebRTC | p2p-webrtc | p2p_webrtc | p2p_webrtc |
 | Embedded Server | embedded-server | embedded_server | embedded-server |
+| Video Relay (WebCodecs) | video-relay.html | - | - |
+| Video P2P (WebRTC) | video-p2p.html | - | - |
 
 ## Docker Compose
 

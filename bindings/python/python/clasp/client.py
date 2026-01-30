@@ -502,6 +502,9 @@ class Clasp:
         """Encode message to binary frame"""
         payload = self._encode_message_v3(msg)
 
+        if len(payload) > 65535:
+            raise ClaspError(f"Payload too large: {len(payload)} bytes (max 65535)")
+
         # Build frame header with encoding version bit
         flags = 0x01  # Encoding = 1 (binary), 0 = MessagePack (legacy)
         header = bytes([

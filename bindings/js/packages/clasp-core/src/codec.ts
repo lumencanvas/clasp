@@ -167,6 +167,10 @@ export function encodeFrame(payload: Uint8Array, options: FrameOptions = {}): Ui
   const frame = new Uint8Array(headerSize + payload.length);
   const view = new DataView(frame.buffer);
 
+  if (payload.length > 65535) {
+    throw new Error(`Payload too large: ${payload.length} bytes (max 65535)`);
+  }
+
   frame[0] = MAGIC_BYTE;
   frame[1] = encodeFlags({
     qos: options.qos ?? QoS.Fire,
@@ -219,10 +223,61 @@ export function decodeFrame(data: Uint8Array): DecodedFrame {
 }
 
 /**
+ * Estimate the size needed for a value
+ */
+function estimateValueSize(value: Value | undefined): number {
+  if (value === null || value === undefined) return 1;
+  if (typeof value === 'boolean') return 2;
+  if (typeof value === 'number') return 9;
+  if (typeof value === 'string') return value.length + 4;
+  if (value instanceof Uint8Array) return value.length + 4;
+  if (Array.isArray(value)) {
+    let size = 4;
+    for (const v of value) {
+      size += estimateValueSize(v) + 1;
+    }
+    return size;
+  }
+  if (typeof value === 'object') {
+    let size = 4;
+    for (const [k, v] of Object.entries(value)) {
+      size += k.length + 4 + estimateValueSize(v) + 1;
+    }
+    return size;
+  }
+  return 16;
+}
+
+/**
+ * Estimate the size needed for a message
+ */
+function estimateMessageSize(message: Message): number {
+  // Base overhead for message type and flags
+  let size = 64;
+
+  if ('address' in message && typeof (message as { address?: string }).address === 'string') {
+    size += ((message as { address: string }).address).length + 4;
+  }
+  if ('pattern' in message && typeof (message as { pattern?: string }).pattern === 'string') {
+    size += ((message as { pattern: string }).pattern).length + 4;
+  }
+  if ('value' in message) {
+    size += estimateValueSize((message as { value?: Value }).value);
+  }
+  if ('payload' in message) {
+    size += estimateValueSize((message as { payload?: Value }).payload);
+  }
+
+  // Add buffer for other fields
+  return Math.max(size * 2, 4096);
+}
+
+/**
  * Encode a message to binary payload
  */
 export function encodeMessageBinary(message: Message): Uint8Array {
-  const buf = new ArrayBuffer(4096);
+  const estimatedSize = estimateMessageSize(message);
+  const buf = new ArrayBuffer(estimatedSize);
   const view = new DataView(buf);
   let offset = 0;
 

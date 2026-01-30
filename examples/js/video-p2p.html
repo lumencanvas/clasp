@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CLASP Video P2P Example</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #111; color: #eee; padding: 1rem; }
+  h1 { font-size: 1.2rem; margin-bottom: 1rem; font-weight: 400; letter-spacing: 0.1em; }
+  .controls { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; }
+  input { background: #222; color: #eee; border: 1px solid #444; padding: 0.5rem 0.75rem; font-family: inherit; font-size: 0.85rem; }
+  input:focus { outline: none; border-color: #ff5f1f; }
+  button { background: #333; color: #eee; border: 1px solid #555; padding: 0.5rem 1rem; cursor: pointer; font-family: inherit; font-size: 0.85rem; transition: background 0.15s; }
+  button:hover:not(:disabled) { background: #444; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.active { background: #ff5f1f; border-color: #ff5f1f; color: #fff; }
+  button.danger { background: #c62828; border-color: #c62828; }
+  button.muted { background: #555; border-color: #777; }
+  .video-area { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 1rem; }
+  .video-box { background: #1a1a1a; border: 1px solid #333; padding: 0.5rem; }
+  .video-box h3 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.5; margin-bottom: 0.5rem; }
+  video { width: 100%; aspect-ratio: 4/3; background: #000; display: block; }
+  .local-video { transform: scaleX(-1); }
+  #log { margin-top: 1rem; background: #1a1a1a; border: 1px solid #333; padding: 0.75rem; font-family: monospace; font-size: 0.75rem; max-height: 200px; overflow-y: auto; white-space: pre-wrap; color: #aaa; }
+  .label { font-size: 0.7rem; opacity: 0.4; text-transform: uppercase; letter-spacing: 0.05em; }
+  .peers { font-size: 0.8rem; margin-top: 0.5rem; opacity: 0.6; }
+</style>
+</head>
+<body>
+<h1>CLASP Video P2P (WebRTC)</h1>
+
+<div class="controls">
+  <label class="label">Server</label>
+  <input id="url" type="text" value="ws://localhost:7330" placeholder="ws://host:port" style="width: 220px" />
+  <label class="label">Room</label>
+  <input id="room" type="text" value="test" placeholder="room name" style="width: 100px" />
+  <button id="connectBtn" onclick="toggleConnect()">Connect</button>
+  <button id="joinBtn" onclick="toggleRoom()" disabled>Join Room</button>
+  <button id="muteBtn" onclick="toggleMute()" disabled>Mute</button>
+  <button id="videoBtn" onclick="toggleVideo()" disabled>Cam Off</button>
+</div>
+
+<div class="video-area" id="videoGrid">
+  <div class="video-box">
+    <h3>You</h3>
+    <video id="localVideo" class="local-video" autoplay muted playsinline></video>
+  </div>
+</div>
+
+<div class="peers" id="peerCount">No peers connected</div>
+
+<div id="log">Waiting to connect...</div>
+
+<script type="module">
+// ============================================================================
+// CLASP Video P2P Example
+//
+// Demonstrates: CLASP signaling + WebRTC PeerConnection for direct video/audio
+//
+// Requirements:
+//   - A running CLASP router
+//   - Serve over localhost or HTTPS (camera requires secure context)
+// ============================================================================
+
+import { ClaspBuilder } from '../../bindings/js/packages/clasp-core/dist/index.js';
+
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+];
+
+let client = null;
+let localStream = null;
+let inRoom = false;
+let audioEnabled = true;
+let videoEnabled = true;
+const peers = new Map(); // peerId -> { connection, iceCandidateQueue }
+const peerVideos = new Map(); // peerId -> video element
+
+function log(msg) {
+  const el = document.getElementById('log');
+  el.textContent += '\n' + msg;
+  el.scrollTop = el.scrollHeight;
+}
+
+function updatePeerCount() {
+  const count = peers.size;
+  document.getElementById('peerCount').textContent =
+    count === 0 ? 'No peers connected' : `${count} peer${count > 1 ? 's' : ''} connected`;
+}
+
+// ---- Connect ----
+window.toggleConnect = async function() {
+  if (client) {
+    if (inRoom) window.toggleRoom();
+    client.close();
+    client = null;
+    document.getElementById('connectBtn').textContent = 'Connect';
+    document.getElementById('connectBtn').classList.remove('active');
+    document.getElementById('joinBtn').disabled = true;
+    log('Disconnected');
+    return;
+  }
+
+  const url = document.getElementById('url').value;
+  try {
+    const builder = new ClaspBuilder(url);
+    builder.name('video-p2p-example');
+    builder.features(['param', 'event', 'stream']);
+    builder.reconnect(true);
+    client = await builder.connect();
+    log(`Connected: session=${client.session}`);
+    document.getElementById('connectBtn').textContent = 'Disconnect';
+    document.getElementById('connectBtn').classList.add('active');
+    document.getElementById('joinBtn').disabled = false;
+  } catch (e) {
+    log(`Connection failed: ${e.message}`);
+  }
+};
+
+// ---- Join / Leave Room ----
+window.toggleRoom = async function() {
+  if (inRoom) {
+    leaveRoom();
+    return;
+  }
+
+  // Get camera first
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
+      audio: true,
+    });
+    document.getElementById('localVideo').srcObject = localStream;
+    log('Camera started');
+  } catch (e) {
+    log(`Camera error: ${e.message}`);
+    return;
+  }
+
+  const room = document.getElementById('room').value;
+
+  // Subscribe to presence
+  client.on(`/video/room/${room}/presence/*`, (data, addr) => {
+    const peerId = addr.split('/').pop();
+    if (peerId === client.session) return;
+    if (data === null) {
+      handlePeerLeft(peerId);
+    } else {
+      handlePeerJoined(peerId, data);
+    }
+  });
+
+  // Subscribe to signaling
+  client.on(`/video/room/${room}/signal/${client.session}`, (data) => {
+    if (data?.from && data.from !== client.session) {
+      handleSignal(data);
+    }
+  });
+
+  // Announce presence
+  client.set(`/video/room/${room}/presence/${client.session}`, {
+    name: 'p2p-example',
+    joinedAt: Date.now(),
+  });
+
+  inRoom = true;
+  document.getElementById('joinBtn').textContent = 'Leave';
+  document.getElementById('joinBtn').classList.add('danger');
+  document.getElementById('muteBtn').disabled = false;
+  document.getElementById('videoBtn').disabled = false;
+  log(`Joined room: ${room}`);
+};
+
+function leaveRoom() {
+  const room = document.getElementById('room').value;
+  if (client) {
+    client.set(`/video/room/${room}/presence/${client.session}`, null);
+  }
+
+  for (const [peerId] of peers) {
+    closePeer(peerId);
+  }
+  peers.clear();
+  peerVideos.clear();
+
+  // Remove peer video elements
+  const grid = document.getElementById('videoGrid');
+  while (grid.children.length > 1) grid.removeChild(grid.lastChild);
+
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+    document.getElementById('localVideo').srcObject = null;
+  }
+
+  inRoom = false;
+  document.getElementById('joinBtn').textContent = 'Join Room';
+  document.getElementById('joinBtn').classList.remove('danger');
+  document.getElementById('muteBtn').disabled = true;
+  document.getElementById('videoBtn').disabled = true;
+  updatePeerCount();
+  log('Left room');
+}
+
+// ---- Peer Management ----
+function handlePeerJoined(peerId, data) {
+  log(`Peer joined: ${data.name || peerId.slice(0,8)}`);
+  // Initiator: lexicographically larger session ID creates offer
+  if (!peers.has(peerId) && client.session.localeCompare(peerId) > 0) {
+    createPeerConnection(peerId, true);
+  }
+}
+
+function handlePeerLeft(peerId) {
+  log(`Peer left: ${peerId.slice(0,8)}`);
+  closePeer(peerId);
+  peers.delete(peerId);
+
+  const videoEl = peerVideos.get(peerId);
+  if (videoEl?.parentElement) videoEl.parentElement.remove();
+  peerVideos.delete(peerId);
+  updatePeerCount();
+}
+
+async function createPeerConnection(peerId, initiator) {
+  if (peers.has(peerId)) return peers.get(peerId).connection;
+
+  const connection = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  const iceCandidateQueue = [];
+  peers.set(peerId, { connection, iceCandidateQueue });
+
+  // Add local tracks
+  if (localStream) {
+    localStream.getTracks().forEach(track => connection.addTrack(track, localStream));
+  }
+
+  // Handle remote tracks
+  connection.ontrack = (event) => {
+    const [remoteStream] = event.streams;
+    let videoEl = peerVideos.get(peerId);
+    if (!videoEl) {
+      const box = document.createElement('div');
+      box.className = 'video-box';
+      box.innerHTML = `<h3>Peer ${peerId.slice(0,8)}</h3>`;
+      videoEl = document.createElement('video');
+      videoEl.autoplay = true;
+      videoEl.playsInline = true;
+      box.appendChild(videoEl);
+      document.getElementById('videoGrid').appendChild(box);
+      peerVideos.set(peerId, videoEl);
+    }
+    videoEl.srcObject = remoteStream;
+    updatePeerCount();
+  };
+
+  // ICE candidates
+  connection.onicecandidate = (event) => {
+    if (event.candidate) {
+      sendSignal(peerId, {
+        type: 'ice-candidate',
+        candidate: {
+          candidate: event.candidate.candidate,
+          sdpMid: event.candidate.sdpMid,
+          sdpMLineIndex: event.candidate.sdpMLineIndex,
+        },
+      });
+    }
+  };
+
+  connection.onconnectionstatechange = () => {
+    if (connection.connectionState === 'failed' || connection.connectionState === 'closed') {
+      handlePeerLeft(peerId);
+    }
+  };
+
+  // Create offer if initiator
+  if (initiator) {
+    try {
+      const offer = await connection.createOffer();
+      await connection.setLocalDescription(offer);
+      sendSignal(peerId, {
+        type: 'offer',
+        sdp: { type: connection.localDescription.type, sdp: connection.localDescription.sdp },
+      });
+    } catch (e) {
+      log(`Offer error: ${e.message}`);
+    }
+  }
+
+  return connection;
+}
+
+async function drainIceCandidateQueue(peerId) {
+  const peer = peers.get(peerId);
+  if (!peer) return;
+  for (const candidate of peer.iceCandidateQueue) {
+    try {
+      await peer.connection.addIceCandidate(candidate);
+    } catch (e) {
+      // ignore
+    }
+  }
+  peer.iceCandidateQueue.length = 0;
+}
+
+function closePeer(peerId) {
+  const peer = peers.get(peerId);
+  if (peer?.connection?.connectionState !== 'closed') {
+    try { peer.connection.close(); } catch(e) {}
+  }
+}
+
+function sendSignal(peerId, data) {
+  const room = document.getElementById('room').value;
+  client.emit(`/video/room/${room}/signal/${peerId}`, { from: client.session, ...data });
+}
+
+async function handleSignal(data) {
+  const { from, type } = data;
+
+  if (type === 'offer') {
+    const connection = await createPeerConnection(from, false);
+    try {
+      await connection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+      await drainIceCandidateQueue(from);
+      const answer = await connection.createAnswer();
+      await connection.setLocalDescription(answer);
+      sendSignal(from, {
+        type: 'answer',
+        sdp: { type: connection.localDescription.type, sdp: connection.localDescription.sdp },
+      });
+    } catch (e) {
+      log(`Answer error: ${e.message}`);
+    }
+  } else if (type === 'answer') {
+    const peer = peers.get(from);
+    if (peer?.connection) {
+      try {
+        await peer.connection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        await drainIceCandidateQueue(from);
+      } catch (e) {
+        log(`Answer set error: ${e.message}`);
+      }
+    }
+  } else if (type === 'ice-candidate') {
+    const peer = peers.get(from);
+    if (peer?.connection?.remoteDescription) {
+      try {
+        await peer.connection.addIceCandidate(new RTCIceCandidate(data.candidate));
+      } catch (e) {
+        // ignore
+      }
+    } else {
+      // Queue candidate
+      if (!peers.has(from)) {
+        peers.set(from, { connection: null, iceCandidateQueue: [] });
+      }
+      peers.get(from).iceCandidateQueue.push(new RTCIceCandidate(data.candidate));
+    }
+  }
+}
+
+// ---- Toggle Audio/Video ----
+window.toggleMute = function() {
+  if (!localStream) return;
+  const track = localStream.getAudioTracks()[0];
+  if (track) {
+    track.enabled = !track.enabled;
+    audioEnabled = track.enabled;
+    const btn = document.getElementById('muteBtn');
+    btn.textContent = audioEnabled ? 'Mute' : 'Unmute';
+    btn.classList.toggle('muted', !audioEnabled);
+  }
+};
+
+window.toggleVideo = function() {
+  if (!localStream) return;
+  const track = localStream.getVideoTracks()[0];
+  if (track) {
+    track.enabled = !track.enabled;
+    videoEnabled = track.enabled;
+    const btn = document.getElementById('videoBtn');
+    btn.textContent = videoEnabled ? 'Cam Off' : 'Cam On';
+    btn.classList.toggle('muted', !videoEnabled);
+  }
+};
+</script>
+</body>
+</html>
