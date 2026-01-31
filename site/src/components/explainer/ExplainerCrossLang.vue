@@ -1,6 +1,10 @@
 <script setup>
-import { ref, onMounted, watch, nextTick } from 'vue'
-import CodeBlock from './CodeBlock.vue'
+import { ref } from 'vue'
+import CodeBlock from '../CodeBlock.vue'
+import { useScrollAnimation } from '../../composables/useScrollAnimation.js'
+
+const sectionRef = ref(null)
+useScrollAnimation(sectionRef)
 
 const activeTab = ref('js')
 
@@ -10,7 +14,6 @@ const tabs = [
   { id: 'rs', label: 'Rust' }
 ]
 
-// SDK examples matching actual implementation
 const jsCode = `// Install: npm install @clasp-to/core
 
 import { Clasp } from '@clasp-to/core';
@@ -130,15 +133,18 @@ const codeExamples = {
 </script>
 
 <template>
-  <section class="section" id="api">
-    <h2>API & SDKs</h2>
+  <section class="explainer-section crosslang-section" ref="sectionRef">
+    <div class="explainer-inner">
+      <h2 class="fade-in">Write in Your Language</h2>
+      <p class="subtitle fade-in">
+        First-class SDKs for JavaScript, Python, and Rust. Same API shape, native idioms.
+      </p>
 
-    <div class="tabs" style="max-width: 900px; margin: 0 auto;">
-      <div class="tab-bar">
+      <div class="lang-tabs fade-in">
         <button
           v-for="tab in tabs"
           :key="tab.id"
-          class="tab-btn"
+          class="lang-tab"
           :class="{ active: activeTab === tab.id }"
           @click="activeTab = tab.id"
         >
@@ -146,17 +152,135 @@ const codeExamples = {
         </button>
       </div>
 
-      <div
-        v-for="tab in tabs"
-        :key="tab.id"
-        class="tab-panel"
-        :class="{ active: activeTab === tab.id }"
-      >
-        <CodeBlock
-          :code="codeExamples[tab.id].code"
-          :language="codeExamples[tab.id].lang"
-        />
+      <div class="code-wrapper fade-in">
+        <div
+          v-for="tab in tabs"
+          :key="tab.id"
+          v-show="activeTab === tab.id"
+        >
+          <CodeBlock
+            :code="codeExamples[tab.id].code"
+            :language="codeExamples[tab.id].lang"
+          />
+        </div>
+      </div>
+
+      <div class="install-notes fade-in">
+        <span>npm install @clasp-to/core</span>
+        <span>pip install clasp-to</span>
+        <span>cargo add clasp-client</span>
       </div>
     </div>
   </section>
 </template>
+
+<style scoped>
+.crosslang-section {
+  background: #f77f00;
+  color: #fff;
+}
+
+h2 {
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  text-align: center;
+  margin-bottom: 1rem;
+  color: #fff;
+}
+
+.subtitle {
+  text-align: center;
+  max-width: 550px;
+  margin: 0 auto 2rem;
+  font-size: 1.1rem;
+  line-height: 1.6;
+  opacity: 0.9;
+}
+
+.lang-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.lang-tab {
+  background: transparent;
+  border: 2px solid rgba(255,255,255,0.4);
+  color: rgba(255,255,255,0.8);
+  padding: 0.6rem 1.5rem;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.lang-tab:hover {
+  border-color: #fff;
+  color: #fff;
+}
+
+.lang-tab.active {
+  background: rgba(255,255,255,0.95);
+  border-color: rgba(255,255,255,0.95);
+  color: #f77f00;
+}
+
+.code-wrapper {
+  max-width: 750px;
+  margin: 0 auto;
+  background: #1a1a1a;
+  padding: 1.5rem;
+  border: 2px solid rgba(255,255,255,0.2);
+  overflow-x: auto;
+  min-width: 0;
+}
+
+.code-wrapper :deep(.hljs) {
+  color: rgba(255,255,255,0.9) !important;
+}
+
+.code-wrapper :deep(pre) {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.code-wrapper :deep(code) {
+  font-size: 0.8rem;
+}
+
+.install-notes {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  margin-top: 2rem;
+  flex-wrap: wrap;
+}
+
+.install-notes span {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  opacity: 0.7;
+  padding: 0.3rem 0.6rem;
+  background: rgba(255,255,255,0.15);
+}
+
+@media (max-width: 768px) {
+  .code-wrapper {
+    padding: 1rem;
+  }
+
+  .code-wrapper :deep(code) {
+    font-size: 0.7rem;
+  }
+
+  .install-notes {
+    gap: 0.75rem;
+  }
+
+  .install-notes span {
+    font-size: 0.65rem;
+  }
+}
+</style>

@@ -18,7 +18,7 @@ function randomSuffix() {
 
 // Connection settings
 const settings = reactive({
-  url: 'ws://localhost:7330',
+  url: 'wss://relay.clasp.to',
   name: `Playground ${randomSuffix()}`,
   token: '',
   features: ['param', 'event', 'stream', 'gesture', 'timeline'],

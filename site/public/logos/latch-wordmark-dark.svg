@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 80" width="400" height="80">
+  <!-- Latch Icon Mark (scaled down) -->
+  <g transform="translate(5, 8) scale(0.32)">
+    <!-- Left bracket -->
+    <path d="M 50 35 L 25 35 Q 15 35 15 45 L 15 155 Q 15 165 25 165 L 50 165"
+          fill="none" stroke="#f5f2eb" stroke-width="12" stroke-linecap="round"/>
+
+    <!-- Right bracket -->
+    <path d="M 150 35 L 175 35 Q 185 35 185 45 L 185 155 Q 185 165 175 165 L 150 165"
+          fill="none" stroke="#f5f2eb" stroke-width="12" stroke-linecap="round"/>
+
+    <!-- Horizontal flow lines -->
+    <line x1="50" y1="75" x2="150" y2="75" stroke="#f5f2eb" stroke-width="4"/>
+    <line x1="50" y1="125" x2="150" y2="125" stroke="#f5f2eb" stroke-width="4"/>
+
+    <!-- Diagonal latch bar -->
+    <line x1="65" y1="115" x2="135" y2="85" stroke="#f5f2eb" stroke-width="8" stroke-linecap="round"/>
+
+    <!-- Orange accent at pivot point -->
+    <rect x="58" y="108" width="18" height="14" rx="3" fill="#e85d3b"/>
+
+    <!-- Catch point on right -->
+    <rect x="130" y="80" width="14" height="10" rx="2" fill="#e85d3b"/>
+  </g>
+  
+  <!-- Wordmark: latch.design -->
+  <text x="82" y="52" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="32" font-weight="600" fill="#f5f2eb">
+    <tspan>latch</tspan><tspan fill="#888888">.design</tspan>
+  </text>
+</svg>

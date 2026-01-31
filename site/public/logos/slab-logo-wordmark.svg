@@ -1,0 +1,9 @@
+<svg width="160" height="48" viewBox="0 0 160 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Logo Mark -->
+  <rect x="4" y="4" width="40" height="12" fill="#00d4aa"/>
+  <rect x="4" y="18" width="20" height="12" fill="#00d4aa"/>
+  <rect x="4" y="32" width="40" height="12" fill="#00d4aa"/>
+  
+  <!-- Wordmark -->
+  <text x="56" y="33" font-family="'Space Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace" font-size="24" font-weight="700" letter-spacing="4" fill="#e8e8ec">SLAB</text>
+</svg>

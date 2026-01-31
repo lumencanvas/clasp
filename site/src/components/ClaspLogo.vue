@@ -1,3 +1,9 @@
+<script setup>
+defineProps({
+  color: { type: String, default: '#1a1a1a' }
+})
+</script>
+
 <template>
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="100%">
     <defs>
@@ -25,7 +31,7 @@
                L 70 275
                Q 35 275, 35 240
                Z"
-            fill="#1a1a1a"/>
+            :fill="color"/>
 
       <!-- Right bracket -->
       <path d="M 265 150
@@ -43,11 +49,11 @@
                L 230 275
                Q 265 275, 265 240
                Z"
-            fill="#1a1a1a"/>
+            :fill="color"/>
     </g>
 
     <!-- Connection lines - hand-drawn style -->
-    <g stroke="#1a1a1a" stroke-width="6" stroke-linecap="round" filter="url(#rough)">
+    <g :stroke="color" stroke-width="6" stroke-linecap="round" filter="url(#rough)">
       <line x1="65" y1="110" x2="235" y2="112"/>
       <line x1="65" y1="150" x2="235" y2="148"/>
       <line x1="65" y1="190" x2="235" y2="191"/>
@@ -55,15 +61,15 @@
 
     <!-- Center node - bold circle -->
     <g filter="url(#rough)">
-      <circle cx="150" cy="150" r="28" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="8"/>
-      <circle cx="150" cy="150" r="10" fill="#1a1a1a"/>
+      <circle cx="150" cy="150" r="28" :fill="color === '#1a1a1a' ? '#FFFFFF' : '#1a1a1a'" :stroke="color" stroke-width="8"/>
+      <circle cx="150" cy="150" r="10" :fill="color"/>
     </g>
 
-    <!-- Accent color - spot orange -->
+    <!-- Accent color - spot -->
     <g opacity="0.9" filter="url(#rough)">
-      <circle cx="150" cy="150" r="10" fill="#FF5F1F"/>
-      <rect x="60" y="146" width="20" height="8" fill="#FF5F1F"/>
-      <rect x="220" y="146" width="20" height="8" fill="#FF5F1F"/>
+      <circle cx="150" cy="150" r="10" fill="#e63946"/>
+      <rect x="60" y="146" width="20" height="8" fill="#e63946"/>
+      <rect x="220" y="146" width="20" height="8" fill="#e63946"/>
     </g>
   </svg>
 </template>
