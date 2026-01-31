@@ -141,6 +141,11 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* =============================================
+   Mobile-first responsive styles
+   Base = mobile, @media (min-width: 768px) = desktop
+   ============================================= */
+
 .connection-panel {
   display: flex;
   flex-direction: column;
@@ -186,12 +191,15 @@ onMounted(() => {
   opacity: 0.7;
 }
 
+/* Mobile-first: 1rem font-size prevents iOS zoom on focus */
 .field input {
   padding: 0.6rem 0.8rem;
   border: 1px solid rgba(0,0,0,0.15);
   background: rgba(255,255,255,0.5);
+  color: var(--ink, #1a1a1a);
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: 1rem;
+  min-height: 44px;
 }
 
 .field input:focus {
@@ -211,7 +219,8 @@ onMounted(() => {
 }
 
 .preset-btn {
-  padding: 0.3rem 0.6rem;
+  min-height: 44px;
+  padding: 0.5rem 0.8rem;
   font-size: 0.7rem;
   border: 1px solid rgba(0,0,0,0.15);
   background: transparent;
@@ -263,6 +272,7 @@ onMounted(() => {
 }
 
 .connect-btn {
+  min-height: 48px;
   padding: 0.8rem;
   background: var(--ink);
   color: var(--paper);
@@ -342,6 +352,7 @@ onMounted(() => {
 }
 
 .scan-btn {
+  min-height: 44px;
   padding: 0.25rem 0.5rem;
   font-size: 0.7rem;
   background: transparent;
@@ -370,6 +381,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-height: 44px;
   padding: 0.5rem 0.6rem;
   background: rgba(0,0,0,0.03);
   border: 1px solid rgba(0,0,0,0.08);
@@ -419,5 +431,12 @@ onMounted(() => {
   opacity: 0.5;
   text-align: center;
   padding: 0.5rem;
+}
+
+/* Desktop refinements */
+@media (min-width: 768px) {
+  .field input {
+    font-size: 0.9rem;
+  }
 }
 </style>

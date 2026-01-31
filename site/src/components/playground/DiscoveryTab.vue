@@ -262,9 +262,10 @@ const client = await ClaspBuilder('ws://192.168.1.50:7330')
   line-height: 1.5;
 }
 
+/* Mobile-first: single column */
 .discovery-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: 1fr;
   gap: 1rem;
 }
 
@@ -291,9 +292,10 @@ const client = await ClaspBuilder('ws://192.168.1.50:7330')
   line-height: 1.4;
 }
 
-/* Flow Diagram */
+/* Flow Diagram - mobile: column layout */
 .flow-diagram {
   display: flex;
+  flex-direction: column;
   align-items: stretch;
   gap: 0.5rem;
   margin-bottom: 1rem;
@@ -344,17 +346,20 @@ const client = await ClaspBuilder('ws://192.168.1.50:7330')
   font-size: 0.75rem;
 }
 
+/* Flow Arrow - mobile: rotated for vertical flow */
 .flow-arrow {
   display: flex;
   align-items: center;
+  justify-content: center;
   font-size: 1.5rem;
   opacity: 0.3;
+  transform: rotate(90deg);
 }
 
-/* Record Config */
+/* Record Config - mobile: single column */
 .record-config {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: 1fr;
   gap: 1rem;
   margin-bottom: 1rem;
 }
@@ -371,12 +376,14 @@ const client = await ClaspBuilder('ws://192.168.1.50:7330')
   opacity: 0.6;
 }
 
+/* Input - mobile: touch-friendly sizing */
 input {
   padding: 0.5rem 0.7rem;
   border: 1px solid rgba(0,0,0,0.15);
   background: rgba(255,255,255,0.5);
   font-family: inherit;
-  font-size: 0.85rem;
+  font-size: 1rem;
+  min-height: 44px;
 }
 
 input:focus {
@@ -471,6 +478,7 @@ input:focus {
   font-family: inherit;
   font-size: 0.75rem;
   cursor: pointer;
+  min-height: 44px;
 }
 
 .copy-btn:hover {
@@ -531,18 +539,27 @@ input:focus {
   margin-bottom: 0.2rem;
 }
 
-@media (max-width: 900px) {
+/* Tablet and up */
+@media (min-width: 768px) {
+  .discovery-grid {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+
   .flow-diagram {
-    flex-direction: column;
+    flex-direction: row;
   }
 
   .flow-arrow {
-    transform: rotate(90deg);
-    justify-content: center;
+    transform: none;
+    justify-content: initial;
   }
 
   .record-config {
-    grid-template-columns: 1fr;
+    grid-template-columns: 2fr 1fr;
+  }
+
+  input {
+    font-size: 0.85rem;
   }
 }
 </style>

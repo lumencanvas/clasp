@@ -241,6 +241,8 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+/* ── Mobile-first base styles ── */
+
 .explorer-tab {
   display: flex;
   flex-direction: column;
@@ -249,7 +251,7 @@ onUnmounted(() => {
 
 .explorer-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: 1fr;
   gap: 1rem;
 }
 
@@ -287,6 +289,7 @@ onUnmounted(() => {
 
 .field-row {
   display: flex;
+  flex-direction: column;
   gap: 0.8rem;
 }
 
@@ -294,8 +297,11 @@ input, select, textarea {
   padding: 0.6rem 0.8rem;
   border: 1px solid rgba(0,0,0,0.15);
   background: rgba(255,255,255,0.5);
+  color: var(--ink, #1a1a1a);
   font-family: inherit;
-  font-size: 0.85rem;
+  font-size: 1rem;
+  min-height: 44px;
+  box-sizing: border-box;
 }
 
 input:focus, select:focus, textarea:focus {
@@ -310,7 +316,6 @@ input:disabled, select:disabled, textarea:disabled {
 textarea {
   resize: vertical;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.8rem;
 }
 
 .input-row {
@@ -333,6 +338,8 @@ textarea {
   letter-spacing: 0.1em;
   cursor: pointer;
   white-space: nowrap;
+  min-height: 44px;
+  box-sizing: border-box;
 }
 
 .input-row button:hover:not(:disabled), .action-btn:hover:not(:disabled) {
@@ -435,8 +442,9 @@ textarea {
 
 .value-row {
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
-  gap: 1rem;
+  gap: 0.3rem;
   padding: 0.5rem 0.6rem;
   background: rgba(0,0,0,0.03);
 }
@@ -451,5 +459,35 @@ textarea {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.8rem;
   word-break: break-all;
+}
+
+/* ── Desktop breakpoint (768px+) ── */
+
+@media (min-width: 768px) {
+  .explorer-grid {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+
+  .field-row {
+    flex-direction: row;
+  }
+
+  input, select, textarea {
+    font-size: 0.85rem;
+    min-height: unset;
+  }
+
+  textarea {
+    font-size: 0.8rem;
+  }
+
+  .input-row button, .action-btn {
+    min-height: unset;
+  }
+
+  .value-row {
+    flex-direction: row;
+    gap: 1rem;
+  }
 }
 </style>

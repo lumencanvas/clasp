@@ -323,9 +323,10 @@ client.set('${lockAddress}', value, {
   line-height: 1.5;
 }
 
+/* Mobile-first: single column */
 .security-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: 1fr;
   gap: 1rem;
 }
 
@@ -365,17 +366,22 @@ client.set('${lockAddress}', value, {
   opacity: 0.6;
 }
 
+/* Mobile-first: stack vertically */
 .field-row {
   display: flex;
+  flex-direction: column;
   gap: 1rem;
 }
 
+/* Mobile-first: larger touch targets and readable font */
 input {
   padding: 0.5rem 0.7rem;
   border: 1px solid rgba(0,0,0,0.15);
   background: rgba(255,255,255,0.5);
+  color: var(--ink, #1a1a1a);
   font-family: inherit;
-  font-size: 0.85rem;
+  font-size: 1rem;
+  min-height: 44px;
 }
 
 input:focus {
@@ -387,10 +393,10 @@ input:disabled {
   opacity: 0.5;
 }
 
-/* Token Builder */
+/* Token Builder — Mobile-first: single column */
 .token-builder {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 1.5rem;
   margin-bottom: 1rem;
 }
@@ -421,6 +427,8 @@ input:disabled {
   border: none;
   cursor: pointer;
   opacity: 0.6;
+  min-height: 36px;
+  min-width: 36px;
 }
 
 .scope-tag button:hover {
@@ -445,6 +453,7 @@ input:disabled {
   font-family: inherit;
   font-size: 0.8rem;
   cursor: pointer;
+  min-height: 44px;
 }
 
 .add-scope button:hover {
@@ -546,6 +555,7 @@ input:disabled {
   font-family: inherit;
   font-size: 0.8rem;
   cursor: pointer;
+  min-height: 44px;
 }
 
 .lock-buttons button:hover:not(:disabled) {
@@ -571,6 +581,7 @@ input:disabled {
   border: 1px solid rgba(0,0,0,0.1);
   cursor: pointer;
   transition: all 0.15s;
+  min-height: 44px;
 }
 
 .strategy:hover {
@@ -609,6 +620,7 @@ input:disabled {
   font-size: 0.8rem;
   cursor: pointer;
   margin-top: 0.5rem;
+  min-height: 44px;
 }
 
 .conflict-demo button:hover:not(:disabled) {
@@ -619,9 +631,23 @@ input:disabled {
   opacity: 0.4;
 }
 
-@media (max-width: 800px) {
+/* Tablet and up */
+@media (min-width: 768px) {
+  .security-grid {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+
   .token-builder {
-    grid-template-columns: 1fr;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .field-row {
+    flex-direction: row;
+  }
+
+  input {
+    font-size: 0.85rem;
   }
 }
 </style>

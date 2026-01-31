@@ -12,6 +12,10 @@
 
 * { box-sizing: border-box; }
 
+input, select, textarea, button {
+  color: var(--ink);
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -502,6 +506,20 @@ footer {
 }
 
 /* Responsive */
+@media (max-width: 480px) {
+  .topnav {
+    padding: 0.6rem 3vw;
+  }
+
+  .topnav .navlinks {
+    gap: 0.6rem;
+  }
+
+  .topnav .navlinks a {
+    font-size: 0.7rem;
+  }
+}
+
 @media (max-width: 980px) {
   .topnav {
     flex-wrap: wrap;

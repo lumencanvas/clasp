@@ -110,6 +110,8 @@ function exportLog() {
 </template>
 
 <style scoped>
+/* --- Base / Mobile-first styles --- */
+
 .console-panel {
   height: 100%;
   display: flex;
@@ -124,7 +126,7 @@ function exportLog() {
   padding: 0.5rem 1rem;
   border-bottom: 1px solid rgba(0,0,0,0.1);
   background: rgba(0,0,0,0.02);
-  gap: 1rem;
+  gap: 0.6rem;
   flex-wrap: wrap;
 }
 
@@ -132,15 +134,27 @@ function exportLog() {
   display: flex;
   align-items: center;
   gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.toolbar-left {
+  flex: 1 1 100%;
+}
+
+.toolbar-right {
+  flex: 1 1 100%;
+  justify-content: flex-end;
 }
 
 .filter-input {
   padding: 0.3rem 0.6rem;
   border: 1px solid rgba(0,0,0,0.15);
   background: rgba(255,255,255,0.5);
+  color: var(--ink, #1a1a1a);
   font-family: inherit;
-  font-size: 0.8rem;
-  width: 150px;
+  font-size: 1rem;
+  width: 100%;
+  min-height: 44px;
 }
 
 .filter-input:focus {
@@ -152,7 +166,7 @@ function exportLog() {
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  font-size: 0.75rem;
+  font-size: 1rem;
   cursor: pointer;
 }
 
@@ -186,8 +200,9 @@ function exportLog() {
   background: transparent;
   border: 1px solid rgba(0,0,0,0.15);
   font-family: inherit;
-  font-size: 0.75rem;
+  font-size: 1rem;
   cursor: pointer;
+  min-height: 44px;
 }
 
 .toolbar-btn:hover:not(:disabled) {
@@ -270,5 +285,35 @@ function exportLog() {
   line-height: 1.4;
   max-height: 100px;
   overflow-y: auto;
+}
+
+/* --- Desktop breakpoint (768px+) --- */
+
+@media (min-width: 768px) {
+  .console-toolbar {
+    gap: 1rem;
+  }
+
+  .toolbar-left {
+    flex: 0 1 auto;
+  }
+
+  .toolbar-right {
+    flex: 0 1 auto;
+  }
+
+  .filter-input {
+    width: 150px;
+    font-size: 0.8rem;
+  }
+
+  .checkbox-label {
+    font-size: 0.75rem;
+  }
+
+  .toolbar-btn {
+    font-size: 0.75rem;
+    min-height: auto;
+  }
 }
 </style>

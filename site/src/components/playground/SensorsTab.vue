@@ -595,14 +595,16 @@ client.on('/sensors/gyroscope', (data) => {
 /* Mode Toggle */
 .mode-toggle {
   display: flex;
+  flex-wrap: wrap;
   gap: 0;
   border: 1px solid rgba(0,0,0,0.15);
-  width: fit-content;
+  width: 100%;
 }
 
 .mode-btn {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
   padding: 0.6rem 1.2rem;
   background: transparent;
@@ -612,6 +614,8 @@ client.on('/sensors/gyroscope', (data) => {
   letter-spacing: 0.08em;
   cursor: pointer;
   transition: all 0.15s;
+  min-height: 44px;
+  width: 100%;
 }
 
 .mode-btn svg {
@@ -648,12 +652,13 @@ client.on('/sensors/gyroscope', (data) => {
   border: 1px solid rgba(0,0,0,0.15);
   background: rgba(255,255,255,0.5);
   font-family: inherit;
-  font-size: 0.85rem;
+  font-size: 1rem;
+  min-height: 44px;
 }
 
 .sensors-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: 1fr;
   gap: 1rem;
 }
 
@@ -707,6 +712,7 @@ client.on('/sensors/gyroscope', (data) => {
   font-size: 0.75rem;
   letter-spacing: 0.08em;
   cursor: pointer;
+  min-height: 44px;
 }
 
 .stream-btn:hover:not(:disabled) {
@@ -826,8 +832,11 @@ client.on('/sensors/gyroscope', (data) => {
   width: 60px;
   padding: 0.3rem;
   border: 1px solid rgba(0,0,0,0.15);
+  background: rgba(255,255,255,0.5);
+  color: var(--ink, #1a1a1a);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.8rem;
+  font-size: 1rem;
+  min-height: 44px;
 }
 
 /* Sliders */
@@ -838,6 +847,13 @@ client.on('/sensors/gyroscope', (data) => {
   margin-bottom: 1rem;
   padding: 1rem 0.5rem;
   background: rgba(0,0,0,0.03);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.slider-bank::-webkit-scrollbar {
+  display: none;
 }
 
 .slider-channel {
@@ -845,6 +861,8 @@ client.on('/sensors/gyroscope', (data) => {
   flex-direction: column;
   align-items: center;
   gap: 0.4rem;
+  flex-shrink: 0;
+  min-width: 36px;
 }
 
 .slider-channel input[type="range"] {
@@ -859,7 +877,7 @@ client.on('/sensors/gyroscope', (data) => {
 
 .slider-channel input[type="range"]::-webkit-slider-thumb {
   appearance: none;
-  width: 24px;
+  width: 32px;
   height: 12px;
   background: var(--ink);
   cursor: grab;
@@ -966,6 +984,7 @@ client.on('/sensors/gyroscope', (data) => {
   letter-spacing: 0.08em;
   cursor: pointer;
   transition: all 0.15s;
+  min-height: 44px;
 }
 
 .subscribe-btn svg {
@@ -1097,5 +1116,34 @@ client.on('/sensors/gyroscope', (data) => {
 
 .receive-hint strong {
   color: var(--accent);
+}
+
+/* Tablet and desktop breakpoint */
+@media (min-width: 768px) {
+  .sensors-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+
+  .mode-toggle {
+    width: fit-content;
+  }
+
+  .mode-btn {
+    width: auto;
+  }
+
+  .stream-rate select {
+    font-size: 0.85rem;
+    min-height: unset;
+  }
+
+  .value-item input[type="number"] {
+    font-size: 0.8rem;
+    min-height: unset;
+  }
+
+  .slider-channel input[type="range"]::-webkit-slider-thumb {
+    width: 24px;
+  }
 }
 </style>

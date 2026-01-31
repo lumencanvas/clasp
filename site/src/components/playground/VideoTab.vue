@@ -893,7 +893,7 @@ watch(connected, (isConnected) => {
   max-width: 500px;
   background: rgba(255,255,255,0.6);
   border: 1px solid rgba(0,0,0,0.1);
-  padding: 2.5rem;
+  padding: 1.5rem;
 }
 
 .join-header {
@@ -943,6 +943,7 @@ watch(connected, (isConnected) => {
   letter-spacing: 0.05em;
   cursor: pointer;
   transition: all 0.15s;
+  min-height: 44px;
 }
 
 .mode-btn:hover {
@@ -1011,6 +1012,7 @@ watch(connected, (isConnected) => {
   cursor: pointer;
   transition: all 0.15s;
   text-align: center;
+  min-height: 44px;
 }
 
 .preset-btn:hover {
@@ -1164,8 +1166,9 @@ watch(connected, (isConnected) => {
   padding: 0.8rem 1rem;
   border: 1px solid rgba(0,0,0,0.12);
   background: rgba(255,255,255,0.8);
+  color: var(--ink, #1a1a1a);
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: 1rem;
   transition: border-color 0.15s;
 }
 
@@ -1240,7 +1243,7 @@ watch(connected, (isConnected) => {
 
 .join-buttons {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 0.75rem;
   margin-top: 0.5rem;
 }
@@ -1257,6 +1260,7 @@ watch(connected, (isConnected) => {
   letter-spacing: 0.08em;
   cursor: pointer;
   transition: all 0.15s;
+  min-height: 44px;
 }
 
 .join-btn.primary {
@@ -1340,8 +1344,8 @@ watch(connected, (isConnected) => {
 }
 
 .back-btn {
-  width: 32px;
-  height: 32px;
+  min-width: 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1365,6 +1369,7 @@ watch(connected, (isConnected) => {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .room-details h3 {
@@ -1404,8 +1409,8 @@ watch(connected, (isConnected) => {
 }
 
 .action-btn {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1473,6 +1478,12 @@ watch(connected, (isConnected) => {
   background: rgba(0,0,0,0.03);
   border-bottom: 1px solid rgba(0,0,0,0.08);
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.stats-bar::-webkit-scrollbar {
+  display: none;
 }
 
 .stat {
@@ -1480,7 +1491,7 @@ watch(connected, (isConnected) => {
   flex-direction: column;
   padding: 0.5rem 1rem;
   border-right: 1px solid rgba(0,0,0,0.08);
-  min-width: 100px;
+  min-width: 80px;
 }
 
 .stat:last-child {
@@ -1516,14 +1527,14 @@ watch(connected, (isConnected) => {
 /* Video Layout */
 .video-layout {
   flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 200px;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
 }
 
 .video-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: 1fr;
   gap: 1rem;
   padding: 1rem;
   overflow-y: auto;
@@ -1532,7 +1543,6 @@ watch(connected, (isConnected) => {
 
 .video-grid.single {
   grid-template-columns: 1fr;
-  max-width: 640px;
   margin: 0 auto;
 }
 
@@ -1659,7 +1669,7 @@ watch(connected, (isConnected) => {
 
 /* Participants Sidebar */
 .participants-sidebar {
-  display: flex;
+  display: none;
   flex-direction: column;
   background: rgba(255,255,255,0.3);
   border-left: 1px solid rgba(0,0,0,0.08);
@@ -1771,22 +1781,40 @@ watch(connected, (isConnected) => {
   height: 16px;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .video-layout {
-    grid-template-columns: 1fr;
+/* Responsive - Tablet and up */
+@media (min-width: 768px) {
+  .join-card {
+    padding: 2.5rem;
   }
 
-  .participants-sidebar {
-    display: none;
+  .field input {
+    font-size: 0.95rem;
+  }
+
+  .join-buttons {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .video-layout {
+    display: grid;
+    grid-template-columns: 1fr 200px;
+    flex-direction: unset;
   }
 
   .video-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+
+  .video-grid.single {
+    max-width: 640px;
+  }
+
+  .participants-sidebar {
+    display: flex;
   }
 
   .room-details {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 }
 </style>

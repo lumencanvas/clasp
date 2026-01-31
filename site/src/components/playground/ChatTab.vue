@@ -509,7 +509,7 @@ watch(connected, (isConnected) => {
   max-width: 420px;
   background: rgba(255,255,255,0.6);
   border: 1px solid rgba(0,0,0,0.1);
-  padding: 2.5rem;
+  padding: 1.5rem;
 }
 
 .join-header {
@@ -569,8 +569,9 @@ watch(connected, (isConnected) => {
   padding: 0.8rem 1rem;
   border: 1px solid rgba(0,0,0,0.12);
   background: rgba(255,255,255,0.8);
+  color: var(--ink, #1a1a1a);
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: 1rem;
   transition: border-color 0.15s;
 }
 
@@ -620,7 +621,8 @@ watch(connected, (isConnected) => {
 }
 
 .room-chip {
-  padding: 0.35rem 0.6rem;
+  min-height: 44px;
+  padding: 0.5rem 0.8rem;
   font-size: 0.75rem;
   border: 1px solid rgba(0,0,0,0.12);
   background: transparent;
@@ -648,6 +650,7 @@ watch(connected, (isConnected) => {
   align-items: center;
   justify-content: center;
   gap: 0.6rem;
+  min-height: 44px;
   padding: 1rem;
   background: var(--ink);
   color: var(--paper);
@@ -716,8 +719,8 @@ watch(connected, (isConnected) => {
 }
 
 .back-btn {
-  width: 32px;
-  height: 32px;
+  min-width: 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -755,8 +758,8 @@ watch(connected, (isConnected) => {
 }
 
 .header-btn {
-  width: 32px;
-  height: 32px;
+  min-width: 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -779,13 +782,13 @@ watch(connected, (isConnected) => {
 /* Room Switcher */
 .room-switcher {
   position: absolute;
-  right: 1rem;
+  left: 0;
+  right: 0;
   top: 50px;
   z-index: 100;
   background: white;
   border: 1px solid rgba(0,0,0,0.15);
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  min-width: 160px;
 }
 
 .switcher-header {
@@ -802,6 +805,7 @@ watch(connected, (isConnected) => {
   align-items: center;
   gap: 0.5rem;
   width: 100%;
+  min-height: 44px;
   padding: 0.6rem 0.8rem;
   background: none;
   border: none;
@@ -835,8 +839,8 @@ watch(connected, (isConnected) => {
 /* Chat Layout */
 .chat-layout {
   flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 200px;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
 }
 
@@ -844,7 +848,7 @@ watch(connected, (isConnected) => {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-right: 1px solid rgba(0,0,0,0.08);
+  flex: 1;
 }
 
 .messages-scroll {
@@ -933,7 +937,7 @@ watch(connected, (isConnected) => {
 }
 
 .message-content {
-  max-width: 70%;
+  max-width: 85%;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -1038,8 +1042,9 @@ watch(connected, (isConnected) => {
   padding: 0.75rem 1rem;
   border: 1px solid rgba(0,0,0,0.1);
   background: white;
+  color: var(--ink, #1a1a1a);
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: 1rem;
   border-radius: 20px;
 }
 
@@ -1049,8 +1054,8 @@ watch(connected, (isConnected) => {
 }
 
 .send-btn {
-  width: 42px;
-  height: 42px;
+  min-width: 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1078,7 +1083,7 @@ watch(connected, (isConnected) => {
 
 /* Participants Sidebar */
 .participants-sidebar {
-  display: flex;
+  display: none;
   flex-direction: column;
   background: rgba(255,255,255,0.3);
 }
@@ -1162,18 +1167,42 @@ watch(connected, (isConnected) => {
   flex-shrink: 0;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .chat-layout {
-    grid-template-columns: 1fr;
+/* Responsive - Tablet and up */
+@media (min-width: 768px) {
+  .join-card {
+    padding: 2.5rem;
   }
 
-  .participants-sidebar {
-    display: none;
+  .field input {
+    font-size: 0.95rem;
+  }
+
+  .message-composer input {
+    font-size: 0.9rem;
   }
 
   .message-content {
-    max-width: 85%;
+    max-width: 70%;
+  }
+
+  .chat-layout {
+    display: grid;
+    grid-template-columns: 1fr 200px;
+    flex-direction: unset;
+  }
+
+  .messages-area {
+    border-right: 1px solid rgba(0,0,0,0.08);
+  }
+
+  .participants-sidebar {
+    display: flex;
+  }
+
+  .room-switcher {
+    left: auto;
+    right: 1rem;
+    min-width: 160px;
   }
 }
 </style>
