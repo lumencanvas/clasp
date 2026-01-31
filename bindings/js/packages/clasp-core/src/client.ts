@@ -746,7 +746,19 @@ export class Clasp {
 
       case 'PUBLISH': {
         const pub = message as PublishMessage;
-        const value = pub.value ?? pub.payload ?? null;
+        let value: Value;
+        if (pub.signal === 'gesture') {
+          // For gesture signals, merge phase/id into the value so subscribers
+          // can access gesture metadata without needing raw message access
+          const payload = (pub.payload ?? pub.value ?? {}) as { [key: string]: Value };
+          value = {
+            ...payload,
+            ...(pub.phase !== undefined ? { phase: pub.phase } : {}),
+            ...(pub.id !== undefined ? { gestureId: pub.id } : {}),
+          };
+        } else {
+          value = pub.value ?? pub.payload ?? null;
+        }
         this.notifySubscribers(pub.address, value);
         break;
       }
