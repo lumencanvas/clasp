@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import CodeBlock from '../CodeBlock.vue'
 import { useScrollAnimation } from '../../composables/useScrollAnimation.js'
 
@@ -7,6 +7,7 @@ const sectionRef = ref(null)
 useScrollAnimation(sectionRef)
 
 const activeTab = ref('js')
+const activeTransport = ref('ws')
 
 const tabs = [
   { id: 'js', label: 'JavaScript' },
@@ -14,7 +15,19 @@ const tabs = [
   { id: 'rs', label: 'Rust' }
 ]
 
-const jsCode = `// Install: npm install @clasp-to/core
+const allTransports = [
+  { id: 'ws', label: 'WebSocket' },
+  { id: 'webrtc', label: 'WebRTC' },
+  { id: 'quic', label: 'QUIC' },
+  { id: 'tcp', label: 'TCP' },
+  { id: 'udp', label: 'UDP' },
+  { id: 'serial', label: 'Serial' },
+  { id: 'ble', label: 'BLE' }
+]
+
+const codeExamples = {
+  'js-ws': {
+    code: `// Install: npm install @clasp-to/core
 
 import { Clasp } from '@clasp-to/core';
 
@@ -48,9 +61,35 @@ clasp.bundle([
 
 // Cleanup
 unsubscribe();
-clasp.close();`
+clasp.close();`,
+    lang: 'javascript'
+  },
 
-const pyCode = `# Install: pip install clasp-to
+  'js-webrtc': {
+    code: `// Install: npm install @clasp-to/core
+
+import { Clasp } from '@clasp-to/core';
+
+// Connect via WebRTC data channel (P2P with NAT traversal)
+const clasp = new Clasp('webrtc://signal.example.com/room/stage1');
+await clasp.connect();
+
+// Same CLASP API over peer-to-peer data channels
+const unsubscribe = clasp.on('/lights/*/brightness', (value, address) => {
+  console.log(\`\${address} = \${value}\`);
+});
+
+clasp.set('/lights/kitchen/brightness', 0.75);
+
+clasp.emit('/cue/fire', { cueId: 'intro', fadeTime: 2.0 });
+
+unsubscribe();
+clasp.close();`,
+    lang: 'javascript'
+  },
+
+  'py-ws': {
+    code: `# Install: pip install clasp-to
 
 import asyncio
 from clasp import ClaspBuilder
@@ -81,9 +120,12 @@ async def main():
     # Keep running (processes incoming messages)
     await client.run()
 
-asyncio.run(main())`
+asyncio.run(main())`,
+    lang: 'python'
+  },
 
-const rsCode = `// Cargo.toml: clasp-client = "3.0"
+  'rs-ws': {
+    code: `// Cargo.toml: clasp-client = "3.0"
 
 use clasp_client::{Clasp, ClaspBuilder};
 use clasp_core::Value;
@@ -123,12 +165,242 @@ async fn main() -> anyhow::Result<()> {
     tokio::signal::ctrl_c().await?;
     client.close().await?;
     Ok(())
-}`
+}`,
+    lang: 'rust'
+  },
 
-const codeExamples = {
-  js: { code: jsCode, lang: 'javascript' },
-  py: { code: pyCode, lang: 'python' },
-  rs: { code: rsCode, lang: 'rust' }
+  'rs-webrtc': {
+    code: `// Cargo.toml: clasp-client = { version = "3.0", features = ["webrtc"] }
+
+use clasp_client::{ClaspBuilder, WebRtcTransport, WebRtcConfig};
+use clasp_core::Value;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Configure WebRTC transport (P2P with NAT traversal)
+    let transport = WebRtcTransport::new(
+        WebRtcConfig::builder()
+            .signaling_url("wss://signal.example.com")
+            .room("stage1")
+            .build()?,
+    );
+
+    let client = ClaspBuilder::with_transport(transport)
+        .name("Rust WebRTC Controller")
+        .connect()
+        .await?;
+
+    let _unsub = client.subscribe("/lights/**", |value, addr| {
+        println!("{} = {:?}", addr, value);
+    }).await?;
+
+    client.set("/lights/kitchen/brightness", Value::Float(0.75)).await?;
+
+    tokio::signal::ctrl_c().await?;
+    client.close().await?;
+    Ok(())
+}`,
+    lang: 'rust'
+  },
+
+  'rs-quic': {
+    code: `// Cargo.toml: clasp-client = { version = "3.0", features = ["quic"] }
+
+use clasp_client::{ClaspBuilder, QuicTransport, QuicConfig};
+use clasp_core::Value;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Configure QUIC transport
+    let transport = QuicTransport::new(
+        QuicConfig::builder()
+            .server_addr("127.0.0.1:7331")
+            .server_name("clasp-router")
+            .cert_path("certs/ca.pem")
+            .build()?,
+    );
+
+    // Connect with QUIC
+    let client = ClaspBuilder::with_transport(transport)
+        .name("Rust QUIC Controller")
+        .connect()
+        .await?;
+
+    // Same CLASP API — subscribe, set, emit
+    let _unsub = client.subscribe("/lights/**", |value, addr| {
+        println!("{} = {:?}", addr, value);
+    }).await?;
+
+    client.set("/lights/kitchen/brightness", Value::Float(0.75)).await?;
+
+    tokio::signal::ctrl_c().await?;
+    client.close().await?;
+    Ok(())
+}`,
+    lang: 'rust'
+  },
+
+  'rs-tcp': {
+    code: `// Cargo.toml: clasp-client = { version = "3.0", features = ["tcp"] }
+
+use clasp_client::{ClaspBuilder, TcpTransport, TcpConfig};
+use clasp_core::Value;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Configure TCP transport
+    let transport = TcpTransport::new(
+        TcpConfig::builder()
+            .server_addr("127.0.0.1:7332")
+            .nodelay(true)
+            .build()?,
+    );
+
+    // Connect with TCP
+    let client = ClaspBuilder::with_transport(transport)
+        .name("Rust TCP Controller")
+        .connect()
+        .await?;
+
+    // Same CLASP API — subscribe, set, emit
+    let _unsub = client.subscribe("/lights/**", |value, addr| {
+        println!("{} = {:?}", addr, value);
+    }).await?;
+
+    client.set("/lights/kitchen/brightness", Value::Float(0.75)).await?;
+
+    tokio::signal::ctrl_c().await?;
+    client.close().await?;
+    Ok(())
+}`,
+    lang: 'rust'
+  },
+
+  'rs-udp': {
+    code: `// Cargo.toml: clasp-client = { version = "3.0", features = ["udp"] }
+
+use clasp_client::{ClaspBuilder, UdpTransport, UdpConfig};
+use clasp_core::Value;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Configure UDP transport (lightweight, LAN-optimized)
+    let transport = UdpTransport::new(
+        UdpConfig::builder()
+            .server_addr("127.0.0.1:7333")
+            .broadcast(false)
+            .build()?,
+    );
+
+    let client = ClaspBuilder::with_transport(transport)
+        .name("Rust UDP Controller")
+        .connect()
+        .await?;
+
+    // Fire-and-forget — ideal for high-rate sensor streams
+    let _unsub = client.subscribe("/sensors/**", |value, addr| {
+        println!("{} = {:?}", addr, value);
+    }).await?;
+
+    client.stream("/sensors/accelerometer/x", Value::Float(0.342)).await?;
+
+    tokio::signal::ctrl_c().await?;
+    client.close().await?;
+    Ok(())
+}`,
+    lang: 'rust'
+  },
+
+  'rs-serial': {
+    code: `// Cargo.toml: clasp-client = { version = "3.0", features = ["serial"] }
+
+use clasp_client::{ClaspBuilder, SerialTransport, SerialConfig};
+use clasp_core::Value;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Configure serial port transport (direct hardware link)
+    let transport = SerialTransport::new(
+        SerialConfig::builder()
+            .port("/dev/ttyUSB0")
+            .baud_rate(115200)
+            .build()?,
+    );
+
+    let client = ClaspBuilder::with_transport(transport)
+        .name("Rust Serial Controller")
+        .connect()
+        .await?;
+
+    // Talk directly to a CLASP-speaking microcontroller
+    let _unsub = client.subscribe("/hw/**", |value, addr| {
+        println!("{} = {:?}", addr, value);
+    }).await?;
+
+    client.set("/hw/led/brightness", Value::Float(1.0)).await?;
+
+    tokio::signal::ctrl_c().await?;
+    client.close().await?;
+    Ok(())
+}`,
+    lang: 'rust'
+  },
+
+  'rs-ble': {
+    code: `// Cargo.toml: clasp-client = { version = "3.0", features = ["ble"] }
+
+use clasp_client::{ClaspBuilder, BleTransport, BleConfig};
+use clasp_core::Value;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Configure BLE transport (low-power wireless)
+    let transport = BleTransport::new(
+        BleConfig::builder()
+            .device_name("CLASP-Controller")
+            .service_uuid("0000ff00-0000-1000-8000-00805f9b34fb")
+            .build()?,
+    );
+
+    let client = ClaspBuilder::with_transport(transport)
+        .name("Rust BLE Controller")
+        .connect()
+        .await?;
+
+    // Control IoT devices over Bluetooth
+    let _unsub = client.subscribe("/ble/**", |value, addr| {
+        println!("{} = {:?}", addr, value);
+    }).await?;
+
+    client.set("/ble/light/on", Value::Bool(true)).await?;
+
+    tokio::signal::ctrl_c().await?;
+    client.close().await?;
+    Ok(())
+}`,
+    lang: 'rust'
+  }
+}
+
+// Filter transports to only those available for the active language
+const visibleTransports = computed(() => {
+  return allTransports.filter(t => `${activeTab.value}-${t.id}` in codeExamples)
+})
+
+const activeExample = computed(() => {
+  return codeExamples[`${activeTab.value}-${activeTransport.value}`]
+})
+
+function selectTransport(id) {
+  activeTransport.value = id
+}
+
+function selectLang(id) {
+  activeTab.value = id
+  // If current transport isn't available for this lang, fall back to ws
+  if (!(`${id}-${activeTransport.value}` in codeExamples)) {
+    activeTransport.value = 'ws'
+  }
 }
 </script>
 
@@ -146,23 +418,29 @@ const codeExamples = {
           :key="tab.id"
           class="lang-tab"
           :class="{ active: activeTab === tab.id }"
-          @click="activeTab = tab.id"
+          @click="selectLang(tab.id)"
         >
           {{ tab.label }}
         </button>
       </div>
 
-      <div class="code-wrapper fade-in">
-        <div
-          v-for="tab in tabs"
-          :key="tab.id"
-          v-show="activeTab === tab.id"
+      <div class="transport-tabs fade-in">
+        <button
+          v-for="t in visibleTransports"
+          :key="t.id"
+          class="transport-tab"
+          :class="{ active: activeTransport === t.id }"
+          @click="selectTransport(t.id)"
         >
-          <CodeBlock
-            :code="codeExamples[tab.id].code"
-            :language="codeExamples[tab.id].lang"
-          />
-        </div>
+          {{ t.label }}
+        </button>
+      </div>
+
+      <div class="code-wrapper fade-in">
+        <CodeBlock
+          :code="activeExample.code"
+          :language="activeExample.lang"
+        />
       </div>
 
       <div class="install-notes fade-in">
@@ -200,7 +478,7 @@ h2 {
   display: flex;
   justify-content: center;
   gap: 0.5rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.75rem;
 }
 
 .lang-tab {
@@ -221,6 +499,37 @@ h2 {
 }
 
 .lang-tab.active {
+  background: rgba(255,255,255,0.95);
+  border-color: rgba(255,255,255,0.95);
+  color: #f77f00;
+}
+
+.transport-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.transport-tab {
+  background: transparent;
+  border: 1.5px solid rgba(255,255,255,0.3);
+  color: rgba(255,255,255,0.7);
+  padding: 0.4rem 1rem;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.transport-tab:hover {
+  border-color: #fff;
+  color: #fff;
+}
+
+.transport-tab.active {
   background: rgba(255,255,255,0.95);
   border-color: rgba(255,255,255,0.95);
   color: #f77f00;

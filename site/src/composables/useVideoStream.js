@@ -203,8 +203,11 @@ export function useVideoStream() {
     announcePresence(false)
     // Announce again in 1 second to catch late subscribers
     setTimeout(() => announcePresence(isBroadcasting.value), 1000)
-    // Then every 5 seconds
-    presenceInterval = setInterval(() => announcePresence(isBroadcasting.value), 5000)
+    // Then every 5 seconds, also prune stale peers
+    presenceInterval = setInterval(() => {
+      announcePresence(isBroadcasting.value)
+      pruneStaleParticipants()
+    }, 5000)
 
     // Start stats tracking
     statsInterval = setInterval(updateStats, 1000)
@@ -265,6 +268,7 @@ export function useVideoStream() {
       name: currentUserName || sessionId.value.slice(0, 8),
       isBroadcaster: broadcasting,
       joinedAt: Date.now(),
+      lastSeen: Date.now(),
       quality: quality.preset,
     })
   }
@@ -273,11 +277,23 @@ export function useVideoStream() {
    * Handle peer joining
    */
   function handlePeerJoined(peerId, data) {
-    participants.value.set(peerId, data)
+    const existing = participants.value.get(peerId)
+    const wasBroadcasting = existing?.isBroadcaster
+
+    participants.value.set(peerId, { ...data, lastSeen: data.lastSeen || Date.now() })
 
     // If peer is broadcasting, subscribe to their stream
-    if (data.isBroadcaster) {
+    if (data.isBroadcaster && !wasBroadcasting) {
       subscribeToStream(peerId)
+    }
+    // If peer stopped broadcasting, clean up their stream
+    if (!data.isBroadcaster && wasBroadcasting) {
+      cleanupRemoteStream(peerId)
+      const unsub = unsubStreams.get(peerId)
+      if (unsub) {
+        unsub()
+        unsubStreams.delete(peerId)
+      }
     }
   }
 
@@ -293,6 +309,29 @@ export function useVideoStream() {
       unsub()
       unsubStreams.delete(peerId)
     }
+  }
+
+  /**
+   * Prune participants whose lastSeen is older than 20 seconds
+   */
+  function pruneStaleParticipants() {
+    const now = Date.now()
+    const staleThreshold = 20_000
+    const stale = []
+    for (const [peerId, data] of participants.value) {
+      if (now - (data.lastSeen || data.joinedAt || 0) > staleThreshold) {
+        stale.push(peerId)
+      }
+    }
+    stale.forEach(id => handlePeerLeft(id))
+  }
+
+  /**
+   * Get the CLASP stream address for a peer
+   */
+  function getStreamAddress(peerId) {
+    if (!room.value) return null
+    return `/video/relay/${room.value}/stream/${peerId}`
   }
 
   /**
@@ -785,5 +824,6 @@ export function useVideoStream() {
     startBroadcasting,
     stopBroadcasting,
     getRemoteCanvas,
+    getStreamAddress,
   }
 }

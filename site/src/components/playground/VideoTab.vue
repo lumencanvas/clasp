@@ -6,6 +6,10 @@ import { useVideoStream, QUALITY_PRESETS } from '../../composables/useVideoStrea
 
 const { connected, sessionId, settings } = useClasp()
 
+// Clipboard feedback
+const copiedAddress = ref('')
+let copiedTimeout = null
+
 // Mode: 'relay' is the primary mode (CLASP native), 'p2p' is optional WebRTC
 const mode = ref('relay')
 
@@ -74,6 +78,26 @@ const hasLocalStream = computed(() => {
     ? !!videoCall.localStream.value
     : !!videoStream.localStream.value
 })
+
+// Computed: own stream address (relay mode)
+const myStreamAddress = computed(() => {
+  if (mode.value !== 'relay' || !isBroadcasting.value || !sessionId.value || !room.value) return null
+  return videoStream.getStreamAddress(sessionId.value)
+})
+
+// Copy a CLASP address to clipboard
+function copyAddress(address) {
+  if (!address) return
+  navigator.clipboard.writeText(address).catch(() => {})
+  copiedAddress.value = address
+  if (copiedTimeout) clearTimeout(copiedTimeout)
+  copiedTimeout = setTimeout(() => { copiedAddress.value = '' }, 2000)
+}
+
+// Get stream address for a peer
+function getPeerStreamAddress(peerId) {
+  return videoStream.getStreamAddress(peerId)
+}
 
 // Callback ref for local video element - sets srcObject when DOM element mounts
 function setLocalVideoRef(el) {
@@ -375,6 +399,7 @@ onMounted(() => {
 
 // Cleanup
 onUnmounted(() => {
+  if (copiedTimeout) clearTimeout(copiedTimeout)
   stopCanvasRenderLoop()
   leaveRoom()
   stopCamera()
@@ -737,6 +762,21 @@ watch(connected, (isConnected) => {
         </div>
       </div>
 
+      <!-- Stream Address Bar (Relay mode, broadcasting) -->
+      <div v-if="myStreamAddress" class="stream-address-bar">
+        <span class="address-label">Your stream address</span>
+        <code class="address-value">{{ myStreamAddress }}</code>
+        <button class="copy-btn" @click="copyAddress(myStreamAddress)" :title="copiedAddress === myStreamAddress ? 'Copied!' : 'Copy address'">
+          <svg v-if="copiedAddress !== myStreamAddress" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </button>
+      </div>
+
       <!-- Video Grid -->
       <div class="video-layout">
         <div class="video-grid" :class="{ 'single': peerStreams.length === 0 && broadcasters.length === 0 && !isBroadcasting }">
@@ -753,6 +793,20 @@ watch(connected, (isConnected) => {
             <div class="video-label">
               <span class="name">{{ nickname }} (you)</span>
               <span v-if="mode === 'relay' && isBroadcasting" class="broadcast-indicator">LIVE</span>
+              <button
+                v-if="myStreamAddress"
+                class="copy-stream-btn"
+                @click.stop="copyAddress(myStreamAddress)"
+                :title="copiedAddress === myStreamAddress ? 'Copied!' : 'Copy stream address'"
+              >
+                <svg v-if="copiedAddress !== myStreamAddress" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </button>
             </div>
           </div>
 
@@ -814,6 +868,19 @@ watch(connected, (isConnected) => {
               <div class="video-label">
                 <span class="name">{{ broadcaster.name }}</span>
                 <span class="broadcast-indicator">LIVE</span>
+                <button
+                  class="copy-stream-btn"
+                  @click.stop="copyAddress(getPeerStreamAddress(broadcaster.id))"
+                  :title="copiedAddress === getPeerStreamAddress(broadcaster.id) ? 'Copied!' : 'Copy stream address'"
+                >
+                  <svg v-if="copiedAddress !== getPeerStreamAddress(broadcaster.id)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  </svg>
+                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                </button>
               </div>
             </div>
           </template>
@@ -1665,6 +1732,86 @@ watch(connected, (isConnected) => {
   width: 16px;
   height: 16px;
   color: #f44336;
+}
+
+/* Stream Address Bar */
+.stream-address-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(0,0,0,0.05);
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  overflow: hidden;
+}
+
+.address-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.5;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.address-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  background: rgba(0,0,0,0.06);
+  padding: 0.25rem 0.5rem;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+}
+
+.copy-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid rgba(0,0,0,0.1);
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.copy-btn:hover {
+  background: rgba(0,0,0,0.05);
+}
+
+.copy-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Copy button on video labels */
+.copy-stream-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.25);
+  cursor: pointer;
+  transition: all 0.15s;
+  color: white;
+  flex-shrink: 0;
+}
+
+.copy-stream-btn:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+.copy-stream-btn svg {
+  width: 12px;
+  height: 12px;
 }
 
 /* Participants Sidebar */

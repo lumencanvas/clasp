@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { computed } from 'vue'
 import hljs from 'highlight.js/lib/core'
 import javascript from 'highlight.js/lib/languages/javascript'
 import python from 'highlight.js/lib/languages/python'
@@ -24,19 +24,12 @@ const props = defineProps({
   }
 })
 
-const codeRef = ref(null)
-
-function highlight() {
-  if (codeRef.value) {
-    codeRef.value.textContent = props.code
-    hljs.highlightElement(codeRef.value)
-  }
-}
-
-onMounted(highlight)
-watch(() => props.code, highlight)
+const highlightedHtml = computed(() => {
+  const lang = hljs.getLanguage(props.language) ? props.language : 'plaintext'
+  return hljs.highlight(props.code, { language: lang }).value
+})
 </script>
 
 <template>
-  <pre><code ref="codeRef" :class="`language-${language}`">{{ code }}</code></pre>
+  <pre><code class="hljs" :class="`language-${language}`" v-html="highlightedHtml"></code></pre>
 </template>

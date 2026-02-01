@@ -130,7 +130,10 @@ export function useVideoCall() {
 
     // Announce our presence
     announcePresence()
-    presenceInterval = setInterval(() => announcePresence(), 10000)
+    presenceInterval = setInterval(() => {
+      announcePresence()
+      pruneStaleParticipants()
+    }, 10000)
 
     inRoom.value = true
     return true
@@ -181,6 +184,7 @@ export function useVideoCall() {
     set(`/video/room/${room.value}/presence/${sessionId.value}`, {
       name: currentUserName || sessionId.value.slice(0, 8),
       joinedAt: Date.now(),
+      lastSeen: Date.now(),
       audioEnabled: audioEnabled.value,
       videoEnabled: videoEnabled.value,
     })
@@ -190,7 +194,7 @@ export function useVideoCall() {
    * Handle a peer joining
    */
   function handlePeerJoined(peerId, data) {
-    participants.value.set(peerId, data)
+    participants.value.set(peerId, { ...data, lastSeen: data.lastSeen || Date.now() })
 
     // If we don't have a connection to this peer, initiate one
     // Use lexicographic comparison for consistent initiator selection
@@ -208,6 +212,21 @@ export function useVideoCall() {
     closePeerConnection(peerId)
     peers.delete(peerId)
     iceCandidateQueues.delete(peerId)
+  }
+
+  /**
+   * Prune participants whose lastSeen is older than 25 seconds
+   */
+  function pruneStaleParticipants() {
+    const now = Date.now()
+    const staleThreshold = 25_000
+    const stale = []
+    for (const [peerId, data] of participants.value) {
+      if (now - (data.lastSeen || data.joinedAt || 0) > staleThreshold) {
+        stale.push(peerId)
+      }
+    }
+    stale.forEach(id => handlePeerLeft(id))
   }
 
   /**
