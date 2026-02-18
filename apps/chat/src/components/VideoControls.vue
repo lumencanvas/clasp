@@ -2,9 +2,11 @@
 const props = defineProps({
   audioEnabled: { type: Boolean, default: true },
   videoEnabled: { type: Boolean, default: true },
+  isScreenSharing: { type: Boolean, default: false },
+  layout: { type: String, default: 'grid' },
 })
 
-const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave'])
+const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave', 'set-layout'])
 </script>
 
 <template>
@@ -45,7 +47,7 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
     </button>
 
     <button
-      class="control-btn"
+      :class="['control-btn', { sharing: isScreenSharing }]"
       @click="emit('share-screen')"
       title="Share screen"
     >
@@ -55,6 +57,46 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
         <line x1="12" y1="17" x2="12" y2="21"/>
       </svg>
     </button>
+
+    <!-- Layout switcher -->
+    <div class="layout-group">
+      <button
+        :class="['layout-btn', { active: layout === 'grid' }]"
+        @click="emit('set-layout', 'grid')"
+        title="Grid layout"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7"/>
+          <rect x="14" y="3" width="7" height="7"/>
+          <rect x="3" y="14" width="7" height="7"/>
+          <rect x="14" y="14" width="7" height="7"/>
+        </svg>
+      </button>
+      <button
+        :class="['layout-btn', { active: layout === 'spotlight' }]"
+        @click="emit('set-layout', 'spotlight')"
+        title="Spotlight layout"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="12"/>
+          <rect x="3" y="18" width="5" height="3"/>
+          <rect x="10" y="18" width="5" height="3"/>
+          <rect x="17" y="18" width="4" height="3"/>
+        </svg>
+      </button>
+      <button
+        :class="['layout-btn', { active: layout === 'sidebar' }]"
+        @click="emit('set-layout', 'sidebar')"
+        title="Sidebar layout"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="12" height="18"/>
+          <rect x="18" y="3" width="3" height="5"/>
+          <rect x="18" y="10" width="3" height="5"/>
+          <rect x="18" y="17" width="3" height="4"/>
+        </svg>
+      </button>
+    </div>
 
     <button
       class="control-btn leave-btn"
@@ -109,6 +151,12 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
   color: var(--danger);
 }
 
+.control-btn.sharing {
+  background: rgba(var(--accent-rgb, 99,102,241),0.15);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .leave-btn {
   background: var(--danger);
   border-color: var(--danger);
@@ -118,5 +166,42 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
 .leave-btn:hover {
   opacity: 0.9;
   background: var(--danger);
+}
+
+.layout-group {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.layout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  transition: all 0.15s;
+}
+
+.layout-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.layout-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-active);
+}
+
+.layout-btn.active {
+  color: var(--accent);
+  background: var(--bg-active);
 }
 </style>

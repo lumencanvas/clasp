@@ -1,0 +1,36 @@
+spec:
+  name: clasp-chat
+  region: nyc
+
+  # Static site: Chat SPA
+  static_sites:
+    - name: chat
+      source_dir: apps/chat
+      build_command: npm ci && npm run build
+      output_dir: dist
+      environment_slug: node-js
+      routes:
+        - path: /
+      catchall_document: index.html
+      envs:
+        - key: VITE_AUTH_API_URL
+          scope: BUILD_TIME
+          value: ${relay.PUBLIC_URL}
+
+  # Service: CLASP Relay with auth
+  services:
+    - name: relay
+      source_dir: deploy/relay
+      dockerfile_path: Dockerfile
+      http_port: 7330
+      instance_count: 1
+      instance_size_slug: basic-xxs
+      routes:
+        - path: /ws
+      envs:
+        - key: RUST_LOG
+          value: info
+      run_command: clasp-relay --ws-port 7330 --auth-port 7350
+      health_check:
+        http_path: /
+        port: 7330

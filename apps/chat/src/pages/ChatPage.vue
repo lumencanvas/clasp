@@ -5,27 +5,34 @@ import { useClasp } from '../composables/useClasp.js'
 import { useIdentity } from '../composables/useIdentity.js'
 import { useRooms } from '../composables/useRooms.js'
 import { useNotifications } from '../composables/useNotifications.js'
+import { useFriends } from '../composables/useFriends.js'
 import { ROOM_TYPES } from '../lib/constants.js'
+import { useStorage } from '../composables/useStorage.js'
 import AppLayout from '../components/AppLayout.vue'
 import AppHeader from '../components/AppHeader.vue'
 import AppSidebar from '../components/AppSidebar.vue'
 import MemberList from '../components/MemberList.vue'
+import FriendList from '../components/FriendList.vue'
 import ChatView from '../components/ChatView.vue'
 import VideoChannelView from '../components/VideoChannelView.vue'
 import ComboChannelView from '../components/ComboChannelView.vue'
 import RoomCreateDialog from '../components/RoomCreateDialog.vue'
 import RoomDiscovery from '../components/RoomDiscovery.vue'
+import UserProfilePopup from '../components/UserProfilePopup.vue'
+import StatusPicker from '../components/StatusPicker.vue'
 
 const router = useRouter()
 const { connected, disconnect } = useClasp()
-const { displayName, announceProfile } = useIdentity()
+const { displayName, status, setStatus, announceProfile } = useIdentity()
 const {
   joinedRooms,
   joinedRoomIds,
+  dmRooms,
   currentRoomId,
   currentRoom,
   discoveredRooms,
   createRoom,
+  createDM,
   joinRoom,
   leaveRoom,
   switchRoom,
@@ -33,15 +40,42 @@ const {
   stopDiscovery,
 } = useRooms()
 const { unreadCounts, markRead, requestPermission } = useNotifications()
+const {
+  friendList,
+  pendingRequests,
+  requestCount,
+  init: initFriends,
+  cleanup: cleanupFriends,
+  acceptRequest,
+  declineRequest,
+  removeFriend,
+} = useFriends()
+
+const { exportData, importData } = useStorage()
+const importFileRef = ref(null)
 
 const showMembers = ref(true)
 const showCreateDialog = ref(false)
 const showBrowseDialog = ref(false)
+const showFriends = ref(false)
+const showStatusPicker = ref(false)
+const profileTarget = ref(null) // { userId, name, avatarColor, status }
 const layoutRef = ref(null)
 const chatViewRef = ref(null)
+const videoViewRef = ref(null)
+const comboViewRef = ref(null)
 
-const activeMemberList = computed(() => chatViewRef.value?.sortedParticipants ?? [])
-const activeOnlineCount = computed(() => chatViewRef.value?.onlineCount ?? 0)
+const activeViewRef = computed(() => {
+  if (!currentRoom.value) return null
+  const type = currentRoom.value.type
+  if (type === ROOM_TYPES.TEXT || type === ROOM_TYPES.DM) return chatViewRef.value
+  if (type === ROOM_TYPES.VIDEO) return videoViewRef.value
+  if (type === ROOM_TYPES.COMBO) return comboViewRef.value
+  return null
+})
+
+const activeMemberList = computed(() => activeViewRef.value?.sortedParticipants ?? [])
+const activeOnlineCount = computed(() => activeViewRef.value?.onlineCount ?? 0)
 
 // Redirect if not connected
 watch(connected, (val) => {
@@ -52,10 +86,6 @@ watch(connected, (val) => {
 watch(currentRoomId, (roomId) => {
   if (roomId) markRead(roomId)
 })
-
-// Chat members from current room's ChatView
-// (We don't have a separate presence composable here, ChatView manages its own)
-const currentRoomMembers = ref([])
 
 function handleSelectRoom(roomId) {
   switchRoom(roomId)
@@ -81,14 +111,51 @@ function handleBrowse() {
   showBrowseDialog.value = true
 }
 
+function handleOpenDM(targetUserId, targetName) {
+  const roomId = createDM(targetUserId, targetName)
+  if (roomId) {
+    switchRoom(roomId)
+    profileTarget.value = null
+    showFriends.value = false
+  }
+}
+
+function handleFriendMessage(friend) {
+  handleOpenDM(friend.id, friend.name)
+}
+
+function handleViewProfile(member) {
+  profileTarget.value = {
+    userId: member.id,
+    name: member.name,
+    avatarColor: member.avatarColor,
+    status: member.status,
+  }
+}
+
+function handleStatusChange(newStatus) {
+  setStatus(newStatus)
+  showStatusPicker.value = false
+}
+
+function handleExport() { exportData() }
+function handleImport() { importFileRef.value?.click() }
+async function handleImportFile(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  try {
+    await importData(file)
+  } catch { /* ignore */ }
+  e.target.value = ''
+}
+
 onMounted(() => {
   announceProfile()
   requestPermission()
+  initFriends()
 
-  // If we have previously joined rooms, discover them
   discoverPublicRooms()
 
-  // Auto-select first room if none selected
   if (!currentRoomId.value && joinedRooms.value.length > 0) {
     switchRoom(joinedRooms.value[0].id)
   }
@@ -96,20 +163,26 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopDiscovery()
+  cleanupFriends()
 })
 </script>
 
 <template>
-  <AppLayout ref="layoutRef" :show-members="showMembers && currentRoom">
+  <AppLayout ref="layoutRef" :show-members="showMembers && !!currentRoom && !showFriends">
     <template #sidebar="{ closeSidebar }">
       <AppSidebar
         :rooms="joinedRooms"
+        :dm-rooms="dmRooms"
         :current-room-id="currentRoomId"
         :unread-counts="unreadCounts"
         :connected="connected"
+        :request-count="requestCount"
         @select-room="handleSelectRoom"
+        @select-dm="handleSelectRoom"
         @create-room="showCreateDialog = true"
         @browse-rooms="handleBrowse"
+        @toggle-friends="showFriends = !showFriends"
+        @status-change="showStatusPicker = true"
       />
     </template>
 
@@ -127,16 +200,19 @@ onUnmounted(() => {
     <!-- Main content: channel view based on room type -->
     <template v-if="currentRoom">
       <ChatView
-        v-if="currentRoom.type === ROOM_TYPES.TEXT"
+        v-if="currentRoom.type === ROOM_TYPES.TEXT || currentRoom.type === ROOM_TYPES.DM"
         ref="chatViewRef"
         :room-id="currentRoomId"
+        :is-active="true"
       />
       <VideoChannelView
         v-else-if="currentRoom.type === ROOM_TYPES.VIDEO"
+        ref="videoViewRef"
         :room-id="currentRoomId"
       />
       <ComboChannelView
         v-else-if="currentRoom.type === ROOM_TYPES.COMBO"
+        ref="comboViewRef"
         :room-id="currentRoomId"
       />
     </template>
@@ -157,11 +233,32 @@ onUnmounted(() => {
             Browse Public
           </button>
         </div>
+        <div class="data-actions">
+          <button class="data-btn" @click="handleExport">Export Data</button>
+          <button class="data-btn" @click="handleImport">Import Data</button>
+          <input type="file" ref="importFileRef" accept=".json" style="display:none" @change="handleImportFile" />
+        </div>
       </div>
     </div>
 
     <template #members>
-      <MemberList :members="activeMemberList" />
+      <!-- Show friends panel or member list -->
+      <FriendList
+        v-if="showFriends"
+        :friends="friendList"
+        :pending-requests="pendingRequests"
+        @message="handleFriendMessage"
+        @accept="acceptRequest"
+        @decline="declineRequest"
+        @remove="removeFriend"
+        @view-profile="handleViewProfile"
+        @close="showFriends = false"
+      />
+      <MemberList
+        v-else
+        :members="activeMemberList"
+        @view-profile="handleViewProfile"
+      />
     </template>
   </AppLayout>
 
@@ -177,6 +274,21 @@ onUnmounted(() => {
     :joined-room-ids="joinedRoomIds"
     @join="handleBrowseJoin"
     @close="showBrowseDialog = false"
+  />
+  <UserProfilePopup
+    v-if="profileTarget"
+    :user-id="profileTarget.userId"
+    :name="profileTarget.name"
+    :avatar-color="profileTarget.avatarColor"
+    :status="profileTarget.status"
+    @close="profileTarget = null"
+    @send-dm="handleOpenDM"
+  />
+  <StatusPicker
+    v-if="showStatusPicker"
+    :current-status="status"
+    @select="handleStatusChange"
+    @close="showStatusPicker = false"
   />
 </template>
 
@@ -243,5 +355,29 @@ onUnmounted(() => {
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
   color: var(--text-primary);
+}
+
+.data-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+.data-btn {
+  padding: 0.4rem 0.8rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.data-btn:hover {
+  border-color: var(--text-muted);
+  color: var(--text-secondary);
 }
 </style>

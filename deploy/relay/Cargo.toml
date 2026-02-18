@@ -8,7 +8,7 @@
 
 [package]
 name = "clasp-relay"
-version = "3.3.0"
+version = "3.4.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "CLASP multi-protocol relay server"
@@ -53,3 +53,11 @@ anyhow = "1.0"
 
 # TLS certificate parsing (for QUIC)
 rustls-pemfile = { version = "2.0", optional = true }
+
+# Auth system
+axum = "0.8"
+argon2 = "0.5"
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tower-http = { version = "0.6", features = ["cors"] }

@@ -27,6 +27,12 @@ async function connect(displayName) {
       .features(['param', 'event', 'stream', 'gesture', 'timeline'])
       .reconnect(true)
 
+    // Attach auth token if available
+    const storedToken = localStorage.getItem('clasp-chat-token')
+    if (storedToken) {
+      builder.token(storedToken)
+    }
+
     const c = await builder.connect()
     client.value = c
     connected.value = true

@@ -6,6 +6,10 @@ export const router = createRouter({
   routes: [
     { path: '/', component: JoinPage },
     {
+      path: '/auth',
+      component: () => import('./pages/AuthPage.vue'),
+    },
+    {
       path: '/chat',
       component: () => import('./pages/ChatPage.vue'),
     },

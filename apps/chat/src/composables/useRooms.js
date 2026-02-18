@@ -1,7 +1,7 @@
 import { ref, computed, readonly } from 'vue'
 import { useClasp } from './useClasp.js'
 import { useIdentity } from './useIdentity.js'
-import { ADDR } from '../lib/constants.js'
+import { ADDR, ROOM_TYPES } from '../lib/constants.js'
 import { generateId } from '../lib/utils.js'
 
 const rooms = ref(new Map()) // roomId -> { id, name, type, isPublic, creatorId, creatorName, createdAt }
@@ -17,8 +17,15 @@ function persistJoined() {
 const joinedRooms = computed(() => {
   return [...joinedRoomIds.value]
     .map(id => rooms.value.get(id))
-    .filter(Boolean)
+    .filter(r => r && r.type !== ROOM_TYPES.DM)
     .sort((a, b) => a.name.localeCompare(b.name))
+})
+
+const dmRooms = computed(() => {
+  return [...joinedRoomIds.value]
+    .map(id => rooms.value.get(id))
+    .filter(r => r && r.type === ROOM_TYPES.DM)
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
 })
 
 const currentRoom = computed(() => {
@@ -101,6 +108,48 @@ function deleteRoom(roomId) {
   }
 }
 
+function createDM(targetUserId, targetName) {
+  const { set, connected } = useClasp()
+  const { userId, displayName } = useIdentity()
+  if (!connected.value || !targetUserId) return null
+
+  // Deterministic room ID from sorted user IDs
+  const ids = [userId.value, targetUserId].sort()
+  const roomId = `dm-${ids[0].slice(0, 8)}-${ids[1].slice(0, 8)}`
+
+  // If already exists, just switch to it
+  if (rooms.value.has(roomId)) {
+    return roomId
+  }
+
+  const roomData = {
+    name: targetName,
+    type: ROOM_TYPES.DM,
+    isPublic: false,
+    creatorId: userId.value,
+    creatorName: displayName.value,
+    createdAt: Date.now(),
+    dmUsers: {
+      [userId.value]: displayName.value,
+      [targetUserId]: targetName,
+    },
+  }
+
+  // Register in global registry
+  set(`${ADDR.ROOM_REGISTRY}/${roomId}`, roomData)
+
+  // Add locally
+  rooms.value.set(roomId, { id: roomId, ...roomData })
+  rooms.value = new Map(rooms.value)
+
+  // Auto-join
+  joinedRoomIds.value.add(roomId)
+  joinedRoomIds.value = new Set(joinedRoomIds.value)
+  persistJoined()
+
+  return roomId
+}
+
 function discoverPublicRooms() {
   const { subscribe, connected } = useClasp()
   if (!connected.value) return
@@ -151,10 +200,12 @@ export function useRooms() {
     rooms: readonly(rooms),
     joinedRoomIds: readonly(joinedRoomIds),
     joinedRooms,
+    dmRooms,
     currentRoomId,
     currentRoom,
     discoveredRooms: readonly(discoveredRooms),
     createRoom,
+    createDM,
     joinRoom,
     leaveRoom,
     switchRoom,

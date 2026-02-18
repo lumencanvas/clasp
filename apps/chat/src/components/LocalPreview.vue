@@ -7,9 +7,10 @@ const props = defineProps({
   error: { type: String, default: null },
 })
 
-const emit = defineEmits(['join', 'get-media'])
+const emit = defineEmits(['join-camera', 'join-audio', 'join-spectator'])
 
 const videoEl = ref(null)
+const cameraRequested = ref(false)
 
 function attachStream() {
   if (videoEl.value && props.stream) {
@@ -17,7 +18,10 @@ function attachStream() {
   }
 }
 
-watch(() => props.stream, attachStream)
+watch(() => props.stream, (s) => {
+  attachStream()
+  if (s) cameraRequested.value = true
+})
 onMounted(attachStream)
 </script>
 
@@ -43,22 +47,54 @@ onMounted(attachStream)
     <p v-if="error" class="error-text">{{ error }}</p>
 
     <div class="preview-actions">
-      <button
-        v-if="!stream"
-        class="preview-btn"
-        @click="emit('get-media')"
-        :disabled="loading"
-      >
-        <span v-if="loading" class="spinner"></span>
-        <span v-else>Enable Camera</span>
-      </button>
-      <button
-        v-else
-        class="preview-btn join"
-        @click="emit('join')"
-      >
-        Join Video
-      </button>
+      <!-- If camera stream is already active, show simple Join button -->
+      <template v-if="stream">
+        <button class="preview-btn join" @click="emit('join-camera')">
+          Join Video
+        </button>
+      </template>
+
+      <!-- Otherwise show three options -->
+      <template v-else>
+        <button
+          class="preview-btn join"
+          @click="emit('join-camera')"
+          :disabled="loading"
+        >
+          <span v-if="loading" class="spinner"></span>
+          <template v-else>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="23 7 16 12 23 17 23 7"/>
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+            </svg>
+            Join with Camera
+          </template>
+        </button>
+        <button
+          class="preview-btn audio-btn"
+          @click="emit('join-audio')"
+          :disabled="loading"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+          Join with Audio
+        </button>
+        <button
+          class="preview-btn"
+          @click="emit('join-spectator')"
+          :disabled="loading"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          Spectate
+        </button>
+      </template>
     </div>
   </div>
 </template>
@@ -118,17 +154,28 @@ onMounted(attachStream)
 .preview-actions {
   display: flex;
   gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .preview-btn {
   min-height: 44px;
-  padding: 0.75rem 1.5rem;
+  padding: 0.75rem 1.25rem;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text-primary);
   font-size: 0.85rem;
   transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.preview-btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 
 .preview-btn:hover {
@@ -142,6 +189,16 @@ onMounted(attachStream)
 }
 
 .preview-btn.join:hover {
+  opacity: 0.9;
+}
+
+.preview-btn.audio-btn {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.preview-btn.audio-btn:hover {
   opacity: 0.9;
 }
 

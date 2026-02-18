@@ -17,21 +17,41 @@
 //! # WebSocket + MQTT
 //! clasp-relay --mqtt-port 1883
 //!
-//! # WebSocket + QUIC (requires cert/key)
-//! clasp-relay --quic-port 7331 --cert cert.pem --key key.pem
+//! # With auth enabled
+//! clasp-relay --auth-port 7350
 //!
 //! # All protocols
 //! clasp-relay --mqtt-port 1883 --osc-port 8000 --quic-port 7331 --cert cert.pem --key key.pem
 //! ```
 
+mod auth;
+
 use anyhow::Result;
 use clap::Parser;
+use clasp_core::security::{CpskValidator, TokenValidator, ValidationResult};
 use clasp_core::SecurityMode;
 use clasp_router::{MultiProtocolConfig, Router, RouterConfig, RouterStateConfig};
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 use tracing_subscriber::EnvFilter;
+
+/// Wrapper to share a CpskValidator between the router and auth module.
+/// Both hold Arc<CpskValidator> pointing to the same instance.
+struct SharedValidator(Arc<CpskValidator>);
+
+impl TokenValidator for SharedValidator {
+    fn validate(&self, token: &str) -> ValidationResult {
+        self.0.validate(token)
+    }
+    fn name(&self) -> &str {
+        self.0.name()
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
 
 #[cfg(feature = "rendezvous")]
 use clasp_discovery::rendezvous::{RendezvousConfig, RendezvousServer};
@@ -56,6 +76,14 @@ struct Cli {
     /// Enable verbose logging
     #[arg(short, long)]
     verbose: bool,
+
+    /// Auth HTTP server port (enables authentication)
+    #[arg(long)]
+    auth_port: Option<u16>,
+
+    /// Auth database path
+    #[arg(long, default_value = "chat-auth.db")]
+    auth_db: String,
 
     /// QUIC listen port (enables QUIC transport, requires --cert and --key)
     #[arg(long)]
@@ -168,10 +196,18 @@ async fn main() -> Result<()> {
         }
     };
 
+    // Determine security mode based on auth
+    let auth_enabled = cli.auth_port.is_some();
+    let security_mode = if auth_enabled {
+        SecurityMode::Authenticated
+    } else {
+        SecurityMode::Open
+    };
+
     // Create router configuration
     let config = RouterConfig {
         name: cli.name.clone(),
-        security_mode: SecurityMode::Open,
+        security_mode,
         max_sessions: cli.max_sessions,
         session_timeout: cli.session_timeout,
         features: vec![
@@ -184,12 +220,33 @@ async fn main() -> Result<()> {
         max_subscriptions_per_session: 100,
         gesture_coalescing: true,
         gesture_coalesce_interval_ms: 16,
-        max_messages_per_second: 0, // No rate limiting for public relay
-        rate_limiting_enabled: false,
+        max_messages_per_second: if auth_enabled { 30 } else { 0 },
+        rate_limiting_enabled: auth_enabled,
         state_config,
     };
 
-    let router = Router::new(config);
+    let mut router = Router::new(config);
+
+    // Create shared validator and start auth HTTP server if enabled
+    if let Some(auth_port) = cli.auth_port {
+        let validator = Arc::new(CpskValidator::new());
+        router.set_validator(SharedValidator(Arc::clone(&validator)));
+
+        let auth_state = Arc::new(
+            auth::AuthState::new(&cli.auth_db, validator)
+                .expect("Failed to initialize auth database"),
+        );
+        let auth_app = auth::auth_router(auth_state);
+        let auth_addr: SocketAddr = format!("{}:{}", cli.host, auth_port).parse()?;
+        tracing::info!("Auth HTTP: http://{}", auth_addr);
+
+        let listener = tokio::net::TcpListener::bind(auth_addr).await?;
+        tokio::spawn(async move {
+            if let Err(e) = axum::serve(listener, auth_app).await {
+                tracing::error!("Auth server error: {}", e);
+            }
+        });
+    }
 
     // Build multi-protocol configuration
     let mut protocols = Vec::new();
@@ -251,7 +308,7 @@ async fn main() -> Result<()> {
     };
 
     #[cfg(not(feature = "quic"))]
-    let quic_config: Option<()> = None;
+    let _quic_config: Option<()> = None;
 
     // MQTT
     #[cfg(feature = "mqtt-server")]
@@ -273,7 +330,7 @@ async fn main() -> Result<()> {
     };
 
     #[cfg(not(feature = "mqtt-server"))]
-    let mqtt_config: Option<()> = None;
+    let _mqtt_config: Option<()> = None;
 
     // OSC
     #[cfg(feature = "osc-server")]
@@ -293,7 +350,7 @@ async fn main() -> Result<()> {
     };
 
     #[cfg(not(feature = "osc-server"))]
-    let osc_config: Option<()> = None;
+    let _osc_config: Option<()> = None;
 
     if protocols.is_empty() {
         anyhow::bail!("No protocols enabled. Enable at least one of: WebSocket, QUIC, MQTT, OSC");
@@ -306,6 +363,7 @@ async fn main() -> Result<()> {
         cli.max_sessions,
         cli.session_timeout
     );
+    tracing::info!("Security: {:?}", if auth_enabled { "Authenticated" } else { "Open" });
     if cli.no_ttl {
         tracing::info!("TTL: disabled (unlimited parameter lifetime)");
     } else {

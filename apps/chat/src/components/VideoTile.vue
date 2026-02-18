@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue'
+import UserAvatar from './UserAvatar.vue'
 
 const props = defineProps({
   stream: { type: MediaStream, default: null },
@@ -8,6 +9,8 @@ const props = defineProps({
   audioEnabled: { type: Boolean, default: true },
   videoEnabled: { type: Boolean, default: true },
   isLocal: { type: Boolean, default: false },
+  isScreenShare: { type: Boolean, default: false },
+  avatarColor: { type: String, default: null },
 })
 
 const videoEl = ref(null)
@@ -26,15 +29,14 @@ onMounted(attachStream)
   <div :class="['video-tile', { local: isLocal }]">
     <video
       ref="videoEl"
+      :class="{ mirrored: isLocal && !isScreenShare }"
       autoplay
       playsinline
       :muted="muted || isLocal"
     ></video>
 
-    <div v-if="!videoEnabled" class="video-off-overlay">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
-      </svg>
+    <div v-if="!videoEnabled || !stream" class="video-off-overlay">
+      <UserAvatar :name="name" :color="avatarColor" :size="64" />
     </div>
 
     <div class="tile-overlay">
@@ -48,7 +50,8 @@ onMounted(attachStream)
           <line x1="8" y1="23" x2="16" y2="23"/>
         </svg>
         <svg v-if="!videoEnabled" class="indicator-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+          <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10"/>
+          <line x1="1" y1="1" x2="23" y2="23"/>
         </svg>
       </div>
     </div>
@@ -70,7 +73,7 @@ onMounted(attachStream)
   object-fit: cover;
 }
 
-.video-tile.local video {
+.video-tile video.mirrored {
   transform: scaleX(-1);
 }
 
@@ -81,12 +84,6 @@ onMounted(attachStream)
   align-items: center;
   justify-content: center;
   background: var(--bg-tertiary);
-}
-
-.video-off-overlay svg {
-  width: 48px;
-  height: 48px;
-  color: var(--text-muted);
 }
 
 .tile-overlay {

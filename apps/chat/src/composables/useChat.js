@@ -1,23 +1,41 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useClasp } from './useClasp.js'
 import { useIdentity } from './useIdentity.js'
+import { useNotifications } from './useNotifications.js'
 import { ADDR, TTL } from '../lib/constants.js'
+import { executeCommand, initBuiltinPlugins, getRegisteredCommands } from '../lib/plugins.js'
+import { useStorage } from './useStorage.js'
+import { useCrypto } from './useCrypto.js'
 
 /**
  * Per-room chat composable
+ * @param {Ref<string>} roomId
+ * @param {Ref<boolean>} [isActive] - whether this room is currently visible
  */
-export function useChat(roomId) {
+export function useChat(roomId, isActive) {
   const { connected, sessionId, subscribe, emit, set } = useClasp()
   const { userId, displayName, avatarColor } = useIdentity()
+  const { incrementUnread, notifyMessage } = useNotifications()
+  const { loadCachedMessages, persistMessage } = useStorage()
+  const { encrypt, decrypt, isEncrypted, loadRoomKey, subscribeKeyExchange } = useCrypto()
 
   const messages = ref([])
   const participants = ref(new Map())
   const typingUsers = ref(new Map())
   const isTyping = ref(false)
+  const replyTo = ref(null) // { id, from, text } or null
+  const editingMessage = ref(null) // message object or null
+  const isThrottled = ref(false)
+
+  // Rate limiting: max 5 messages per second
+  const MSG_RATE_LIMIT = 5
+  const MSG_RATE_WINDOW = 1000
+  let messageTimes = []
 
   let unsubMessages = null
   let unsubPresence = null
   let unsubTyping = null
+  let unsubCrypto = null
   let presenceInterval = null
   let typingTimeout = null
   let pruneInterval = null
@@ -36,23 +54,76 @@ export function useChat(roomId) {
 
   const onlineCount = computed(() => participants.value.size)
 
-  function joinChat() {
+  async function handleIncomingMessage(payload) {
+    if (!payload || typeof payload !== 'object') return
+
+    // Decrypt if encrypted
+    if (payload.encrypted && payload.iv) {
+      const plaintext = await decrypt(roomId.value, payload.text, payload.iv)
+      if (plaintext !== null) {
+        payload = { ...payload, text: plaintext }
+      }
+    }
+
+    // Handle edit messages
+    if (payload.type === 'edit') {
+      if (payload.fromId === sessionId.value) return
+      const idx = messages.value.findIndex(m => m.msgId === payload.targetId)
+      if (idx !== -1) {
+        messages.value[idx] = { ...messages.value[idx], text: payload.text, edited: true }
+      }
+      return
+    }
+
+    // Handle delete messages
+    if (payload.type === 'delete') {
+      if (payload.fromId === sessionId.value) return
+      const idx = messages.value.findIndex(m => m.msgId === payload.targetId)
+      if (idx !== -1) {
+        messages.value.splice(idx, 1)
+      }
+      return
+    }
+
+    // Skip own messages (already added optimistically)
+    if (payload.fromId === sessionId.value) return
+
+    const msgObj = {
+      id: Date.now() + Math.random(),
+      type: 'message',
+      ...payload,
+    }
+    messages.value.push(msgObj)
+
+    // Persist to IndexedDB
+    persistMessage(roomId.value, payload)
+
+    // Fire unread notification if this room is not active
+    if (isActive && !isActive.value) {
+      incrementUnread(roomId.value)
+      notifyMessage(roomId.value, payload.from, payload.text || '')
+    }
+  }
+
+  async function joinChat() {
     if (!connected.value || !roomId.value) return
 
     const rid = roomId.value
 
-    // Subscribe to messages (EMIT)
-    unsubMessages = subscribe(`${ADDR.ROOM}/${rid}/messages`, (payload) => {
-      if (!payload || typeof payload !== 'object') return
-      // Skip own messages (already added optimistically)
-      if (payload.fromId === sessionId.value) return
+    // Load cached messages from IndexedDB
+    try {
+      const cached = await loadCachedMessages(rid)
+      if (cached.length > 0) {
+        const seen = new Set(messages.value.map(m => m.msgId).filter(Boolean))
+        const toAdd = cached
+          .filter(m => m.msgId && !seen.has(m.msgId))
+          .map(m => ({ id: Date.now() + Math.random(), type: 'message', ...m }))
+        messages.value = [...toAdd, ...messages.value]
+      }
+    } catch { /* ignore storage errors */ }
 
-      messages.value.push({
-        id: Date.now() + Math.random(),
-        type: 'message',
-        ...payload,
-      })
-    })
+    // Subscribe to messages (EMIT)
+    unsubMessages = subscribe(`${ADDR.ROOM}/${rid}/messages`, handleIncomingMessage)
 
     // Subscribe to presence (SET with wildcard)
     unsubPresence = subscribe(`${ADDR.ROOM}/${rid}/presence/*`, (data, address) => {
@@ -91,6 +162,10 @@ export function useChat(roomId) {
       typingUsers.value = new Map(typingUsers.value)
     })
 
+    // Setup crypto key exchange for this room
+    loadRoomKey(rid).catch(() => {})
+    unsubCrypto = subscribeKeyExchange(rid)
+
     // Announce presence
     announcePresence()
     presenceInterval = setInterval(() => {
@@ -111,32 +186,93 @@ export function useChat(roomId) {
     if (unsubMessages) { unsubMessages(); unsubMessages = null }
     if (unsubPresence) { unsubPresence(); unsubPresence = null }
     if (unsubTyping) { unsubTyping(); unsubTyping = null }
+    if (unsubCrypto) { unsubCrypto(); unsubCrypto = null }
     if (presenceInterval) { clearInterval(presenceInterval); presenceInterval = null }
     if (pruneInterval) { clearInterval(pruneInterval); pruneInterval = null }
     if (typingTimeout) { clearTimeout(typingTimeout); typingTimeout = null }
 
     // Clear our presence and typing
-    if (connected.value && sessionId.value && rid) {
-      set(`${ADDR.ROOM}/${rid}/presence/${sessionId.value}`, null)
-      set(`${ADDR.ROOM}/${rid}/typing/${sessionId.value}`, null)
+    if (connected.value && userId.value && rid) {
+      set(`${ADDR.ROOM}/${rid}/presence/${userId.value}`, null)
+      set(`${ADDR.ROOM}/${rid}/typing/${userId.value}`, null)
     }
 
     messages.value = []
     participants.value = new Map()
     typingUsers.value = new Map()
     isTyping.value = false
+    replyTo.value = null
+    editingMessage.value = null
   }
 
-  function sendMessage(text) {
-    if (!connected.value || !text.trim() || !roomId.value) return
+  // Initialize plugins once
+  let pluginsInitialized = false
+  function ensurePlugins() {
+    if (pluginsInitialized) return
+    pluginsInitialized = true
+    initBuiltinPlugins({
+      sendMessage: (t) => sendMessage(t),
+      getCurrentRoom: () => roomId.value,
+      getUser: () => ({ userId: userId.value, displayName: displayName.value }),
+    })
+  }
+
+  async function sendMessage(text, { image } = {}) {
+    if (!connected.value || !roomId.value) return
+    if (!text.trim() && !image) return
+
+    // Client-side rate limiting
+    const now = Date.now()
+    messageTimes = messageTimes.filter(t => now - t < MSG_RATE_WINDOW)
+    if (messageTimes.length >= MSG_RATE_LIMIT) {
+      isThrottled.value = true
+      setTimeout(() => { isThrottled.value = false }, MSG_RATE_WINDOW)
+      addSystemMessage('Slow down! You are sending messages too fast.')
+      return
+    }
+    messageTimes.push(now)
+
+    // Route slash commands to plugin system
+    if (text.startsWith('/') && !image) {
+      ensurePlugins()
+      const handled = executeCommand(text, {
+        sendMessage: (t) => sendMessage(t),
+        roomId: roomId.value,
+        userId: userId.value,
+        displayName: displayName.value,
+      })
+      if (handled) {
+        stopTyping()
+        return
+      }
+    }
+
+    const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
     const msgData = {
       from: displayName.value,
       fromId: sessionId.value,
+      msgId,
       text: text.trim(),
       timestamp: Date.now(),
       avatarColor: avatarColor.value,
       type: 'text',
+    }
+
+    // Attach reply reference
+    if (replyTo.value) {
+      msgData.replyTo = {
+        msgId: replyTo.value.msgId,
+        from: replyTo.value.from,
+        text: (replyTo.value.text || '').slice(0, 100),
+      }
+      replyTo.value = null
+    }
+
+    // Attach image data
+    if (image) {
+      msgData.image = image
+      msgData.type = 'image'
     }
 
     // Add optimistically
@@ -146,11 +282,76 @@ export function useChat(roomId) {
       ...msgData,
     })
 
+    // Persist own message to IndexedDB
+    persistMessage(roomId.value, msgData)
+
+    // Encrypt if room is encrypted
+    let emitData = msgData
+    if (isEncrypted(roomId.value)) {
+      const encrypted = await encrypt(roomId.value, msgData.text)
+      if (encrypted) {
+        emitData = { ...msgData, text: encrypted.ciphertext, iv: encrypted.iv, encrypted: true }
+      }
+    }
+
     // Emit to server
-    emit(`${ADDR.ROOM}/${roomId.value}/messages`, msgData)
+    emit(`${ADDR.ROOM}/${roomId.value}/messages`, emitData)
 
     // Clear typing
     stopTyping()
+  }
+
+  function editMessage(msgId, newText) {
+    if (!connected.value || !roomId.value || !newText.trim()) return
+
+    // Update locally
+    const idx = messages.value.findIndex(m => m.msgId === msgId)
+    if (idx !== -1) {
+      messages.value[idx] = { ...messages.value[idx], text: newText.trim(), edited: true }
+    }
+
+    // Emit edit to peers
+    emit(`${ADDR.ROOM}/${roomId.value}/messages`, {
+      type: 'edit',
+      fromId: sessionId.value,
+      targetId: msgId,
+      text: newText.trim(),
+      timestamp: Date.now(),
+    })
+
+    editingMessage.value = null
+  }
+
+  function deleteMessage(msgId) {
+    if (!connected.value || !roomId.value) return
+
+    // Remove locally
+    const idx = messages.value.findIndex(m => m.msgId === msgId)
+    if (idx !== -1) {
+      messages.value.splice(idx, 1)
+    }
+
+    // Emit delete to peers
+    emit(`${ADDR.ROOM}/${roomId.value}/messages`, {
+      type: 'delete',
+      fromId: sessionId.value,
+      targetId: msgId,
+      timestamp: Date.now(),
+    })
+  }
+
+  function setReplyTo(message) {
+    editingMessage.value = null
+    replyTo.value = message ? { msgId: message.msgId, from: message.from, text: message.text } : null
+  }
+
+  function startEditing(message) {
+    replyTo.value = null
+    editingMessage.value = message
+  }
+
+  function cancelEditing() {
+    editingMessage.value = null
   }
 
   function handleTyping() {
@@ -158,7 +359,7 @@ export function useChat(roomId) {
 
     if (!isTyping.value) {
       isTyping.value = true
-      set(`${ADDR.ROOM}/${roomId.value}/typing/${sessionId.value}`, {
+      set(`${ADDR.ROOM}/${roomId.value}/typing/${userId.value}`, {
         name: displayName.value,
         timestamp: Date.now(),
       })
@@ -173,7 +374,7 @@ export function useChat(roomId) {
   function stopTyping() {
     if (isTyping.value && connected.value && sessionId.value && roomId.value) {
       isTyping.value = false
-      set(`${ADDR.ROOM}/${roomId.value}/typing/${sessionId.value}`, null)
+      set(`${ADDR.ROOM}/${roomId.value}/typing/${userId.value}`, null)
     }
     clearTimeout(typingTimeout)
   }
@@ -230,8 +431,17 @@ export function useChat(roomId) {
     typingUsers,
     typingList,
     onlineCount,
+    replyTo,
+    editingMessage,
     sendMessage,
+    editMessage,
+    deleteMessage,
+    setReplyTo,
+    startEditing,
+    cancelEditing,
     handleTyping,
     leaveChat,
+    isThrottled,
+    getRegisteredCommands() { ensurePlugins(); return getRegisteredCommands() },
   }
 }

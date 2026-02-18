@@ -3,11 +3,11 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useClasp } from '../composables/useClasp.js'
 import { useIdentity } from '../composables/useIdentity.js'
-import { AVATAR_COLORS, DEFAULT_RELAY_URL } from '../lib/constants.js'
+import { AVATAR_COLORS, USER_STATUSES, DEFAULT_RELAY_URL } from '../lib/constants.js'
 
 const router = useRouter()
 const { connecting, connected, error, url, connect } = useClasp()
-const { displayName, avatarColor, setDisplayName, setAvatarColor } = useIdentity()
+const { displayName, avatarColor, status, setDisplayName, setAvatarColor, setStatus } = useIdentity()
 
 const nameInput = ref(displayName.value)
 const serverUrl = ref(url.value)
@@ -60,6 +60,22 @@ async function handleConnect() {
               :style="{ background: color }"
               @click="setAvatarColor(color)"
             />
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Status</label>
+          <div class="status-picker">
+            <button
+              v-for="s in USER_STATUSES"
+              :key="s.value"
+              type="button"
+              :class="['status-option', { active: status === s.value }]"
+              @click="setStatus(s.value)"
+            >
+              <span class="status-swatch" :style="{ background: s.color }"></span>
+              {{ s.label }}
+            </button>
           </div>
         </div>
 
@@ -193,6 +209,43 @@ async function handleConnect() {
 .color-swatch.active {
   border-color: var(--text-primary);
   transform: scale(1.15);
+}
+
+.status-picker {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.status-option {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.status-option:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.status-option.active {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.status-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .connect-btn {

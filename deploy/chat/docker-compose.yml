@@ -1,0 +1,21 @@
+services:
+  relay:
+    build: ../relay
+    ports:
+      - "7330:7330"
+      - "7350:7350"
+    environment:
+      RUST_LOG: info
+    command: ["--auth-port", "7350"]
+    volumes:
+      - relay-data:/data
+
+  chat:
+    build: ../../apps/chat
+    ports:
+      - "80:80"
+    depends_on:
+      - relay
+
+volumes:
+  relay-data:

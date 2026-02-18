@@ -1,7 +1,9 @@
 <script setup>
-import { ref, toRef } from 'vue'
+import { ref, computed, toRef } from 'vue'
 import { useVideoRoom } from '../composables/useVideoRoom.js'
+import { useVideoLayout } from '../composables/useVideoLayout.js'
 import { useChat } from '../composables/useChat.js'
+import { useReactions } from '../composables/useReactions.js'
 import { useIdentity } from '../composables/useIdentity.js'
 import LocalPreview from './LocalPreview.vue'
 import VideoGrid from './VideoGrid.vue'
@@ -15,15 +17,26 @@ const props = defineProps({
 })
 
 const roomIdRef = toRef(props, 'roomId')
-const { displayName } = useIdentity()
+const { displayName, avatarColor } = useIdentity()
 
 // Chat composable
 const {
   messages,
+  sortedParticipants: chatParticipants,
   typingList,
+  replyTo,
+  editingMessage,
   sendMessage,
+  editMessage,
+  deleteMessage,
+  setReplyTo,
+  startEditing,
+  cancelEditing,
   handleTyping,
 } = useChat(roomIdRef)
+
+// Reactions composable
+const { toggleReaction, getMessageReactions } = useReactions(roomIdRef)
 
 // Video composable
 const {
@@ -31,9 +44,12 @@ const {
   inVideo,
   audioEnabled,
   videoEnabled,
+  isScreenSharing,
   error: videoError,
   peerList,
+  participantList,
   getUserMedia,
+  getAudioOnly,
   joinVideo,
   leaveVideo,
   toggleAudio,
@@ -42,21 +58,69 @@ const {
   stopUserMedia,
 } = useVideoRoom(roomIdRef)
 
+const { layout, spotlightPeer, setLayout } = useVideoLayout(isScreenSharing)
+
 const mediaLoading = ref(false)
 const videoCollapsed = ref(false)
 
-async function handleGetMedia() {
+// Merge chat + video participants for member list
+const sortedParticipants = computed(() => {
+  const merged = new Map()
+  for (const p of chatParticipants.value) {
+    merged.set(p.id, p)
+  }
+  for (const p of participantList.value) {
+    if (!merged.has(p.id)) {
+      merged.set(p.id, { id: p.id, name: p.name, avatarColor: p.avatarColor })
+    }
+  }
+  return Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name))
+})
+
+const onlineCount = computed(() => {
+  const ids = new Set()
+  for (const p of chatParticipants.value) ids.add(p.id)
+  for (const p of participantList.value) ids.add(p.id)
+  return ids.size + 1
+})
+
+defineExpose({ sortedParticipants, onlineCount })
+
+async function handleJoinCamera() {
   mediaLoading.value = true
-  try { await getUserMedia() } finally { mediaLoading.value = false }
+  try {
+    if (!localStream.value) await getUserMedia()
+    await joinVideo()
+  } finally {
+    mediaLoading.value = false
+  }
 }
 
-async function handleJoinVideo() {
+async function handleJoinAudio() {
+  mediaLoading.value = true
+  try {
+    await getAudioOnly()
+    await joinVideo()
+  } finally {
+    mediaLoading.value = false
+  }
+}
+
+async function handleJoinSpectator() {
   await joinVideo()
 }
 
 function handleLeaveVideo() {
   leaveVideo()
   stopUserMedia()
+}
+
+function handleSend(text) {
+  sendMessage(text)
+}
+
+function handleSendImage(dataUrl) {
+  sendMessage('', { image: dataUrl })
 }
 </script>
 
@@ -72,14 +136,15 @@ function handleLeaveVideo() {
         {{ videoCollapsed ? 'Show Video' : 'Hide Video' }}
       </button>
 
-      <div v-show="!videoCollapsed" class="video-area">
+      <div v-if="!videoCollapsed" class="video-area">
         <LocalPreview
           v-if="!inVideo"
           :stream="localStream"
           :loading="mediaLoading"
           :error="videoError"
-          @get-media="handleGetMedia"
-          @join="handleJoinVideo"
+          @join-camera="handleJoinCamera"
+          @join-audio="handleJoinAudio"
+          @join-spectator="handleJoinSpectator"
         />
         <template v-else>
           <VideoGrid
@@ -87,14 +152,21 @@ function handleLeaveVideo() {
             :local-name="displayName"
             :audio-enabled="audioEnabled"
             :video-enabled="videoEnabled"
+            :is-screen-share="isScreenSharing"
+            :avatar-color="avatarColor"
             :peers="peerList"
+            :layout="layout"
+            :spotlight-peer="spotlightPeer"
           />
           <VideoControls
             :audio-enabled="audioEnabled"
             :video-enabled="videoEnabled"
+            :is-screen-sharing="isScreenSharing"
+            :layout="layout"
             @toggle-audio="toggleAudio"
             @toggle-video="toggleVideo"
             @share-screen="shareScreen"
+            @set-layout="setLayout"
             @leave="handleLeaveVideo"
           />
         </template>
@@ -103,11 +175,24 @@ function handleLeaveVideo() {
 
     <!-- Chat section -->
     <div class="combo-chat">
-      <MessageList :messages="messages" />
+      <MessageList
+        :messages="messages"
+        :get-reactions="getMessageReactions"
+        @reply="setReplyTo"
+        @edit="startEditing"
+        @delete="deleteMessage"
+        @react="toggleReaction"
+      />
       <TypingIndicator :users="typingList" />
       <MessageComposer
-        @send="sendMessage"
+        :reply-to="replyTo"
+        :editing-message="editingMessage"
+        @send="handleSend"
+        @send-image="handleSendImage"
         @typing="handleTyping"
+        @cancel-reply="setReplyTo(null)"
+        @cancel-edit="cancelEditing"
+        @save-edit="editMessage"
       />
     </div>
   </div>
@@ -188,10 +273,6 @@ function handleLeaveVideo() {
 
   .combo-chat {
     flex: 1;
-  }
-
-  .collapse-toggle {
-    display: none;
   }
 
   .combo-video.collapsed {

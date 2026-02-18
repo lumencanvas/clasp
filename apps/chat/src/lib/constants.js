@@ -3,7 +3,12 @@ export const ADDR = {
   USER_PROFILE: '/chat/user',
   ROOM_REGISTRY: '/chat/registry/rooms',
   ROOM: '/chat/room',
+  REQUESTS: '/chat/requests',
+  CRYPTO: '/chat/room', // crypto paths: /chat/room/{rid}/crypto/...
 }
+
+// Auth API URL (set via env or default for local dev)
+export const AUTH_API_URL = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:7350'
 
 // TTL values (milliseconds)
 export const TTL = {
@@ -33,6 +38,7 @@ export const ROOM_TYPES = {
   TEXT: 'text',
   VIDEO: 'video',
   COMBO: 'combo',
+  DM: 'dm',
 }
 
 // Room type labels and icons
@@ -40,7 +46,16 @@ export const ROOM_TYPE_INFO = {
   text: { label: 'Text', icon: '#' },
   video: { label: 'Video', icon: 'cam' },
   combo: { label: 'Combo', icon: 'layout' },
+  dm: { label: 'DM', icon: 'dm' },
 }
+
+// User status options
+export const USER_STATUSES = [
+  { value: 'online', label: 'Online', color: '#2a9d8f' },
+  { value: 'away', label: 'Away', color: '#f77f00' },
+  { value: 'dnd', label: 'Do Not Disturb', color: '#e63946' },
+  { value: 'invisible', label: 'Invisible', color: '#6b7280' },
+]
 
 // Default relay URL
 export const DEFAULT_RELAY_URL = 'wss://relay.clasp.to'

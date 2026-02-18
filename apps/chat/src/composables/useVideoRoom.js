@@ -19,6 +19,7 @@ export function useVideoRoom(roomId) {
   const inVideo = ref(false)
   const audioEnabled = ref(true)
   const videoEnabled = ref(true)
+  const isScreenSharing = ref(false)
   const error = ref(null)
   const peers = reactive(new Map())
   const participants = ref(new Map())
@@ -60,6 +61,18 @@ export function useVideoRoom(roomId) {
     }
   }
 
+  async function getAudioOnly() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      localStream.value = stream
+      videoEnabled.value = false
+      return stream
+    } catch (e) {
+      error.value = `Microphone access failed: ${e.message}`
+      throw e
+    }
+  }
+
   function stopUserMedia() {
     if (localStream.value) {
       localStream.value.getTracks().forEach(t => t.stop())
@@ -70,10 +83,6 @@ export function useVideoRoom(roomId) {
   async function joinVideo() {
     if (!connected.value || !sessionId.value || !roomId.value) {
       error.value = 'Not connected'
-      return false
-    }
-    if (!localStream.value) {
-      error.value = 'No local media stream'
       return false
     }
 
@@ -187,6 +196,11 @@ export function useVideoRoom(roomId) {
       localStream.value.getTracks().forEach(track => {
         connection.addTrack(track, localStream.value)
       })
+    } else {
+      // Spectator: add recvonly transceivers so SDP includes media sections
+      // and we can receive remote audio/video
+      connection.addTransceiver('audio', { direction: 'recvonly' })
+      connection.addTransceiver('video', { direction: 'recvonly' })
     }
 
     connection.ontrack = (event) => {
@@ -347,6 +361,7 @@ export function useVideoRoom(roomId) {
       const screenTrack = screenStream.getVideoTracks()[0]
 
       screenTrack.onended = async () => {
+        isScreenSharing.value = false
         try {
           const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true })
           await replaceVideoTrack(cameraStream.getVideoTracks()[0])
@@ -356,6 +371,7 @@ export function useVideoRoom(roomId) {
       }
 
       await replaceVideoTrack(screenTrack)
+      isScreenSharing.value = true
     } catch (e) {
       error.value = `Screen share failed: ${e.message}`
     }
@@ -379,11 +395,13 @@ export function useVideoRoom(roomId) {
     inVideo,
     audioEnabled,
     videoEnabled,
+    isScreenSharing,
     error,
     peers,
     peerList,
     participantList,
     getUserMedia,
+    getAudioOnly,
     stopUserMedia,
     joinVideo,
     leaveVideo,

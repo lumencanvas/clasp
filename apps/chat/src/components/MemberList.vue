@@ -4,6 +4,8 @@ import MemberItem from './MemberItem.vue'
 const props = defineProps({
   members: { type: Array, default: () => [] },
 })
+
+const emit = defineEmits(['view-profile'])
 </script>
 
 <template>
@@ -22,6 +24,7 @@ const props = defineProps({
         v-for="member in members"
         :key="member.id"
         :member="member"
+        @view-profile="emit('view-profile', $event)"
       />
     </div>
   </div>

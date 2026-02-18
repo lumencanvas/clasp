@@ -16,6 +16,7 @@ const displayName = ref(localStorage.getItem('clasp-chat-displayName') || '')
 const avatarColor = ref(
   localStorage.getItem('clasp-chat-avatarColor') || AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)]
 )
+const status = ref(localStorage.getItem('clasp-chat-status') || 'online')
 
 function setDisplayName(name) {
   displayName.value = name
@@ -27,6 +28,12 @@ function setAvatarColor(color) {
   localStorage.setItem('clasp-chat-avatarColor', color)
 }
 
+function setStatus(newStatus) {
+  status.value = newStatus
+  localStorage.setItem('clasp-chat-status', newStatus)
+  announceProfile()
+}
+
 function announceProfile() {
   const { set, connected } = useClasp()
   if (!connected.value) return
@@ -34,6 +41,7 @@ function announceProfile() {
     name: displayName.value,
     avatarColor: avatarColor.value,
     userId: userId.value,
+    status: status.value,
   })
 }
 
@@ -42,8 +50,10 @@ export function useIdentity() {
     userId,
     displayName,
     avatarColor,
+    status,
     setDisplayName,
     setAvatarColor,
+    setStatus,
     announceProfile,
   }
 }

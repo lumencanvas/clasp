@@ -5,7 +5,10 @@ import SystemMessage from './SystemMessage.vue'
 
 const props = defineProps({
   messages: { type: Array, default: () => [] },
+  getReactions: { type: Function, default: null },
 })
+
+const emit = defineEmits(['reply', 'edit', 'delete', 'react'])
 
 const scrollContainer = ref(null)
 
@@ -51,6 +54,11 @@ defineExpose({ scrollToBottom })
         v-else
         :message="msg"
         :grouped="isGrouped(idx)"
+        :reactions="getReactions ? getReactions(msg.msgId) : []"
+        @reply="emit('reply', $event)"
+        @edit="emit('edit', $event)"
+        @delete="emit('delete', $event)"
+        @react="(msgId, emoji) => emit('react', msgId, emoji)"
       />
     </template>
   </div>

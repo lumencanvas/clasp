@@ -75,6 +75,18 @@ input::placeholder, textarea::placeholder {
   background: rgba(255,255,255,0.2);
 }
 
+/* Message links */
+.message-bubble a {
+  color: var(--accent2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+
+.message-bubble a:hover {
+  color: var(--accent3);
+}
+
 /* Transitions */
 .fade-enter-active,
 .fade-leave-active {
