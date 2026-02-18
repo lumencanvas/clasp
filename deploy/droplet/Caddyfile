@@ -1,0 +1,9 @@
+{$RELAY_DOMAIN} {
+	handle /auth/* {
+		reverse_proxy relay:7350
+	}
+
+	handle {
+		reverse_proxy relay:7330
+	}
+}

@@ -41,8 +41,10 @@ RUN apt-get update && apt-get install -y \
 # Copy binary from builder
 COPY --from=builder /app/target/release/clasp-relay /usr/local/bin/clasp-relay
 
-# Create non-root user
-RUN useradd -r -s /bin/false clasp
+# Create non-root user and data directory
+RUN useradd -r -s /bin/false clasp && \
+    mkdir -p /data && chown clasp:clasp /data
+WORKDIR /data
 USER clasp
 
 # WebSocket port

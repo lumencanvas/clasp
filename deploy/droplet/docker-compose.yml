@@ -1,0 +1,38 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      RELAY_DOMAIN: ${RELAY_DOMAIN}
+    depends_on:
+      - relay
+    restart: unless-stopped
+
+  relay:
+    build: ../relay
+    environment:
+      RUST_LOG: info
+    command:
+      - "--ws-port"
+      - "7330"
+      - "--auth-port"
+      - "7350"
+      - "--auth-db"
+      - "/data/chat-auth.db"
+      - "--no-ttl"
+      - "--name"
+      - "${RELAY_DOMAIN}"
+    volumes:
+      - ${DATA_DIR:-/mnt/clasp_data}/relay:/data
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:

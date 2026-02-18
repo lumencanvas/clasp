@@ -8,7 +8,7 @@ export const ADDR = {
 }
 
 // Auth API URL (set via env or default for local dev)
-export const AUTH_API_URL = import.meta.env.VITE_AUTH_API_URL || 'https://relay.clasp.to'
+export const AUTH_API_URL = import.meta.env.VITE_AUTH_API_URL || 'https://relay.clasp.chat'
 
 // TTL values (milliseconds)
 export const TTL = {
@@ -58,4 +58,4 @@ export const USER_STATUSES = [
 ]
 
 // Default relay URL
-export const DEFAULT_RELAY_URL = 'wss://relay.clasp.to'
+export const DEFAULT_RELAY_URL = import.meta.env.VITE_RELAY_URL || 'wss://relay.clasp.chat'

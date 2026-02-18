@@ -3,6 +3,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
+ARG VITE_AUTH_API_URL
+ARG VITE_RELAY_URL
 RUN npm run build
 
 FROM nginx:alpine
