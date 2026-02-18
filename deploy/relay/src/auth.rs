@@ -229,11 +229,41 @@ async fn login(
     }))
 }
 
+/// Issue a guest token (anonymous access)
+async fn guest(
+    State(state): State<Arc<AuthState>>,
+) -> Json<AuthResponse> {
+    let user_id = generate_user_id();
+    let guest_name = format!("guest-{}", &user_id[user_id.len()-6..]);
+
+    let token = CpskValidator::generate_token();
+    let scope_strings = build_scopes(&user_id);
+    let scopes: Vec<Scope> = scope_strings
+        .iter()
+        .filter_map(|s| Scope::parse(s).ok())
+        .collect();
+
+    let info = TokenInfo::new(user_id.clone(), scopes)
+        .with_subject(&user_id)
+        .with_expires_in(Duration::from_secs(86400));
+
+    state.validator.register(token.clone(), info);
+
+    tracing::info!("Guest joined: {} ({})", guest_name, user_id);
+
+    Json(AuthResponse {
+        token,
+        user_id,
+        username: guest_name,
+    })
+}
+
 /// Build the auth HTTP router
 pub fn auth_router(state: Arc<AuthState>) -> Router {
     Router::new()
         .route("/auth/register", post(register))
         .route("/auth/login", post(login))
+        .route("/auth/guest", post(guest))
         .layer(CorsLayer::permissive())
         .with_state(state)
 }

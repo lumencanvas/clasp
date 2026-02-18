@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useClasp } from '../composables/useClasp.js'
 import { useIdentity } from '../composables/useIdentity.js'
-import { AVATAR_COLORS, USER_STATUSES, DEFAULT_RELAY_URL } from '../lib/constants.js'
+import { AVATAR_COLORS, USER_STATUSES, DEFAULT_RELAY_URL, AUTH_API_URL } from '../lib/constants.js'
 
 const router = useRouter()
 const { connecting, connected, error, url, connect } = useClasp()
@@ -16,6 +16,18 @@ async function handleConnect() {
   if (!nameInput.value.trim()) return
   setDisplayName(nameInput.value.trim())
   url.value = serverUrl.value
+
+  // Try guest token for auth-enabled relays
+  try {
+    const res = await fetch(`${AUTH_API_URL}/auth/guest`, { method: 'POST' })
+    if (res.ok) {
+      const data = await res.json()
+      localStorage.setItem('clasp-chat-token', data.token)
+    }
+  } catch {
+    // Open relay, no auth needed
+  }
+
   await connect(nameInput.value.trim())
   if (connected.value) {
     router.push('/chat')
@@ -98,6 +110,10 @@ async function handleConnect() {
         </button>
 
         <p v-if="error" class="error-text">{{ error }}</p>
+
+        <p class="alt-action">
+          Want a persistent account? <router-link to="/auth">Sign in</router-link>
+        </p>
       </form>
     </div>
   </div>
@@ -288,5 +304,20 @@ async function handleConnect() {
   color: var(--danger);
   font-size: 0.8rem;
   text-align: center;
+}
+
+.alt-action {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.alt-action a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.alt-action a:hover {
+  text-decoration: underline;
 }
 </style>
