@@ -163,7 +163,7 @@ export function useChat(roomId, isActive) {
     })
 
     // Setup crypto key exchange for this room
-    loadRoomKey(rid).catch(() => {})
+    loadRoomKey(rid).catch(e => console.warn('[chat] Failed to load room key:', e))
     unsubCrypto = subscribeKeyExchange(rid)
 
     // Announce presence
@@ -206,15 +206,15 @@ export function useChat(roomId, isActive) {
   }
 
   // Initialize plugins once
-  let pluginsInitialized = false
+  let pluginsReady = null
   function ensurePlugins() {
-    if (pluginsInitialized) return
-    pluginsInitialized = true
-    initBuiltinPlugins({
+    if (pluginsReady) return pluginsReady
+    pluginsReady = initBuiltinPlugins({
       sendMessage: (t) => sendMessage(t),
       getCurrentRoom: () => roomId.value,
       getUser: () => ({ userId: userId.value, displayName: displayName.value }),
     })
+    return pluginsReady
   }
 
   async function sendMessage(text, { image } = {}) {
@@ -234,7 +234,7 @@ export function useChat(roomId, isActive) {
 
     // Route slash commands to plugin system
     if (text.startsWith('/') && !image) {
-      ensurePlugins()
+      await ensurePlugins()
       const handled = executeCommand(text, {
         sendMessage: (t) => sendMessage(t),
         roomId: roomId.value,
@@ -442,6 +442,7 @@ export function useChat(roomId, isActive) {
     handleTyping,
     leaveChat,
     isThrottled,
-    getRegisteredCommands() { ensurePlugins(); return getRegisteredCommands() },
+    async ensurePluginsReady() { await ensurePlugins() },
+    getRegisteredCommands,
   }
 }

@@ -12,6 +12,19 @@ export const router = createRouter({
     {
       path: '/chat',
       component: () => import('./pages/ChatPage.vue'),
+      meta: { requiresAuth: true },
     },
   ],
+})
+
+router.beforeEach((to) => {
+  const hasToken = !!localStorage.getItem('clasp-chat-token')
+
+  if (to.meta.requiresAuth && !hasToken) {
+    return '/auth'
+  }
+
+  if (to.path === '/auth' && hasToken) {
+    return '/chat'
+  }
 })

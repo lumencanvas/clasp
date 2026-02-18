@@ -38,7 +38,7 @@ const emit = defineEmits(['toggle'])
 
 .reaction-badge.active {
   border-color: var(--accent);
-  background: rgba(var(--accent-rgb, 99,102,241), 0.1);
+  background: rgba(var(--accent-rgb), 0.1);
 }
 
 .reaction-emoji {

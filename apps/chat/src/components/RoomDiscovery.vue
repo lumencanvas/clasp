@@ -11,7 +11,7 @@ const emit = defineEmits(['join', 'close'])
 </script>
 
 <template>
-  <div class="dialog-overlay" @click.self="emit('close')">
+  <div class="dialog-overlay" @click.self="emit('close')" @keydown.escape="emit('close')" tabindex="-1">
     <div class="dialog">
       <div class="dialog-header">
         <h3>Browse Public Channels</h3>
@@ -59,7 +59,7 @@ const emit = defineEmits(['join', 'close'])
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal);
   padding: 1rem;
 }
 

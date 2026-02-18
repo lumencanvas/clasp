@@ -1,0 +1,16 @@
+{
+  "name": "CLASP Chat",
+  "short_name": "CLASP",
+  "description": "Real-time chat powered by the CLASP protocol",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#1a1a1a",
+  "background_color": "#1a1a1a",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

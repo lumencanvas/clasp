@@ -91,19 +91,19 @@ onUnmounted(() => {
 
 <template>
   <!-- Grid layout -->
-  <div v-if="layout === 'grid'" :class="['video-grid', gridClass]">
-    <VideoTile
-      v-for="tile in allTiles"
-      :key="tile.id"
-      :stream="tile.stream"
-      :name="tile.name"
-      :audio-enabled="tile.audioEnabled"
-      :video-enabled="tile.videoEnabled"
-      :is-local="tile.isLocal"
-      :is-screen-share="tile.isScreenShare"
-      :avatar-color="tile.avatarColor"
-      :muted="tile.isLocal"
-    />
+  <div v-if="layout === 'grid'" ref="gridRef" :class="['video-grid', gridClass]">
+    <div v-for="tile in allTiles" :key="tile.id" :data-tile-id="tile.id">
+      <VideoTile
+        :stream="isTileVisible(tile.id) ? tile.stream : null"
+        :name="tile.name"
+        :audio-enabled="tile.audioEnabled"
+        :video-enabled="tile.videoEnabled"
+        :is-local="tile.isLocal"
+        :is-screen-share="tile.isScreenShare"
+        :avatar-color="tile.avatarColor"
+        :muted="tile.isLocal"
+      />
+    </div>
   </div>
 
   <!-- Spotlight layout: one large + horizontal strip below -->

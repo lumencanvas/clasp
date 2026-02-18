@@ -33,6 +33,7 @@ const { displayName, avatarColor, status } = useIdentity()
           :class="['action-btn', { 'has-badge': requestCount > 0 }]"
           @click="emit('toggle-friends')"
           title="Friends"
+          aria-label="Friends"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
@@ -42,13 +43,13 @@ const { displayName, avatarColor, status } = useIdentity()
           </svg>
           <span v-if="requestCount > 0" class="notification-dot"></span>
         </button>
-        <button class="action-btn" @click="emit('create-room')" title="Create channel">
+        <button class="action-btn" @click="emit('create-room')" title="Create channel" aria-label="Create channel">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="12" y1="5" x2="12" y2="19"/>
             <line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
         </button>
-        <button class="action-btn" @click="emit('browse-rooms')" title="Browse channels">
+        <button class="action-btn" @click="emit('browse-rooms')" title="Browse channels" aria-label="Browse channels">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8"/>
             <line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -273,8 +274,8 @@ const { displayName, avatarColor, status } = useIdentity()
   flex-shrink: 0;
 }
 
-.status-dot.online { background: var(--success, #2a9d8f); }
-.status-dot.away { background: #f77f00; }
+.status-dot.online { background: var(--success); }
+.status-dot.away { background: var(--accent4); }
 .status-dot.dnd { background: var(--danger); }
-.status-dot.invisible { background: #6b7280; }
+.status-dot.invisible { background: var(--text-disabled); }
 </style>

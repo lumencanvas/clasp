@@ -146,7 +146,6 @@ export const EMOJIS = [
   { emoji: '🤜', name: 'right fist', keywords: ['fist bump'], category: 'People' },
   { emoji: '👏', name: 'clapping hands', keywords: ['applause', 'clap', 'bravo'], category: 'People' },
   { emoji: '🙌', name: 'raising hands', keywords: ['hooray', 'celebrate'], category: 'People' },
-  { emoji: '🫶', name: 'heart hands', keywords: ['love', 'heart'], category: 'People' },
   { emoji: '👐', name: 'open hands', keywords: ['jazz hands'], category: 'People' },
   { emoji: '🤲', name: 'palms up together', keywords: ['pray', 'please'], category: 'People' },
   { emoji: '🤝', name: 'handshake', keywords: ['agree', 'deal'], category: 'People' },

@@ -13,6 +13,15 @@
   --border: rgba(255,255,255,0.08);
   --success: #2a9d8f;
   --danger: #e63946;
+  --warning: #f59e0b;
+  --accent-rgb: 230, 57, 70;
+  --text-disabled: #6b7280;
+
+  /* z-index layers */
+  --z-dropdown: 100;
+  --z-popover: 200;
+  --z-modal: 1000;
+  --z-toast: 9999;
 }
 
 *, *::before, *::after {
@@ -55,6 +64,11 @@ input, textarea {
 
 input::placeholder, textarea::placeholder {
   color: var(--text-muted);
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--text-primary);
 }
 
 /* Custom scrollbar */
@@ -125,7 +139,7 @@ input::placeholder, textarea::placeholder {
   position: fixed;
   top: 1rem;
   right: 1rem;
-  z-index: 9999;
+  z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
   gap: 0.5rem;

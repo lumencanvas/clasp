@@ -56,13 +56,18 @@ async function enableEncryption(roomId) {
 async function loadRoomKey(roomId) {
   if (roomKeys.has(roomId)) return roomKeys.get(roomId)
 
-  const exported = await loadCryptoKey(roomId)
-  if (!exported) return null
+  try {
+    const exported = await loadCryptoKey(roomId)
+    if (!exported) return null
 
-  const key = await importKey(exported, 'aes')
-  roomKeys.set(roomId, key)
-  encryptedRooms.value = new Set(encryptedRooms.value).add(roomId)
-  return key
+    const key = await importKey(exported, 'aes')
+    roomKeys.set(roomId, key)
+    encryptedRooms.value = new Set(encryptedRooms.value).add(roomId)
+    return key
+  } catch (e) {
+    console.warn(`[crypto] Failed to load room key for ${roomId}:`, e)
+    return null
+  }
 }
 
 /**
@@ -100,43 +105,51 @@ function subscribeKeyExchange(roomId) {
     const roomKey = roomKeys.get(roomId)
     if (!roomKey) return // We don't have the room key
 
-    // Derive shared secret with peer's public key
-    const peerPubKey = await importKey(data.publicKey, 'ecdh-public')
-    const kp = await getECDHKeyPair()
-    const sharedKey = await deriveSharedSecret(kp.privateKey, peerPubKey)
+    try {
+      // Derive shared secret with peer's public key
+      const peerPubKey = await importKey(data.publicKey, 'ecdh-public')
+      const kp = await getECDHKeyPair()
+      const sharedKey = await deriveSharedSecret(kp.privateKey, peerPubKey)
 
-    // Encrypt the room key with the shared secret
-    const roomKeyJwk = JSON.stringify(await exportKey(roomKey))
-    const encrypted = await encryptMessage(sharedKey, roomKeyJwk)
+      // Encrypt the room key with the shared secret
+      const roomKeyJwk = JSON.stringify(await exportKey(roomKey))
+      const encrypted = await encryptMessage(sharedKey, roomKeyJwk)
 
-    // Send the encrypted room key to the peer
-    claspEmit(`${ADDR.ROOM}/${roomId}/crypto/keyex/${peerId}`, {
-      fromId: userId.value,
-      encryptedKey: encrypted.ciphertext,
-      iv: encrypted.iv,
-      senderPublicKey: await exportKey(kp.publicKey),
-    })
+      // Send the encrypted room key to the peer
+      claspEmit(`${ADDR.ROOM}/${roomId}/crypto/keyex/${peerId}`, {
+        fromId: userId.value,
+        encryptedKey: encrypted.ciphertext,
+        iv: encrypted.iv,
+        senderPublicKey: await exportKey(kp.publicKey),
+      })
+    } catch (e) {
+      console.warn(`[crypto] Key exchange failed for peer ${peerId}:`, e)
+    }
   })
 
   // Watch for encrypted room keys sent to us
   const unsubKeyex = subscribe(`${ADDR.ROOM}/${roomId}/crypto/keyex/${userId.value}`, async (data) => {
     if (!data || roomKeys.has(roomId)) return
 
-    // Derive shared secret with sender's public key
-    const senderPubKey = await importKey(data.senderPublicKey, 'ecdh-public')
-    const kp = await getECDHKeyPair()
-    const sharedKey = await deriveSharedSecret(kp.privateKey, senderPubKey)
+    try {
+      // Derive shared secret with sender's public key
+      const senderPubKey = await importKey(data.senderPublicKey, 'ecdh-public')
+      const kp = await getECDHKeyPair()
+      const sharedKey = await deriveSharedSecret(kp.privateKey, senderPubKey)
 
-    // Decrypt the room key
-    const roomKeyJwk = await decryptMessage(sharedKey, data.encryptedKey, data.iv)
-    const roomKey = await importKey(JSON.parse(roomKeyJwk), 'aes')
+      // Decrypt the room key
+      const roomKeyJwk = await decryptMessage(sharedKey, data.encryptedKey, data.iv)
+      const roomKey = await importKey(JSON.parse(roomKeyJwk), 'aes')
 
-    roomKeys.set(roomId, roomKey)
-    encryptedRooms.value = new Set(encryptedRooms.value).add(roomId)
+      roomKeys.set(roomId, roomKey)
+      encryptedRooms.value = new Set(encryptedRooms.value).add(roomId)
 
-    // Persist
-    const exported = await exportKey(roomKey)
-    await saveCryptoKey(roomId, exported)
+      // Persist
+      const exported = await exportKey(roomKey)
+      await saveCryptoKey(roomId, exported)
+    } catch (e) {
+      console.warn(`[crypto] Failed to receive room key:`, e)
+    }
   })
 
   return () => {

@@ -29,7 +29,7 @@ const { userId } = useIdentity()
     <span class="member-name">{{ member.name }}</span>
     <span v-if="member.id === sessionId || member.id === userId" class="you-tag">you</span>
     <div v-if="isAdmin && member.id !== sessionId && member.id !== userId" class="admin-actions" @click.stop>
-      <button class="admin-btn" title="Kick" @click="emit('kick', member.id)">
+      <button class="admin-btn" title="Kick" aria-label="Kick member" @click="emit('kick', member.id)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
           <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
         </svg>

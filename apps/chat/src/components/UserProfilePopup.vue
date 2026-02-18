@@ -68,7 +68,7 @@ const statusLabel = {
 </script>
 
 <template>
-  <div class="popup-overlay" @click.self="emit('close')">
+  <div class="popup-overlay" @click.self="emit('close')" @keydown.escape="emit('close')" tabindex="-1">
     <div class="profile-popup">
       <button class="close-btn" @click="emit('close')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -138,7 +138,7 @@ const statusLabel = {
   align-items: center;
   justify-content: center;
   background: rgba(0,0,0,0.5);
-  z-index: 200;
+  z-index: var(--z-popover);
 }
 
 .profile-popup {

@@ -9,7 +9,8 @@ const text = computed(() => {
   if (props.users.length === 0) return ''
   if (props.users.length === 1) return `${props.users[0]} is typing...`
   if (props.users.length === 2) return `${props.users[0]} and ${props.users[1]} are typing...`
-  return `${props.users[0]} and ${props.users.length - 1} others are typing...`
+  const otherCount = props.users.length - 1
+  return `${props.users[0]} and ${otherCount === 1 ? '1 other is' : `${otherCount} others are`} typing...`
 })
 </script>
 

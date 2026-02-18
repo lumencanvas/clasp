@@ -9,6 +9,7 @@ services:
     command: ["--auth-port", "7350"]
     volumes:
       - relay-data:/data
+    restart: unless-stopped
 
   chat:
     build: ../../apps/chat
@@ -16,6 +17,7 @@ services:
       - "80:80"
     depends_on:
       - relay
+    restart: unless-stopped
 
 volumes:
   relay-data:

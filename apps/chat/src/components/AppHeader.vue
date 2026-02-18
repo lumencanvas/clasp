@@ -17,7 +17,7 @@ const typeInfo = computed(() => ROOM_TYPE_INFO[props.roomType] || ROOM_TYPE_INFO
 <template>
   <header class="app-header">
     <div class="header-left">
-      <button class="hamburger-btn" @click="emit('toggle-sidebar')">
+      <button class="hamburger-btn" aria-label="Toggle sidebar" @click="emit('toggle-sidebar')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="3" y1="6" x2="21" y2="6"/>
           <line x1="3" y1="12" x2="21" y2="12"/>
@@ -45,6 +45,7 @@ const typeInfo = computed(() => ROOM_TYPE_INFO[props.roomType] || ROOM_TYPE_INFO
         :class="{ active: showMembers }"
         @click="emit('toggle-members')"
         title="Toggle members"
+        aria-label="Toggle members"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>

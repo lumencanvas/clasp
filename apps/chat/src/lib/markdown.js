@@ -33,10 +33,13 @@ export function renderMarkdown(text) {
   result = escapeHtml(result)
 
   // URLs: detect and wrap in anchor tags (before inline formatting)
+  // Only http(s) and www. are matched — rejects javascript: and other protocols
   const urls = []
   result = result.replace(/(https?:\/\/[^\s<]+|www\.[^\s<]+)/g, (url) => {
-    const idx = urls.length
     const href = url.startsWith('www.') ? `https://${url}` : url
+    // Validate protocol (defense-in-depth)
+    if (!/^https?:\/\//i.test(href)) return url
+    const idx = urls.length
     // Strip trailing punctuation that's likely not part of the URL
     const clean = href.replace(/[.,;:!?)]+$/, '')
     const display = url.replace(/[.,;:!?)]+$/, '')

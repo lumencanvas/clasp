@@ -91,8 +91,12 @@ export function getRegisteredCommands() {
 /**
  * Initialize built-in plugins.
  */
-export function initBuiltinPlugins(api) {
+export async function initBuiltinPlugins(api) {
   // Import and register built-in plugins
-  import('../plugins/dice.js').then(m => registerPlugin(m.default, api))
-  import('../plugins/shrug.js').then(m => registerPlugin(m.default, api))
+  const [dice, shrug] = await Promise.all([
+    import('../plugins/dice.js'),
+    import('../plugins/shrug.js'),
+  ])
+  registerPlugin(dice.default, api)
+  registerPlugin(shrug.default, api)
 }

@@ -8,7 +8,7 @@ export const ADDR = {
 }
 
 // Auth API URL (set via env or default for local dev)
-export const AUTH_API_URL = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:7350'
+export const AUTH_API_URL = import.meta.env.VITE_AUTH_API_URL || 'https://relay.clasp.to'
 
 // TTL values (milliseconds)
 export const TTL = {

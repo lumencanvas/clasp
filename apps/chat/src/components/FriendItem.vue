@@ -24,21 +24,26 @@ const emit = defineEmits(['message', 'accept', 'decline', 'remove', 'view-profil
 
     <div class="friend-actions">
       <template v-if="isPending">
-        <button class="action-btn accept" title="Accept" @click="emit('accept', friend.fromId)">
+        <button class="action-btn accept" title="Accept" aria-label="Accept request" @click="emit('accept', friend.fromId)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="20 6 9 17 4 12"/>
           </svg>
         </button>
-        <button class="action-btn decline" title="Decline" @click="emit('decline', friend.fromId)">
+        <button class="action-btn decline" title="Decline" aria-label="Decline request" @click="emit('decline', friend.fromId)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
         </button>
       </template>
       <template v-else>
-        <button class="action-btn" title="Message" @click="emit('message', friend)">
+        <button class="action-btn" title="Message" aria-label="Message" @click="emit('message', friend)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+          </svg>
+        </button>
+        <button class="action-btn remove" title="Remove friend" aria-label="Remove friend" @click="emit('remove', friend.id)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
         </button>
       </template>
@@ -107,10 +112,11 @@ const emit = defineEmits(['message', 'accept', 'decline', 'remove', 'view-profil
 }
 
 .action-btn.accept:hover {
-  color: var(--success, #2a9d8f);
+  color: var(--success);
 }
 
-.action-btn.decline:hover {
+.action-btn.decline:hover,
+.action-btn.remove:hover {
   color: var(--danger);
 }
 </style>

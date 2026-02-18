@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import EmojiPicker from './EmojiPicker.vue'
 import { getRegisteredCommands } from '../lib/plugins.js'
+import { useNotifications } from '../composables/useNotifications.js'
 
 const props = defineProps({
   replyTo: { type: Object, default: null },
@@ -10,6 +11,7 @@ const props = defineProps({
 
 const emit = defineEmits(['send', 'send-image', 'typing', 'cancel-reply', 'cancel-edit', 'save-edit'])
 
+const { addToast } = useNotifications()
 const message = ref('')
 const inputRef = ref(null)
 const fileInput = ref(null)
@@ -89,6 +91,7 @@ function handleFileChange(e) {
 
   // Limit to ~500KB for base64 in message payload
   if (file.size > 512 * 1024) {
+    addToast('Image too large (max 500KB)', 'error')
     return
   }
 
@@ -175,7 +178,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
     </div>
 
     <div class="message-composer">
-      <button class="attach-btn" title="Attach image" @click="openFilePicker">
+      <button class="attach-btn" title="Attach image" aria-label="Attach image" @click="openFilePicker">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
           <circle cx="8.5" cy="8.5" r="1.5"/>
@@ -195,7 +198,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
         @input="handleInput"
       />
       <div class="emoji-wrapper" ref="emojiRef">
-        <button class="attach-btn" title="Emoji" @click.stop="showEmoji = !showEmoji">
+        <button class="attach-btn" title="Emoji" aria-label="Emoji" @click.stop="showEmoji = !showEmoji">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/>
             <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
@@ -209,6 +212,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
       </div>
       <button
         class="send-btn"
+        aria-label="Send message"
         @click="handleSend"
         :disabled="!message.trim()"
       >
@@ -253,7 +257,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 }
 
 .reply-bar .context-info svg { color: var(--accent); }
-.edit-bar .context-info svg { color: var(--warning, #f59e0b); }
+.edit-bar .context-info svg { color: var(--warning); }
 
 .context-label {
   flex-shrink: 0;
@@ -414,6 +418,6 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   bottom: 100%;
   right: 0;
   margin-bottom: 8px;
-  z-index: 100;
+  z-index: var(--z-dropdown);
 }
 </style>

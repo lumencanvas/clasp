@@ -9,7 +9,7 @@ const emit = defineEmits(['select', 'close'])
 </script>
 
 <template>
-  <div class="popup-overlay" @click.self="emit('close')">
+  <div class="popup-overlay" @click.self="emit('close')" @keydown.escape="emit('close')" tabindex="-1">
     <div class="status-picker">
       <div class="picker-header">Set Status</div>
       <button
@@ -33,7 +33,7 @@ const emit = defineEmits(['select', 'close'])
   align-items: flex-end;
   justify-content: flex-start;
   background: rgba(0,0,0,0.3);
-  z-index: 200;
+  z-index: var(--z-popover);
   padding: 0 0 4rem 0.75rem;
 }
 

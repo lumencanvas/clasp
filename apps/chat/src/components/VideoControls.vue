@@ -15,6 +15,7 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
       :class="['control-btn', { off: !audioEnabled }]"
       @click="emit('toggle-audio')"
       :title="audioEnabled ? 'Mute' : 'Unmute'"
+      :aria-label="audioEnabled ? 'Mute microphone' : 'Unmute microphone'"
     >
       <svg v-if="audioEnabled" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
@@ -35,6 +36,7 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
       :class="['control-btn', { off: !videoEnabled }]"
       @click="emit('toggle-video')"
       :title="videoEnabled ? 'Camera off' : 'Camera on'"
+      :aria-label="videoEnabled ? 'Turn camera off' : 'Turn camera on'"
     >
       <svg v-if="videoEnabled" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polygon points="23 7 16 12 23 17 23 7"/>
@@ -50,6 +52,7 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
       :class="['control-btn', { sharing: isScreenSharing }]"
       @click="emit('share-screen')"
       title="Share screen"
+      aria-label="Share screen"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
@@ -64,6 +67,7 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
         :class="['layout-btn', { active: layout === 'grid' }]"
         @click="emit('set-layout', 'grid')"
         title="Grid layout"
+        aria-label="Grid layout"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="3" width="7" height="7"/>
@@ -76,6 +80,7 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
         :class="['layout-btn', { active: layout === 'spotlight' }]"
         @click="emit('set-layout', 'spotlight')"
         title="Spotlight layout"
+        aria-label="Spotlight layout"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="3" width="18" height="12"/>
@@ -88,6 +93,7 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
         :class="['layout-btn', { active: layout === 'sidebar' }]"
         @click="emit('set-layout', 'sidebar')"
         title="Sidebar layout"
+        aria-label="Sidebar layout"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="3" width="12" height="18"/>
@@ -102,6 +108,7 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
       class="control-btn leave-btn"
       @click="emit('leave')"
       title="Leave video"
+      aria-label="Leave video"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/>
@@ -152,7 +159,7 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
 }
 
 .control-btn.sharing {
-  background: rgba(var(--accent-rgb, 99,102,241),0.15);
+  background: rgba(var(--accent-rgb),0.15);
   border-color: var(--accent);
   color: var(--accent);
 }

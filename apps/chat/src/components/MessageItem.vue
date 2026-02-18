@@ -20,6 +20,17 @@ const { sessionId } = useClasp()
 const isOwn = computed(() => props.message.fromId === sessionId.value)
 const showActions = ref(false)
 const showPicker = ref(false)
+let longPressTimer = null
+
+function onTouchStart() {
+  longPressTimer = setTimeout(() => {
+    showActions.value = true
+  }, 500)
+}
+
+function onTouchEnd() {
+  clearTimeout(longPressTimer)
+}
 
 const renderedText = computed(() => renderMarkdown(props.message.text))
 
@@ -34,6 +45,9 @@ function handleReact(emoji) {
     :class="['message', { own: isOwn, grouped }]"
     @mouseenter="showActions = true"
     @mouseleave="showActions = false; showPicker = false"
+    @touchstart.passive="onTouchStart"
+    @touchend.passive="onTouchEnd"
+    @touchcancel.passive="onTouchEnd"
   >
     <UserAvatar
       v-if="!grouped"
@@ -79,7 +93,7 @@ function handleReact(emoji) {
 
       <!-- Action buttons (hover) -->
       <div v-if="showActions" class="message-actions">
-        <button class="action-btn" title="React" @click.stop="showPicker = !showPicker">
+        <button class="action-btn" title="React" aria-label="React" @click.stop="showPicker = !showPicker">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/>
             <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
@@ -87,27 +101,27 @@ function handleReact(emoji) {
             <line x1="15" y1="9" x2="15.01" y2="9"/>
           </svg>
         </button>
-        <button class="action-btn" title="Reply" @click="emit('reply', message)">
+        <button class="action-btn" title="Reply" aria-label="Reply" @click="emit('reply', message)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="9 17 4 12 9 7"/>
             <path d="M20 18v-2a4 4 0 0 0-4-4H4"/>
           </svg>
         </button>
         <template v-if="isOwn">
-          <button class="action-btn" title="Edit" @click="emit('edit', message)">
+          <button class="action-btn" title="Edit" aria-label="Edit" @click="emit('edit', message)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
               <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
           </button>
-          <button class="action-btn action-danger" title="Delete" @click="emit('delete', message.msgId)">
+          <button class="action-btn action-danger" title="Delete" aria-label="Delete" @click="emit('delete', message.msgId)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="3 6 5 6 21 6"/>
               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
             </svg>
           </button>
         </template>
-        <button v-if="isAdmin && !isOwn" class="action-btn action-danger" title="Mod Delete" @click="emit('mod-delete', message.msgId)">
+        <button v-if="isAdmin && !isOwn" class="action-btn action-danger" title="Mod Delete" aria-label="Mod Delete" @click="emit('mod-delete', message.msgId)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
           </svg>
@@ -290,10 +304,9 @@ function handleReact(emoji) {
 }
 
 .picker-popover {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 4px;
-  z-index: 10;
+  position: fixed;
+  z-index: var(--z-popover);
+  max-height: 50vh;
+  overflow-y: auto;
 }
 </style>
