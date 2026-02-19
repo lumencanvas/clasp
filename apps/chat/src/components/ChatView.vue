@@ -39,7 +39,7 @@ const {
 
 const { toggleReaction, getMessageReactions } = useReactions(roomIdRef)
 const { isEncrypted, enableEncryption, encryptedRooms } = useCrypto()
-const { isRoomCreator, isAdmin, subscribeBans, subscribeAdmins } = useAdmin(roomIdRef)
+const { isRoomCreator, isAdmin, modDeleteMessage, subscribeBans, subscribeAdmins } = useAdmin(roomIdRef)
 const { currentRoom } = useRooms()
 const { set } = useClasp()
 
@@ -59,6 +59,15 @@ async function toggleEncryption() {
       ...currentRoom.value,
       encrypted: true,
     })
+  }
+}
+
+function handleModDelete(msgId) {
+  modDeleteMessage(msgId)
+  // Remove locally
+  const idx = messages.value.findIndex(m => m.msgId === msgId)
+  if (idx !== -1) {
+    messages.value.splice(idx, 1)
   }
 }
 
@@ -118,10 +127,12 @@ defineExpose({ sortedParticipants, onlineCount })
     <MessageList
       :messages="messages"
       :get-reactions="getMessageReactions"
+      :is-admin="isAdmin"
       @reply="setReplyTo"
       @edit="startEditing"
       @delete="deleteMessage"
       @react="toggleReaction"
+      @mod-delete="handleModDelete"
     />
     <TypingIndicator :users="typingList" />
     <div v-if="waitingForKey" class="waiting-for-key">

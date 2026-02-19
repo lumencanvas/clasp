@@ -1,11 +1,12 @@
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth.js'
 import { useClasp } from '../composables/useClasp.js'
 import { useIdentity } from '../composables/useIdentity.js'
 
 const router = useRouter()
+const route = useRoute()
 const { authError, authLoading, register, login } = useAuth()
 const { connect, disconnect } = useClasp()
 const { setDisplayName } = useIdentity()
@@ -35,14 +36,16 @@ async function handleSubmit() {
     if (ok) {
       setDisplayName(username.value.trim())
       await connect(username.value.trim())
-      router.push('/chat')
+      const joinParam = route.query.join
+      router.push(joinParam ? { path: '/chat', query: { join: joinParam } } : '/chat')
     }
   } else {
     const ok = await login(username.value.trim(), password.value)
     if (ok) {
       setDisplayName(username.value.trim())
       await connect(username.value.trim())
-      router.push('/chat')
+      const joinParam = route.query.join
+      router.push(joinParam ? { path: '/chat', query: { join: joinParam } } : '/chat')
     }
   }
 }

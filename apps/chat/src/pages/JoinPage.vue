@@ -1,11 +1,12 @@
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useClasp } from '../composables/useClasp.js'
 import { useIdentity } from '../composables/useIdentity.js'
 import { AVATAR_COLORS, USER_STATUSES, DEFAULT_RELAY_URL, AUTH_API_URL } from '../lib/constants.js'
 
 const router = useRouter()
+const route = useRoute()
 const { connecting, connected, error: claspError, url, connect } = useClasp()
 const { displayName, avatarColor, status, setDisplayName, setAvatarColor, setStatus } = useIdentity()
 
@@ -40,7 +41,8 @@ async function handleConnect() {
 
   await connect(nameInput.value.trim())
   if (connected.value) {
-    router.push('/chat')
+    const joinParam = route.query.join
+    router.push(joinParam ? { path: '/chat', query: { join: joinParam } } : '/chat')
   }
 }
 </script>

@@ -8,6 +8,7 @@ const name = ref('')
 const type = ref(ROOM_TYPES.TEXT)
 const isPublic = ref(true)
 const encrypted = ref(false)
+const hasPassword = ref(false)
 const password = ref('')
 
 function handleCreate() {
@@ -17,7 +18,7 @@ function handleCreate() {
     type: type.value,
     isPublic: isPublic.value,
     encrypted: encrypted.value,
-    password: password.value || null,
+    password: hasPassword.value ? (password.value || null) : null,
   })
   name.value = ''
   password.value = ''
@@ -112,12 +113,23 @@ function handleCreate() {
           <span class="toggle-hint">{{ encrypted ? 'Messages encrypted end-to-end' : 'Off' }}</span>
         </div>
 
-        <div class="field">
-          <label>Room Password <span class="optional">(optional)</span></label>
+        <div class="field toggle-field">
+          <label>Room Password</label>
+          <button
+            type="button"
+            :class="['toggle', { active: hasPassword }]"
+            @click="hasPassword = !hasPassword"
+          >
+            <span class="toggle-knob"></span>
+          </button>
+          <span class="toggle-hint">{{ hasPassword ? 'Password required to join' : 'Off' }}</span>
+        </div>
+
+        <div v-if="hasPassword" class="field">
           <input
             v-model="password"
             type="password"
-            placeholder="Leave empty for no password"
+            placeholder="Enter room password"
             autocomplete="off"
           />
         </div>

@@ -21,7 +21,9 @@ router.beforeEach((to) => {
   const hasToken = !!localStorage.getItem('clasp-chat-token')
 
   if (to.meta.requiresAuth && !hasToken) {
-    return '/auth'
+    // Forward ?join param through auth redirect
+    const query = to.query.join ? { join: to.query.join } : undefined
+    return { path: '/auth', query }
   }
 
   // Don't block /auth — users may want to switch from guest to registered

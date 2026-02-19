@@ -2,6 +2,7 @@ import { ref, computed, watch, onUnmounted } from 'vue'
 import { useClasp } from './useClasp.js'
 import { useIdentity } from './useIdentity.js'
 import { useNotifications } from './useNotifications.js'
+import { useRooms } from './useRooms.js'
 import { ADDR, TTL } from '../lib/constants.js'
 import { executeCommand, initBuiltinPlugins, getRegisteredCommands } from '../lib/plugins.js'
 import { useStorage } from './useStorage.js'
@@ -17,6 +18,7 @@ export function useChat(roomId, isActive) {
   const { userId, displayName, avatarColor } = useIdentity()
   const { incrementUnread, notifyMessage } = useNotifications()
   const { loadCachedMessages, persistMessage } = useStorage()
+  const { updateRoomData } = useRooms()
   const { encrypt, decrypt, isEncrypted, loadRoomKey, subscribeKeyExchange, encryptedRooms, markPasswordProtected } = useCrypto()
 
   const messages = ref([])
@@ -196,6 +198,15 @@ export function useChat(roomId, isActive) {
       }
       if (meta && meta.passwordHash) {
         markPasswordProtected(rid)
+      }
+      // Sync meta changes (name, isPublic) to rooms Map so sidebar stays current
+      if (meta) {
+        const updates = {}
+        if (meta.name) updates.name = meta.name
+        if (meta.isPublic !== undefined) updates.isPublic = meta.isPublic
+        if (Object.keys(updates).length) {
+          updateRoomData(rid, updates)
+        }
       }
     })
 

@@ -2,7 +2,6 @@ import { ref, computed, readonly } from 'vue'
 import { useClasp } from './useClasp.js'
 import { useIdentity } from './useIdentity.js'
 import { ADDR, ROOM_TYPES } from '../lib/constants.js'
-import { generateId } from '../lib/utils.js'
 
 const rooms = ref(new Map()) // roomId -> { id, name, type, isPublic, creatorId, creatorName, createdAt }
 const joinedRoomIds = ref(new Set(JSON.parse(localStorage.getItem('clasp-chat-joined') || '[]')))
@@ -38,7 +37,7 @@ function createRoom({ name, type, isPublic, encrypted = false, passwordHash, pas
   const { userId, displayName } = useIdentity()
   if (!connected.value) return null
 
-  const roomId = generateId(8)
+  const roomId = crypto.randomUUID()
   const roomData = {
     name,
     type,
@@ -53,8 +52,10 @@ function createRoom({ name, type, isPublic, encrypted = false, passwordHash, pas
     roomData.hasPassword = true
   }
 
-  // Register in global registry
-  set(`${ADDR.ROOM_REGISTRY}/${roomId}`, roomData)
+  // Register in global registry (public rooms only)
+  if (isPublic) {
+    set(`${ADDR.ROOM_REGISTRY}/${roomId}`, roomData)
+  }
   // Set room meta
   const meta = { name, type, description: '', isPublic, encrypted }
   if (passwordHash) {
@@ -145,8 +146,13 @@ function createDM(targetUserId, targetName) {
     },
   }
 
-  // Register in global registry
-  set(`${ADDR.ROOM_REGISTRY}/${roomId}`, roomData)
+  // Set room meta (DMs skip the public registry)
+  set(`${ADDR.ROOM}/${roomId}/meta`, {
+    name: targetName,
+    type: ROOM_TYPES.DM,
+    isPublic: false,
+    dmUsers: roomData.dmUsers,
+  })
 
   // Add locally
   rooms.value.set(roomId, { id: roomId, ...roomData })
@@ -160,42 +166,90 @@ function createDM(targetUserId, targetName) {
   return roomId
 }
 
+function processRegistryEntry(data, roomId) {
+  if (data === null) {
+    // Room deleted
+    discoveredRooms.value = discoveredRooms.value.filter(r => r.id !== roomId)
+    rooms.value.delete(roomId)
+    rooms.value = new Map(rooms.value)
+    return
+  }
+
+  // Safety filter: skip non-public rooms (handles public->private toggles)
+  if (!data.isPublic) {
+    discoveredRooms.value = discoveredRooms.value.filter(r => r.id !== roomId)
+    return
+  }
+
+  const roomData = { id: roomId, ...data }
+
+  // Update rooms map
+  rooms.value.set(roomId, roomData)
+  rooms.value = new Map(rooms.value)
+
+  // Update discovered list
+  const idx = discoveredRooms.value.findIndex(r => r.id === roomId)
+  if (idx >= 0) {
+    discoveredRooms.value[idx] = roomData
+  } else {
+    discoveredRooms.value.push(roomData)
+  }
+  discoveredRooms.value = [...discoveredRooms.value]
+}
+
 function discoverPublicRooms() {
-  const { subscribe, connected } = useClasp()
+  const { subscribe, connected, client } = useClasp()
   if (!connected.value) return
 
   if (unsubDiscovery) {
     unsubDiscovery()
   }
 
-  unsubDiscovery = subscribe(`${ADDR.ROOM_REGISTRY}/*`, (data, address) => {
+  const registryPattern = `${ADDR.ROOM_REGISTRY}/*`
+
+  unsubDiscovery = subscribe(registryPattern, (data, address) => {
     const roomId = address.split('/').pop()
-
-    if (data === null) {
-      // Room deleted
-      discoveredRooms.value = discoveredRooms.value.filter(r => r.id !== roomId)
-      rooms.value.delete(roomId)
-      rooms.value = new Map(rooms.value)
-      return
-    }
-
-    const roomData = { id: roomId, ...data }
-
-    // Update rooms map
-    rooms.value.set(roomId, roomData)
-    rooms.value = new Map(rooms.value)
-
-    // Update discovered list (only public rooms)
-    if (data.isPublic) {
-      const idx = discoveredRooms.value.findIndex(r => r.id === roomId)
-      if (idx >= 0) {
-        discoveredRooms.value[idx] = roomData
-      } else {
-        discoveredRooms.value.push(roomData)
-      }
-      discoveredRooms.value = [...discoveredRooms.value]
-    }
+    processRegistryEntry(data, roomId)
   })
+
+  // Fix: process pre-existing state from CLASP snapshot cache.
+  // The SNAPSHOT handler stores params but doesn't call notifySubscribers(),
+  // so wildcard subscriptions never fire for already-set data.
+  if (client.value?.params) {
+    const prefix = `${ADDR.ROOM_REGISTRY}/`
+    for (const [address, data] of client.value.params) {
+      if (address.startsWith(prefix) && data !== null) {
+        const roomId = address.slice(prefix.length)
+        processRegistryEntry(data, roomId)
+      }
+    }
+  }
+}
+
+function fetchRoomMeta(roomId) {
+  const { subscribe, connected } = useClasp()
+  if (!connected.value) return Promise.resolve(null)
+
+  return new Promise((resolve) => {
+    const unsub = subscribe(`${ADDR.ROOM}/${roomId}/meta`, (data) => {
+      resolve(data)
+      unsub()
+    })
+    setTimeout(() => {
+      unsub()
+      resolve(null)
+    }, 3000)
+  })
+}
+
+function updateRoomData(roomId, updates) {
+  const existing = rooms.value.get(roomId)
+  if (existing) {
+    rooms.value.set(roomId, { ...existing, ...updates })
+  } else {
+    rooms.value.set(roomId, { id: roomId, ...updates })
+  }
+  rooms.value = new Map(rooms.value)
 }
 
 function stopDiscovery() {
@@ -220,6 +274,8 @@ export function useRooms() {
     leaveRoom,
     switchRoom,
     deleteRoom,
+    fetchRoomMeta,
+    updateRoomData,
     discoverPublicRooms,
     stopDiscovery,
   }

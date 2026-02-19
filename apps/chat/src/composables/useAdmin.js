@@ -13,11 +13,12 @@ import { ADDR } from '../lib/constants.js'
 export function useAdmin(roomId) {
   const { connected, set, emit: claspEmit, subscribe } = useClasp()
   const { userId } = useIdentity()
-  const { currentRoom } = useRooms()
+  const { currentRoom, updateRoomData } = useRooms()
   const { isEncrypted, rotateRoomKey } = useCrypto()
 
-  const bannedUsers = ref(new Set())
+  const bannedUsers = ref(new Map()) // userId -> { id, name, bannedBy, timestamp }
   const adminList = ref(new Map()) // userId -> { role, promotedBy, timestamp }
+  const roomMeta = ref(null)
 
   const isRoomCreator = computed(() => {
     return currentRoom.value?.creatorId === userId.value
@@ -26,6 +27,110 @@ export function useAdmin(roomId) {
   const isAdmin = computed(() => {
     return isRoomCreator.value || adminList.value.has(userId.value)
   })
+
+  const bannedUsersList = computed(() => {
+    return [...bannedUsers.value.values()].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+  })
+
+  /**
+   * Subscribe to room meta for this room.
+   */
+  function subscribeRoomMeta() {
+    if (!roomId.value) return () => {}
+    return subscribe(`${ADDR.ROOM}/${roomId.value}/meta`, (data) => {
+      roomMeta.value = data
+    })
+  }
+
+  /**
+   * Update room name (admin). Also updates registry if public.
+   */
+  function updateRoomName(newName) {
+    if (!connected.value || !roomId.value || !isAdmin.value || !newName?.trim()) return
+    const rid = roomId.value
+    const meta = roomMeta.value || {}
+    const updatedMeta = { ...meta, name: newName.trim() }
+    set(`${ADDR.ROOM}/${rid}/meta`, updatedMeta)
+
+    // Update registry if public
+    if (updatedMeta.isPublic) {
+      const room = currentRoom.value
+      if (room) {
+        set(`${ADDR.ROOM_REGISTRY}/${rid}`, { ...room, name: newName.trim() })
+      }
+    }
+
+    // Update local rooms map
+    updateRoomData(rid, { name: newName.trim() })
+  }
+
+  /**
+   * Toggle room public/private (creator-only).
+   */
+  function togglePublic(makePublic) {
+    if (!connected.value || !roomId.value || !isRoomCreator.value) return
+    const rid = roomId.value
+    const meta = roomMeta.value || {}
+    const updatedMeta = { ...meta, isPublic: makePublic }
+    set(`${ADDR.ROOM}/${rid}/meta`, updatedMeta)
+
+    if (makePublic) {
+      // Write to registry
+      const room = currentRoom.value || {}
+      set(`${ADDR.ROOM_REGISTRY}/${rid}`, {
+        name: updatedMeta.name || room.name,
+        type: updatedMeta.type || room.type,
+        isPublic: true,
+        creatorId: room.creatorId,
+        creatorName: room.creatorName,
+        createdAt: room.createdAt,
+        hasPassword: !!updatedMeta.passwordHash,
+      })
+    } else {
+      // Remove from registry
+      set(`${ADDR.ROOM_REGISTRY}/${rid}`, null)
+    }
+
+    // Update local rooms map
+    updateRoomData(rid, { isPublic: makePublic })
+  }
+
+  /**
+   * Update or remove room password (creator-only).
+   */
+  function updatePassword(hash, salt) {
+    if (!connected.value || !roomId.value || !isRoomCreator.value) return
+    const rid = roomId.value
+    const meta = roomMeta.value || {}
+    const updatedMeta = { ...meta }
+    if (hash && salt) {
+      updatedMeta.passwordHash = hash
+      updatedMeta.passwordSalt = salt
+    } else {
+      delete updatedMeta.passwordHash
+      delete updatedMeta.passwordSalt
+    }
+    set(`${ADDR.ROOM}/${rid}/meta`, updatedMeta)
+
+    // Update registry hasPassword flag if public
+    if (updatedMeta.isPublic) {
+      const room = currentRoom.value || {}
+      set(`${ADDR.ROOM_REGISTRY}/${rid}`, {
+        ...room,
+        hasPassword: !!(hash && salt),
+      })
+    }
+  }
+
+  /**
+   * Unban a user from the room.
+   */
+  function unbanUser(targetUserId) {
+    if (!connected.value || !roomId.value || !isAdmin.value) return
+    set(`${ADDR.ROOM}/${roomId.value}/bans/${targetUserId}`, null)
+    bannedUsers.value.delete(targetUserId)
+    bannedUsers.value = new Map(bannedUsers.value)
+  }
 
   /**
    * Subscribe to admin list for this room.
@@ -95,20 +200,24 @@ export function useAdmin(roomId) {
   /**
    * Ban a user from the room.
    */
-  function banUser(targetUserId) {
+  function banUser(targetUserId, targetName) {
     if (!connected.value || !roomId.value || !isAdmin.value) return
     const rid = roomId.value
 
-    // Set ban record
-    set(`${ADDR.ROOM}/${rid}/bans/${targetUserId}`, {
+    const banRecord = {
       bannedBy: userId.value,
       timestamp: Date.now(),
-    })
+      name: targetName || 'Unknown',
+    }
+
+    // Set ban record
+    set(`${ADDR.ROOM}/${rid}/bans/${targetUserId}`, banRecord)
 
     // Also kick them
     kickUser(targetUserId)
 
-    bannedUsers.value = new Set(bannedUsers.value).add(targetUserId)
+    bannedUsers.value.set(targetUserId, { id: targetUserId, ...banRecord })
+    bannedUsers.value = new Map(bannedUsers.value)
 
     // Rotate room key if encrypted (so banned user can't decrypt new messages)
     if (isEncrypted(rid)) {
@@ -141,9 +250,9 @@ export function useAdmin(roomId) {
       if (data === null) {
         bannedUsers.value.delete(targetId)
       } else {
-        bannedUsers.value.add(targetId)
+        bannedUsers.value.set(targetId, { id: targetId, ...data })
       }
-      bannedUsers.value = new Set(bannedUsers.value)
+      bannedUsers.value = new Map(bannedUsers.value)
     })
   }
 
@@ -156,7 +265,10 @@ export function useAdmin(roomId) {
     isAdmin,
     adminList,
     bannedUsers,
+    bannedUsersList,
+    roomMeta,
     subscribeAdmins,
+    subscribeRoomMeta,
     promoteToAdmin,
     demoteAdmin,
     isUserAdmin,
@@ -165,5 +277,9 @@ export function useAdmin(roomId) {
     modDeleteMessage,
     subscribeBans,
     isUserBanned,
+    updateRoomName,
+    togglePublic,
+    updatePassword,
+    unbanUser,
   }
 }

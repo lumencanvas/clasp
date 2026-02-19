@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useClasp } from '../composables/useClasp.js'
 import { useIdentity } from '../composables/useIdentity.js'
 import { useRooms } from '../composables/useRooms.js'
@@ -24,6 +24,7 @@ import UserProfilePopup from '../components/UserProfilePopup.vue'
 import StatusPicker from '../components/StatusPicker.vue'
 
 const router = useRouter()
+const route = useRoute()
 const { connected, disconnect } = useClasp()
 const { displayName, status, setStatus, announceProfile } = useIdentity()
 const {
@@ -38,6 +39,8 @@ const {
   joinRoom,
   leaveRoom,
   deleteRoom,
+  fetchRoomMeta,
+  updateRoomData,
   switchRoom,
   discoverPublicRooms,
   stopDiscovery,
@@ -68,6 +71,73 @@ const layoutRef = ref(null)
 const chatViewRef = ref(null)
 const videoViewRef = ref(null)
 const comboViewRef = ref(null)
+
+// Invite join state
+const inviteJoinRoom = ref(null) // room meta when password is needed
+const invitePasswordInput = ref('')
+const inviteError = ref(null)
+
+async function handleInviteJoin(roomId) {
+  // Already joined — just switch
+  if (joinedRoomIds.value.has(roomId)) {
+    switchRoom(roomId)
+    router.replace({ path: '/chat' })
+    return
+  }
+
+  const meta = await fetchRoomMeta(roomId)
+  if (!meta) {
+    // Room doesn't exist
+    router.replace({ path: '/chat' })
+    return
+  }
+
+  if (meta.passwordHash) {
+    // Password required — show prompt
+    inviteJoinRoom.value = { id: roomId, ...meta }
+    return
+  }
+
+  // No password — join directly
+  updateRoomData(roomId, { name: meta.name, type: meta.type, isPublic: meta.isPublic, creatorId: meta.creatorId })
+  joinRoom(roomId)
+  switchRoom(roomId)
+  router.replace({ path: '/chat' })
+}
+
+async function handleInvitePassword() {
+  if (!inviteJoinRoom.value || !invitePasswordInput.value) return
+  inviteError.value = null
+  const room = inviteJoinRoom.value
+
+  const hash = await hashPassword(invitePasswordInput.value, room.passwordSalt)
+  if (hash !== room.passwordHash) {
+    inviteError.value = 'Incorrect password'
+    return
+  }
+
+  // Publish password proof
+  const { userId: uid } = useIdentity()
+  const { set } = useClasp()
+  set(`/chat/room/${room.id}/crypto/proof/${uid.value}`, {
+    hash,
+    timestamp: Date.now(),
+  })
+
+  updateRoomData(room.id, { name: room.name, type: room.type, isPublic: room.isPublic })
+  joinRoom(room.id)
+  switchRoom(room.id)
+  inviteJoinRoom.value = null
+  invitePasswordInput.value = ''
+  router.replace({ path: '/chat' })
+}
+
+function cancelInviteJoin() {
+  inviteJoinRoom.value = null
+  invitePasswordInput.value = ''
+  inviteError.value = null
+  router.replace({ path: '/chat' })
+}
 
 const activeViewRef = computed(() => {
   if (!currentRoom.value) return null
@@ -222,7 +292,11 @@ onMounted(() => {
 
   discoverPublicRooms()
 
-  if (!currentRoomId.value && joinedRooms.value.length > 0) {
+  // Handle invite join from URL
+  const joinParam = route.query.join
+  if (joinParam) {
+    handleInviteJoin(joinParam)
+  } else if (!currentRoomId.value && joinedRooms.value.length > 0) {
     switchRoom(joinedRooms.value[0].id)
   }
 })
@@ -358,6 +432,28 @@ onUnmounted(() => {
     @select="handleStatusChange"
     @close="showStatusPicker = false"
   />
+
+  <!-- Invite join password dialog -->
+  <div v-if="inviteJoinRoom" class="dialog-overlay" @click.self="cancelInviteJoin">
+    <div class="invite-dialog">
+      <h3>Join "{{ inviteJoinRoom.name }}"</h3>
+      <p class="invite-desc">This room requires a password to join.</p>
+      <form @submit.prevent="handleInvitePassword">
+        <input
+          v-model="invitePasswordInput"
+          type="password"
+          placeholder="Enter room password"
+          class="invite-password-input"
+          autofocus
+        />
+        <p v-if="inviteError" class="invite-error">{{ inviteError }}</p>
+        <div class="invite-actions">
+          <button type="button" class="action-btn secondary" @click="cancelInviteJoin">Cancel</button>
+          <button type="submit" class="action-btn primary" :disabled="!invitePasswordInput">Join</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -447,5 +543,66 @@ onUnmounted(() => {
 .data-btn:hover {
   border-color: var(--text-muted);
   color: var(--text-secondary);
+}
+
+/* Invite join dialog */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+  padding: 1rem;
+}
+
+.invite-dialog {
+  width: 100%;
+  max-width: 380px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.invite-dialog h3 {
+  font-size: 1rem;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.5rem;
+}
+
+.invite-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+}
+
+.invite-password-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+  box-sizing: border-box;
+}
+
+.invite-password-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.invite-error {
+  color: var(--danger);
+  font-size: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.invite-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
 }
 </style>
