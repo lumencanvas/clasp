@@ -1,12 +1,13 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use clasp_core::security::CpskValidator;
+use clasp_core::security::{CpskValidator, Scope};
+use clasp_router::Session;
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tower::ServiceExt;
 
-use clasp_relay::auth::{auth_router, AuthState};
+use clasp_relay::auth::{auth_router, build_scopes, AuthState};
 
 fn setup_app() -> axum::Router {
     let validator = Arc::new(CpskValidator::new());
@@ -354,6 +355,120 @@ async fn registration_rate_limiting_blocks_after_max_attempts() {
     assert!(body["error"].as_str().unwrap().contains("Too many"));
 }
 
+// === Scope restriction tests (S1) ===
+
+/// Helper: parse scopes and check if any scope allows the given action+address
+fn scopes_allow(scopes: &[Scope], action: clasp_core::Action, address: &str) -> bool {
+    scopes.iter().any(|s| s.allows(action, address))
+}
+
+/// Helper: check that ONLY read-action scopes (not write-implies-read) allow a read
+fn read_only_scopes_allow(scopes: &[Scope], address: &str) -> bool {
+    scopes.iter().any(|s| {
+        s.action() == clasp_core::Action::Read && s.allows(clasp_core::Action::Read, address)
+    })
+}
+
+// -- Read scope restriction: verify no explicit read:/chat/** --
+
+#[test]
+fn scope_no_explicit_global_read() {
+    let scope_strings = build_scopes("alice");
+    // The old `read:/chat/**` should NOT be present as an explicit read scope
+    assert!(
+        !scope_strings.contains(&"read:/chat/**".to_string()),
+        "read:/chat/** still present in scope strings"
+    );
+}
+
+#[test]
+fn scope_explicit_read_own_user_data() {
+    let scopes: Vec<Scope> = build_scopes("alice")
+        .iter()
+        .filter_map(|s| Scope::parse(s).ok())
+        .collect();
+    // Explicit read scopes cover own user data
+    assert!(read_only_scopes_allow(&scopes, "/chat/user/alice/profile"));
+    assert!(read_only_scopes_allow(&scopes, "/chat/user/alice/friends/bob"));
+    assert!(read_only_scopes_allow(&scopes, "/chat/user/alice/dms/room1"));
+}
+
+#[test]
+fn scope_explicit_read_denies_other_user_private_data() {
+    let scopes: Vec<Scope> = build_scopes("alice")
+        .iter()
+        .filter_map(|s| Scope::parse(s).ok())
+        .collect();
+    // Explicit read scopes should NOT cover other user's private data
+    assert!(read_only_scopes_allow(&scopes, "/chat/user/bob/profile"),
+        "should allow reading other user's profile");
+    assert!(!read_only_scopes_allow(&scopes, "/chat/user/bob/dms/room1"),
+        "explicit read scope covers other user's DMs");
+    assert!(!read_only_scopes_allow(&scopes, "/chat/user/bob/friends/charlie"),
+        "explicit read scope covers other user's friends");
+    assert!(!read_only_scopes_allow(&scopes, "/chat/user/bob/settings"),
+        "explicit read scope covers other user's settings");
+}
+
+#[test]
+fn scope_write_implies_read_on_dm_paths_at_action_level() {
+    // Action::Write.allows(Action::Read) is true in the core model,
+    // so scopes_allow() sees write:/chat/user/*/dms/* as granting read.
+    // However, the SUBSCRIBE handler uses has_strict_read_scope() which
+    // only checks explicit read scopes, mitigating subscription-based attacks.
+    let scopes: Vec<Scope> = build_scopes("alice")
+        .iter()
+        .filter_map(|s| Scope::parse(s).ok())
+        .collect();
+    let read = clasp_core::Action::Read;
+    // Still true at the Action model level
+    assert!(scopes_allow(&scopes, read, "/chat/user/bob/dms/room1"),
+        "write-implies-read exists at Action level (mitigated by strict read in SUBSCRIBE)");
+    // But strict read-only scopes do NOT cover it
+    assert!(!read_only_scopes_allow(&scopes, "/chat/user/bob/dms/room1"),
+        "strict read scopes should NOT cover other user's DMs");
+}
+
+#[test]
+fn scope_can_read_rooms_and_registry() {
+    let scopes: Vec<Scope> = build_scopes("alice")
+        .iter()
+        .filter_map(|s| Scope::parse(s).ok())
+        .collect();
+    let read = clasp_core::Action::Read;
+    assert!(scopes_allow(&scopes, read, "/chat/room/r1/messages"));
+    assert!(scopes_allow(&scopes, read, "/chat/room/r1/meta"));
+    assert!(scopes_allow(&scopes, read, "/chat/registry/rooms/r1"));
+    assert!(scopes_allow(&scopes, read, "/chat/registry/ns/gaming/room1"));
+}
+
+#[test]
+fn scope_can_read_own_friend_requests() {
+    let scopes: Vec<Scope> = build_scopes("alice")
+        .iter()
+        .filter_map(|s| Scope::parse(s).ok())
+        .collect();
+    // Explicit read only covers own inbox
+    assert!(read_only_scopes_allow(&scopes, "/chat/requests/alice"));
+    assert!(!read_only_scopes_allow(&scopes, "/chat/requests/bob"),
+        "explicit read scope covers other user's friend request inbox");
+}
+
+#[test]
+fn scope_write_implies_read_on_friend_requests_at_action_level() {
+    // Same pattern: write:/chat/requests/* implies read at Action level,
+    // but SUBSCRIBE uses strict read scopes which blocks it.
+    let scopes: Vec<Scope> = build_scopes("alice")
+        .iter()
+        .filter_map(|s| Scope::parse(s).ok())
+        .collect();
+    let read = clasp_core::Action::Read;
+    assert!(scopes_allow(&scopes, read, "/chat/requests/bob"),
+        "write-implies-read exists at Action level");
+    assert!(!read_only_scopes_allow(&scopes, "/chat/requests/bob"),
+        "strict read scopes should NOT cover other user's request inbox");
+}
+
 /// H2: CORS — explicit origin should be set when provided
 #[tokio::test]
 async fn cors_explicit_origin_is_set() {
@@ -374,4 +489,80 @@ async fn cors_explicit_origin_is_set() {
     let acao = response.headers().get("access-control-allow-origin");
     assert!(acao.is_some());
     assert_eq!(acao.unwrap().to_str().unwrap(), "https://chat.example.com");
+}
+
+// === has_strict_read_scope tests ===
+
+/// Create an authenticated Session with the scopes from build_scopes()
+fn make_authenticated_session(user_id: &str) -> Session {
+    let scope_strings = build_scopes(user_id);
+    let scopes: Vec<Scope> = scope_strings
+        .iter()
+        .filter_map(|s| Scope::parse(s).ok())
+        .collect();
+    let mut session = Session::stub(Some(user_id.to_string()));
+    session.set_authenticated("test-token".to_string(), Some(user_id.to_string()), scopes);
+    session
+}
+
+#[test]
+fn strict_read_allows_own_user_data() {
+    let session = make_authenticated_session("alice");
+    assert!(session.has_strict_read_scope("/chat/user/alice/profile"));
+    assert!(session.has_strict_read_scope("/chat/user/alice/friends/bob"));
+    assert!(session.has_strict_read_scope("/chat/user/alice/dms/room1"));
+}
+
+#[test]
+fn strict_read_allows_other_user_profile() {
+    let session = make_authenticated_session("alice");
+    assert!(session.has_strict_read_scope("/chat/user/bob/profile"));
+}
+
+#[test]
+fn strict_read_denies_other_user_dms() {
+    let session = make_authenticated_session("alice");
+    // This is the critical fix: strict read denies subscribing to other users' DMs
+    assert!(!session.has_strict_read_scope("/chat/user/bob/dms/room1"),
+        "strict read should deny access to other user's DMs");
+}
+
+#[test]
+fn strict_read_denies_other_user_friends() {
+    let session = make_authenticated_session("alice");
+    assert!(!session.has_strict_read_scope("/chat/user/bob/friends/charlie"),
+        "strict read should deny access to other user's friends");
+}
+
+#[test]
+fn strict_read_denies_other_user_request_inbox() {
+    let session = make_authenticated_session("alice");
+    assert!(!session.has_strict_read_scope("/chat/requests/bob"),
+        "strict read should deny subscribing to other user's request inbox");
+}
+
+#[test]
+fn strict_read_allows_own_request_inbox() {
+    let session = make_authenticated_session("alice");
+    assert!(session.has_strict_read_scope("/chat/requests/alice"));
+}
+
+#[test]
+fn strict_read_allows_rooms_and_registry() {
+    let session = make_authenticated_session("alice");
+    assert!(session.has_strict_read_scope("/chat/room/r1/messages"));
+    assert!(session.has_strict_read_scope("/chat/room/r1/meta"));
+    assert!(session.has_strict_read_scope("/chat/registry/rooms/r1"));
+    assert!(session.has_strict_read_scope("/chat/registry/ns/gaming/room1"));
+}
+
+#[test]
+fn strict_read_vs_has_scope_on_victim_dms() {
+    let session = make_authenticated_session("alice");
+    // has_scope(Read) passes due to write-implies-read
+    assert!(session.has_scope(clasp_core::Action::Read, "/chat/user/bob/dms/room1"),
+        "has_scope should allow via write-implies-read");
+    // has_strict_read_scope blocks it
+    assert!(!session.has_strict_read_scope("/chat/user/bob/dms/room1"),
+        "has_strict_read_scope should block write-implies-read");
 }

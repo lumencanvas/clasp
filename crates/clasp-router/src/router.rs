@@ -1381,9 +1381,12 @@ async fn handle_message(
                 return Some(MessageResult::Send(bytes));
             }
 
-            // Check scope for read access (in authenticated mode)
+            // Check scope for read access (in authenticated mode).
+            // Use strict read scope check to prevent write-only scopes
+            // (e.g. write:/chat/user/*/dms/*) from granting subscription
+            // access to other users' private data.
             if security_mode == SecurityMode::Authenticated
-                && !session.has_scope(Action::Read, &sub.pattern)
+                && !session.has_strict_read_scope(&sub.pattern)
             {
                 warn!(
                     "Session {} denied SUBSCRIBE to {} - insufficient scope",

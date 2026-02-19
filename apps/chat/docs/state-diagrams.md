@@ -277,6 +277,47 @@ flowchart TD
     S --> T[waitingForKey = false]
 ```
 
+## DM Lifecycle
+
+```mermaid
+sequenceDiagram
+    participant A as User A (initiator)
+    participant R as CLASP Relay
+    participant B as User B (recipient)
+
+    Note over A,B: Prerequisite: A and B are friends
+
+    A->>A: createDM(B.id, B.name)
+    Note over A: roomId = dm-{sort(A.id, B.id)}
+
+    A->>R: set(/chat/room/{roomId}/meta, {type:DM, dmUsers})
+    A->>R: set(/chat/user/{B.id}/dms/{roomId}, {fromId, fromName, timestamp})
+
+    R->>B: UPDATE: /chat/user/{B.id}/dms/{roomId}
+
+    Note over B: handleIncomingDM()
+    B->>B: Add room to local state + joinedRoomIds
+    B->>R: get(/chat/room/{roomId}/meta)
+    R->>B: Room metadata (dmUsers map)
+
+    Note over A,B: Both can now exchange messages at /chat/room/{roomId}/messages
+```
+
+### DM Reconnect (Page Refresh)
+
+```mermaid
+flowchart TD
+    A[Page loads] --> B[joinedRoomIds restored from localStorage]
+    B --> C[rooms Map is empty]
+    C --> D[CLASP connects + receives snapshot]
+    D --> E[subscribeDMInbox replays cached /dms/* entries]
+    E --> F{joinedRoomIds.has AND rooms.has?}
+    F -->|Both true| G[Skip - already synced]
+    F -->|rooms missing| H[handleIncomingDM populates rooms Map]
+    H --> I[fetchRoomMeta for full dmUsers data]
+    I --> J[DM visible in sidebar]
+```
+
 ## Namespace Tree
 
 ```mermaid

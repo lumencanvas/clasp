@@ -62,7 +62,7 @@ Client sends SET/PUBLISH/SUBSCRIBE
         v
   Extract operation type:
     SET/PUBLISH -> requires write scope
-    SUBSCRIBE   -> requires read scope
+    SUBSCRIBE   -> requires explicit read scope (strict check, write scopes do NOT grant subscribe access)
         │
         v
   Match address against scope patterns
@@ -81,11 +81,24 @@ Client sends SET/PUBLISH/SUBSCRIBE
 | `presence/{userId}` | Write restricted to own userId | Prevents presence spoofing |
 | `typing/{userId}` | Write restricted to own userId | Prevents typing indicator spoofing |
 | `user/{userId}/**` | Write restricted to own userId | Prevents profile impersonation |
+| `user/*/dms/*` | Write open + WriteValidator | DM notifications require `fromId` matching session identity and server-verified friendship |
+| `requests/*` | Write open + WriteValidator | Friend requests require `fromId` matching session identity |
+
+### DM Authorization
+
+DMs use a four-layer authorization model:
+
+1. **UI gate**: The "Message" button in `UserProfilePopup` is only shown when `friendStatus === 'friend'`. This prevents unsolicited DMs from non-friends.
+2. **Client-side guard**: `isFriend()` check in `useRooms.js` `createDM()` prevents DM creation even if the UI gate is bypassed.
+3. **Scope gate**: The `write:/chat/user/*/dms/*` scope allows any authenticated user to write a DM notification to another user's inbox. The wildcard `*` matches a single path segment only (no slash traversal), and user IDs are validated to alphanumeric + hyphens/underscores.
+4. **Server-side WriteValidator**: Requires `fromId` field matching session identity (prevents impersonation), requires friendship (checks state for `/chat/user/{a}/friends/{b}`), prevents unsolicited DMs from non-friends at the server level.
+
+The DM message content itself flows through `/chat/room/*/messages` (a separate scope). The DM inbox entry is just a notification containing `{ fromId, fromName, roomId, timestamp }`.
 
 ### Known Limitations (Deferred to Phase 2)
 
-- `read:/chat/**` grants global read access (per-room read scoping requires server-side room membership tracking)
-- Admin/ban/meta paths use client-side role enforcement (server-side role validation requires room membership tracking)
+- Per-room read scoping requires server-side room membership tracking (Phase 2)
+- Admin/ban/meta paths enforced server-side by WriteValidator; namespace metadata still client-side only
 
 ## E2E Encryption
 
@@ -258,8 +271,8 @@ Production deployments should always set `--cors-origin` to the chat frontend's 
 
 | Limitation | Description | Remediation Phase |
 |------------|-------------|-------------------|
-| Global read access | All users can read all CLASP state including room metadata | Phase 2 |
-| Client-side admin enforcement | Room admin/ban/meta roles checked in JS, not on relay | Phase 2 |
+| Per-room read scoping | Granular read scopes in place, but per-room access requires membership tracking | Phase 2 |
+| Namespace admin enforcement | Room admin/ban/meta enforced server-side by WriteValidator; namespace admin still client-side | Phase 2 |
 | No message signatures | Messages can be forged by any room member | Phase 2 |
 | No forward secrecy | Single ECDH key pair per session, static room keys | Phase 3 |
 | Unencrypted local keys | IndexedDB stores room key JWKs in plaintext | Phase 3 |
@@ -284,3 +297,8 @@ A comprehensive security audit was performed on 2026-02-18 covering crypto, auth
 | M7 | ECDH private key marked extractable | Medium | Set `extractable: false` on import |
 | L4 | Silent decryption failure masks tampering | Low | Log AES-GCM OperationError with tampering warning |
 | NEW-3 | Subscription leak in proof timeout | Bug | Added `settled` flag pattern for cleanup |
+| S1 | Global read scope leaks all DM/friend data | Critical | Replaced `read:/chat/**` with 5 granular read scopes; added `has_strict_read_scope()` for SUBSCRIBE |
+| S2 | Anonymous snapshot leaks room internals | High | Removed `!user_id.is_empty()` guard from room membership filter |
+| S3 | Missing fromId allows unattributed DMs | High | fromId now required on DM notifications and friend requests |
+| S4 | No server-side friendship check on DMs | Critical | WriteValidator checks friendship state before allowing DM writes |
+| S5 | fromId spoofing on DMs and friend requests | High | WriteValidator validates fromId matches session subject |

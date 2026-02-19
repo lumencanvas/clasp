@@ -278,6 +278,40 @@ User fills RoomCreateDialog
 | Combo | `combo` | Combined text chat + video grid |
 | DM | `dm` | Direct message (two users, deterministic room ID, no registry listing) |
 
+### DM Flow
+
+DMs require an existing friendship. The "Message" button only appears on friend profiles.
+
+```
+User A clicks "Message" on friend B's profile
+        │
+        v
+  useRooms.createDM(targetUserId, targetName)
+        │
+        ├── Generate deterministic roomId: dm-{first8(A)}-{first8(B)}
+        │   (sorted so both users generate the same ID)
+        ├── If room already exists in rooms Map → return existing roomId
+        ├── set(/chat/room/{roomId}/meta, { name, type:DM, dmUsers })
+        ├── set(/chat/user/{B}/dms/{roomId}, { fromId, fromName, roomId, timestamp })
+        │   ↑ DM inbox notification (requires write:/chat/user/*/dms/* scope)
+        ├── Add to joinedRoomIds + persist to localStorage
+        └── Return roomId → ChatPage switches to it
+        │
+        v
+  User B's client (subscribeDMInbox)
+        │
+        ├── Subscription: /chat/user/{B}/dms/*
+        ├── handleIncomingDM(data, address)
+        │   ├── Extract roomId from address
+        │   ├── Skip if already in joinedRoomIds AND rooms Map
+        │   ├── Add room to local rooms Map
+        │   ├── Add to joinedRoomIds + persist
+        │   └── Async fetchRoomMeta(roomId) for full dmUsers data
+        └── DM appears in B's sidebar
+```
+
+On page refresh, `joinedRoomIds` is restored from localStorage but `rooms` is empty. The DM inbox subscription replays cached entries from the CLASP snapshot, repopulating the rooms Map. The early-return guard checks both `joinedRoomIds` and `rooms` to handle this reconnect case.
+
 ## Namespace System
 
 Namespaces provide hierarchical room organization (like Discord servers or Slack workspaces):

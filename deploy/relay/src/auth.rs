@@ -130,16 +130,27 @@ pub struct ErrorResponse {
 /// identity-keyed paths. Room-level admin/ban/meta operations use dedicated
 /// paths keyed by the acting user's ID, and the client-side composables
 /// enforce role checks before writing.
-fn build_scopes(user_id: &str) -> Vec<String> {
+pub fn build_scopes(user_id: &str) -> Vec<String> {
     vec![
-        // Read: all chat state (room membership gating is a Phase 2 item)
-        "read:/chat/**".to_string(),
+        // Read: own user data (profile, friends, DMs)
+        format!("read:/chat/user/{}/**", user_id),
+        // Read: other users' profiles (public info only)
+        "read:/chat/user/*/profile".to_string(),
+        // Read: room data (per-room gating is Phase 2)
+        "read:/chat/room/**".to_string(),
+        // Read: room/namespace discovery
+        "read:/chat/registry/**".to_string(),
+        // Read: own friend request inbox
+        format!("read:/chat/requests/{}", user_id),
 
         // User profile & identity
         format!("write:/chat/user/{}/**", user_id),
 
         // Friend requests (write to target's inbox)
         "write:/chat/requests/*".to_string(),
+
+        // DM notifications (write to any user's DM inbox)
+        "write:/chat/user/*/dms/*".to_string(),
 
         // Messages: any room (content auth is handled by E2E encryption)
         "write:/chat/room/*/messages".to_string(),

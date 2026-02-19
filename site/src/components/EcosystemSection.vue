@@ -26,6 +26,13 @@ const apps = [
     desc: 'Vue 3 dashboard builder that connects to any data source (REST, WebSocket, MQTT, CLASP, SSE, GraphQL) and visualizes it with 18+ interactive widgets. Drag-and-drop layout, bidirectional controls, and auto-discovered data paths.'
   },
   {
+    name: 'CLASP Chat',
+    logo: null,
+    url: 'https://clasp.chat',
+    desc: 'End-to-end encrypted chat with rooms, DMs, friend system, video calling, and namespace-based organization. Built entirely on CLASP — no dedicated chat server, just a generic relay.',
+    icon: 'chat'
+  },
+  {
     name: 'Video Streaming',
     logo: null,
     url: '#',
@@ -54,7 +61,8 @@ const apps = [
             :style="app.logoHeight ? { height: app.logoHeight } : {}"
           />
           <div v-else class="app-title-row">
-            <svg v-if="app.icon === 'video'" class="app-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg>
+            <svg v-if="app.icon === 'chat'" class="app-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            <svg v-else-if="app.icon === 'video'" class="app-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg>
             <h3>{{ app.name }}</h3>
           </div>
           <p>{{ app.desc }}</p>

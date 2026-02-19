@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useClasp } from '../composables/useClasp.js'
+import { useIdentity } from '../composables/useIdentity.js'
 import { formatTime } from '../lib/utils.js'
 import { renderMarkdown } from '../lib/markdown.js'
 import UserAvatar from './UserAvatar.vue'
@@ -17,7 +18,8 @@ const props = defineProps({
 const emit = defineEmits(['reply', 'edit', 'delete', 'react', 'mod-delete'])
 
 const { sessionId } = useClasp()
-const isOwn = computed(() => props.message.fromId === sessionId.value)
+const { userId } = useIdentity()
+const isOwn = computed(() => props.message.fromId === sessionId.value || props.message.userId === userId.value)
 const showActions = ref(false)
 const showPicker = ref(false)
 let longPressTimer = null
@@ -158,12 +160,36 @@ function handleReact(emoji) {
   padding-left: 48px;
 }
 
+.message.own {
+  flex-direction: row-reverse;
+}
+
+.message.own .message-content {
+  align-items: flex-end;
+}
+
+.message.own .message-meta {
+  flex-direction: row-reverse;
+}
+
+.message.own.grouped {
+  padding-left: 0;
+  padding-right: 48px;
+}
+
+.message.own .reply-preview {
+  border-left: none;
+  border-right: 2px solid var(--accent);
+  border-radius: 4px 0 0 4px;
+}
+
 .message-content {
   max-width: 80%;
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
   min-width: 0;
+  position: relative;
 }
 
 .message-meta {
@@ -356,6 +382,11 @@ function handleReact(emoji) {
   .message-actions {
     right: auto;
     left: 0;
+  }
+
+  .message.own .message-actions {
+    left: auto;
+    right: 0;
   }
 
   .picker-popover {

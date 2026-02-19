@@ -1,6 +1,6 @@
 {
   "name": "clasp-chat",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -18,7 +18,7 @@
     "vue": "^3.5.26"
   },
   "dependencies": {
-    "@clasp-to/core": "^3.3.2",
+    "@clasp-to/core": "^3.4.0",
     "vue-router": "^4.6.4"
   }
 }

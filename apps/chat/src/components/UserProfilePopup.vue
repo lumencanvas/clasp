@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useClasp } from '../composables/useClasp.js'
 import { useIdentity } from '../composables/useIdentity.js'
 import { useFriends } from '../composables/useFriends.js'
@@ -27,7 +27,7 @@ const profile = ref({
 })
 const loading = ref(false)
 const isMe = ref(props.userId === myUserId.value)
-const friendStatus = ref(isFriend(props.userId) ? 'friend' : 'none')
+const friendStatus = computed(() => isFriend(props.userId) ? 'friend' : 'none')
 const requestSent = ref(false)
 
 onMounted(async () => {
@@ -52,7 +52,6 @@ function handleAddFriend() {
 
 function handleRemoveFriend() {
   removeFriend(props.userId)
-  friendStatus.value = 'none'
 }
 
 function handleSendDM() {
@@ -92,7 +91,7 @@ const statusLabel = {
       </div>
 
       <div v-if="!isMe" class="profile-actions">
-        <button class="profile-btn primary" @click="handleSendDM">
+        <button v-if="friendStatus === 'friend'" class="profile-btn primary" @click="handleSendDM">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
           </svg>

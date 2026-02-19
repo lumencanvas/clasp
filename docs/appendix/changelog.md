@@ -4,6 +4,23 @@ All notable changes to CLASP.
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-02-19
+
+### Security
+- Replaced global `read:/chat/**` scope with granular read scopes (own user data, other profiles, rooms, registry, own friend requests)
+- Added `has_strict_read_scope()` to Session — SUBSCRIBE checks only explicit read scopes, preventing write-implies-read attacks
+- DM notifications now require `fromId` field and server-side friendship verification (WriteValidator)
+- Friend requests now require `fromId` field matching session identity
+- Snapshot filter strips other users' private data (DMs, friends, settings)
+- Anonymous sessions now filtered from room internals in snapshots
+
+### Added
+- `Session::has_strict_read_scope()` public API in clasp-router
+- `ChatWriteValidator` with DM and friend request validation in relay
+- `ChatSnapshotFilter` user privacy filtering in relay
+- Client-side `isFriend()` guard in useRooms `createDM()`
+- 98 relay tests (up from 14)
+
 ## [3.1.0] - 2026-01-25
 
 ### Added

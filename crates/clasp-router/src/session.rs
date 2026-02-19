@@ -56,7 +56,27 @@ pub struct Session {
     total_drops: AtomicU64,
 }
 
+/// No-op transport sender for test sessions.
+#[doc(hidden)]
+struct StubSender;
+
+#[async_trait::async_trait]
+impl TransportSender for StubSender {
+    async fn send(&self, _data: Bytes) -> clasp_transport::Result<()> { Ok(()) }
+    fn try_send(&self, _data: Bytes) -> clasp_transport::Result<()> { Ok(()) }
+    fn is_connected(&self) -> bool { false }
+    async fn close(&self) -> clasp_transport::Result<()> { Ok(()) }
+}
+
 impl Session {
+    /// Create a minimal session for unit tests. Uses a no-op transport sender.
+    #[doc(hidden)]
+    pub fn stub(subject: Option<String>) -> Self {
+        let mut s = Self::new(Arc::new(StubSender), "test-stub".to_string(), vec![]);
+        s.subject = subject;
+        s
+    }
+
     /// Create a new session
     pub fn new(sender: Arc<dyn TransportSender>, name: String, features: Vec<String>) -> Self {
         let now = Instant::now();
@@ -104,6 +124,21 @@ impl Session {
         self.scopes
             .iter()
             .any(|scope| scope.allows(action, address))
+    }
+
+    /// Check if this session has an explicit read scope for the given address.
+    ///
+    /// Unlike `has_scope(Action::Read, ...)`, this does NOT match write scopes
+    /// (which normally imply read via `Action::Write.allows(Action::Read)`).
+    /// Use this for SUBSCRIBE checks to prevent write-only scopes from granting
+    /// subscription access to paths they should only write to.
+    pub fn has_strict_read_scope(&self, address: &str) -> bool {
+        if self.scopes.is_empty() && !self.authenticated {
+            return true;
+        }
+        self.scopes.iter().any(|scope| {
+            scope.action() == Action::Read && scope.allows(Action::Read, address)
+        })
     }
 
     /// Get the scopes for this session

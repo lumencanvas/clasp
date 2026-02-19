@@ -1,6 +1,6 @@
 # CLASP Current Status
-**Last Updated:** January 23, 2026
-**Audited By:** Claude Opus 4.5
+**Last Updated:** February 19, 2026
+**Audited By:** Claude Opus 4.6
 
 ---
 
@@ -18,6 +18,9 @@
 - Subscription matching: **WORKING**
 - WebSocket transport: **WORKING**
 - Session management: **WORKING**
+- WriteValidator trait: **WORKING** (app-level write validation hooks)
+- SnapshotFilter trait: **WORKING** (per-session snapshot filtering)
+- `has_strict_read_scope()`: **WORKING** (prevents write-implies-read on SUBSCRIBE)
 
 ### Bridges ✅
 - OSC: **WORKING** (integration tests exist)
@@ -73,7 +76,7 @@
 
 ---
 
-## Test Results Summary (Verified Jan 23, 2026)
+## Test Results Summary (Verified Feb 19, 2026)
 
 ```
 cargo test --workspace:     All tests PASS
@@ -86,7 +89,14 @@ timeline_tests:             7/7 PASS
 subscription_tests:         7/7 PASS
 http_integration_tests:     2/2 PASS
 websocket_bridge_tests:     2/2 PASS
+clasp-relay tests:          98 PASS (63 validator + 31 auth + 4 persistence)
 ```
+
+### Relay Security Model (Feb 2026)
+- Granular read scopes (5 scopes replace global `read:/chat/**`)
+- DM authorization: server-enforced friendship check + fromId validation
+- Snapshot filtering: per-user privacy stripping
+- `has_strict_read_scope()` prevents write-implies-read privilege escalation
 
 ---
 

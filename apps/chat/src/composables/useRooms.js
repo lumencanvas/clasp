@@ -1,6 +1,7 @@
 import { ref, computed, readonly } from 'vue'
 import { useClasp } from './useClasp.js'
 import { useIdentity } from './useIdentity.js'
+import { useFriends } from './useFriends.js'
 import { useNamespaces } from './useNamespaces.js'
 import { ADDR, ROOM_TYPES } from '../lib/constants.js'
 
@@ -145,7 +146,11 @@ function deleteRoom(roomId) {
 function createDM(targetUserId, targetName) {
   const { set, connected } = useClasp()
   const { userId, displayName } = useIdentity()
+  const { isFriend } = useFriends()
   if (!connected.value || !targetUserId) return null
+
+  // Defense-in-depth: require friendship before creating a DM
+  if (!isFriend(targetUserId)) return null
 
   // Deterministic room ID from sorted user IDs
   const ids = [userId.value, targetUserId].sort()
@@ -295,7 +300,7 @@ function subscribeDMInbox() {
     const roomId = address.split('/').pop()
 
     // Already joined — skip
-    if (joinedRoomIds.value.has(roomId)) return
+    if (joinedRoomIds.value.has(roomId) && rooms.value.has(roomId)) return
 
     // Resolve display name: the other user's name
     const myId = userId.value
