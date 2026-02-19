@@ -1,6 +1,9 @@
 <script setup>
+import { computed, onMounted } from 'vue'
 import { useIdentity } from '../composables/useIdentity.js'
+import { useNamespaces } from '../composables/useNamespaces.js'
 import RoomList from './RoomList.vue'
+import NamespaceGroup from './NamespaceGroup.vue'
 import UserAvatar from './UserAvatar.vue'
 
 const props = defineProps({
@@ -23,6 +26,23 @@ const emit = defineEmits([
 ])
 
 const { displayName, avatarColor, status } = useIdentity()
+const {
+  namespaceTree,
+  pinnedNamespaceList,
+  namespacedRoomIds,
+  initPinnedNamespaces,
+} = useNamespaces()
+
+// Filter out rooms that are in a pinned namespace
+const ungroupedRooms = computed(() => {
+  return props.rooms.filter(r => !namespacedRoomIds.value.has(r.id))
+})
+
+onMounted(() => {
+  if (props.connected) {
+    initPinnedNamespaces()
+  }
+})
 </script>
 
 <template>
@@ -61,11 +81,27 @@ const { displayName, avatarColor, status } = useIdentity()
 
     <div class="sidebar-scroll">
       <RoomList
-        :rooms="rooms"
+        :rooms="ungroupedRooms"
         :current-room-id="currentRoomId"
         :unread-counts="unreadCounts"
         @select="emit('select-room', $event)"
       />
+
+      <!-- Pinned Namespaces -->
+      <div v-if="pinnedNamespaceList.length" class="ns-section">
+        <div class="section-label">Namespaces</div>
+        <NamespaceGroup
+          v-for="ns in pinnedNamespaceList"
+          :key="ns"
+          :namespace="ns"
+          :node="namespaceTree.get(ns)"
+          :tree="namespaceTree"
+          :current-room-id="currentRoomId"
+          :unread-counts="unreadCounts"
+          @select-room="emit('select-room', $event)"
+          @join-room="emit('select-room', $event)"
+        />
+      </div>
 
       <!-- DM section -->
       <div v-if="dmRooms.length" class="dm-section">
@@ -180,6 +216,10 @@ const { displayName, avatarColor, status } = useIdentity()
 .sidebar-scroll {
   flex: 1;
   overflow-y: auto;
+}
+
+.ns-section {
+  padding: 0 0.5rem 0.5rem;
 }
 
 .dm-section {

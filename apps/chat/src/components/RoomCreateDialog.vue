@@ -1,8 +1,11 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { ROOM_TYPES } from '../lib/constants.js'
+import { useNamespaces } from '../composables/useNamespaces.js'
 
 const emit = defineEmits(['create', 'close'])
+
+const { subscribedNamespaces, unlockedNamespaces, namespaceTree } = useNamespaces()
 
 const name = ref('')
 const type = ref(ROOM_TYPES.TEXT)
@@ -10,6 +13,43 @@ const isPublic = ref(true)
 const encrypted = ref(false)
 const hasPassword = ref(false)
 const password = ref('')
+
+// Namespace fields
+const namespace = ref('')
+const showNsDropdown = ref(false)
+const isNewNamespace = ref(false)
+const newNsPrivate = ref(false)
+const newNsPassword = ref('')
+
+// Available namespaces for autocomplete (pinned + unlocked)
+const availableNamespaces = computed(() => {
+  const all = new Set([...subscribedNamespaces.value, ...unlockedNamespaces.value])
+  return [...all].sort()
+})
+
+const filteredNamespaces = computed(() => {
+  const q = namespace.value.toLowerCase().trim()
+  if (!q) return availableNamespaces.value
+  return availableNamespaces.value.filter(ns => ns.toLowerCase().includes(q))
+})
+
+function selectNamespace(ns) {
+  namespace.value = ns
+  showNsDropdown.value = false
+  isNewNamespace.value = false
+}
+
+function handleNsInput() {
+  showNsDropdown.value = true
+  // Check if typed value matches any existing namespace
+  const trimmed = namespace.value.trim()
+  isNewNamespace.value = trimmed.length > 0 && !availableNamespaces.value.includes(trimmed)
+}
+
+function handleNsBlur() {
+  // Delay to allow click on dropdown items
+  setTimeout(() => { showNsDropdown.value = false }, 150)
+}
 
 function handleCreate() {
   if (!name.value.trim()) return
@@ -19,9 +59,15 @@ function handleCreate() {
     isPublic: isPublic.value,
     encrypted: encrypted.value,
     password: hasPassword.value ? (password.value || null) : null,
+    namespace: namespace.value.trim() || null,
+    newNamespace: isNewNamespace.value ? {
+      isPublic: !newNsPrivate.value,
+      password: newNsPassword.value || null,
+    } : null,
   })
   name.value = ''
   password.value = ''
+  namespace.value = ''
   encrypted.value = false
 }
 </script>
@@ -86,6 +132,57 @@ function handleCreate() {
               </svg>
               Combo
             </button>
+          </div>
+        </div>
+
+        <!-- Namespace picker -->
+        <div class="field">
+          <label>Namespace <span class="optional">(optional)</span></label>
+          <div class="ns-input-wrap">
+            <input
+              v-model="namespace"
+              type="text"
+              placeholder="e.g. gaming, dev/rust"
+              autocomplete="off"
+              @input="handleNsInput"
+              @focus="showNsDropdown = true"
+              @blur="handleNsBlur"
+            />
+            <div v-if="showNsDropdown && filteredNamespaces.length" class="ns-dropdown">
+              <button
+                v-for="ns in filteredNamespaces"
+                :key="ns"
+                type="button"
+                class="ns-option"
+                @mousedown.prevent="selectNamespace(ns)"
+              >
+                {{ ns }}
+              </button>
+            </div>
+          </div>
+          <span v-if="isNewNamespace" class="ns-new-hint">New namespace will be created</span>
+        </div>
+
+        <!-- New namespace options -->
+        <div v-if="isNewNamespace" class="field ns-new-options">
+          <div class="toggle-field">
+            <label>Private Namespace</label>
+            <button
+              type="button"
+              :class="['toggle', { active: newNsPrivate }]"
+              @click="newNsPrivate = !newNsPrivate"
+            >
+              <span class="toggle-knob"></span>
+            </button>
+            <span class="toggle-hint">{{ newNsPrivate ? 'Hidden from discovery' : 'Public' }}</span>
+          </div>
+          <div v-if="newNsPrivate" class="ns-pw-field">
+            <input
+              v-model="newNsPassword"
+              type="password"
+              placeholder="Namespace password (optional)"
+              autocomplete="off"
+            />
           </div>
         </div>
 
@@ -203,6 +300,8 @@ function handleCreate() {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  max-height: 70vh;
+  overflow-y: auto;
 }
 
 .field {
@@ -230,6 +329,12 @@ function handleCreate() {
 .field input:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+.optional {
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text-muted);
 }
 
 .type-selector {
@@ -273,6 +378,72 @@ function handleCreate() {
   height: 20px;
 }
 
+/* Namespace input */
+.ns-input-wrap {
+  position: relative;
+}
+
+.ns-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 0 0 4px 4px;
+  max-height: 140px;
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.ns-option {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  text-align: left;
+}
+
+.ns-option:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.ns-new-hint {
+  font-size: 0.7rem;
+  color: var(--accent3);
+}
+
+.ns-new-options {
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  padding: 0.75rem;
+  gap: 0.75rem;
+}
+
+.ns-pw-field {
+  margin-top: 0.25rem;
+}
+
+.ns-pw-field input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  box-sizing: border-box;
+}
+
+.ns-pw-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Toggle */
 .toggle-field {
   flex-direction: row;
   align-items: center;
@@ -310,12 +481,6 @@ function handleCreate() {
 
 .toggle-hint {
   font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-.optional {
-  text-transform: none;
-  letter-spacing: normal;
   color: var(--text-muted);
 }
 

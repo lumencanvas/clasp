@@ -2,6 +2,7 @@
 import { ref, computed, toRef, onMounted, watch } from 'vue'
 import { useAdmin } from '../composables/useAdmin.js'
 import { useIdentity } from '../composables/useIdentity.js'
+import { useNamespaces } from '../composables/useNamespaces.js'
 import { hashPassword, generateSalt } from '../lib/crypto.js'
 
 const props = defineProps({
@@ -33,10 +34,74 @@ const {
   unbanUser,
 } = useAdmin(roomIdRef)
 
+const {
+  subscribedNamespaces,
+  unlockedNamespaces,
+  getRoomNamespace,
+  registerRoomInNamespace,
+  removeRoomFromNamespace,
+  isNamespaceUnlocked,
+} = useNamespaces()
+
 const editName = ref('')
 const newPassword = ref('')
 const showPasswordInput = ref(false)
 const copySuccess = ref(false)
+
+// Namespace management
+const currentNamespace = computed(() => getRoomNamespace(props.roomId))
+const nsInput = ref('')
+const showNsDropdown = ref(false)
+
+const availableNs = computed(() => {
+  const all = new Set([...subscribedNamespaces.value, ...unlockedNamespaces.value])
+  return [...all].sort()
+})
+
+const filteredNs = computed(() => {
+  const q = nsInput.value.toLowerCase().trim()
+  if (!q) return availableNs.value
+  return availableNs.value.filter(ns => ns.toLowerCase().includes(q))
+})
+
+function handleChangeNamespace(newNs) {
+  if (!isAdmin.value) return
+  const oldNs = currentNamespace.value
+  const room = roomMeta.value
+  if (!room) return
+
+  // Only allow moving to namespaces the user has pinned/unlocked
+  if (newNs && !subscribedNamespaces.value.has(newNs) && !unlockedNamespaces.value.has(newNs)) return
+
+  const roomInfo = {
+    name: room.name,
+    type: room.type,
+    creatorId: room.creatorId || '',
+    creatorName: room.creatorName || '',
+    hasPassword: !!room.passwordHash,
+    createdAt: room.createdAt || Date.now(),
+  }
+
+  if (oldNs) {
+    removeRoomFromNamespace(oldNs, props.roomId)
+  }
+  if (newNs) {
+    registerRoomInNamespace(newNs, props.roomId, roomInfo)
+  }
+  nsInput.value = ''
+  showNsDropdown.value = false
+}
+
+function handleRemoveNamespace() {
+  const oldNs = currentNamespace.value
+  if (oldNs) {
+    removeRoomFromNamespace(oldNs, props.roomId)
+  }
+}
+
+function handleNsBlur() {
+  setTimeout(() => { showNsDropdown.value = false }, 150)
+}
 
 const inviteLink = computed(() => {
   return `${window.location.origin}/chat?join=${props.roomId}`
@@ -172,6 +237,47 @@ function handleRemovePassword() {
               @keydown.enter="handleSetPassword"
             />
             <button class="save-btn" @click="handleSetPassword">Set</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Namespace -->
+      <div class="section">
+        <div class="section-label">Namespace</div>
+        <div class="setting-row">
+          <div v-if="currentNamespace" class="ns-current">
+            <span class="ns-path">{{ currentNamespace }}</span>
+            <button class="admin-action" @click="handleRemoveNamespace">Remove</button>
+          </div>
+          <div v-else class="ns-none">No namespace</div>
+          <div class="ns-change-wrap" style="margin-top: 0.4rem">
+            <label class="setting-label">{{ currentNamespace ? 'Move to' : 'Assign to' }}</label>
+            <div class="ns-input-wrap">
+              <input
+                v-model="nsInput"
+                type="text"
+                class="setting-input"
+                placeholder="Select namespace..."
+                @focus="showNsDropdown = true"
+                @blur="handleNsBlur"
+              />
+              <button
+                class="save-btn"
+                :disabled="!nsInput.trim()"
+                @click="handleChangeNamespace(nsInput.trim())"
+              >Set</button>
+              <div v-if="showNsDropdown && filteredNs.length" class="ns-dropdown">
+                <button
+                  v-for="ns in filteredNs"
+                  :key="ns"
+                  type="button"
+                  class="ns-option"
+                  @mousedown.prevent="handleChangeNamespace(ns)"
+                >
+                  {{ ns }}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -553,5 +659,59 @@ function handleRemovePassword() {
 .delete-room-btn:hover {
   background: var(--danger);
   color: white;
+}
+
+/* Namespace */
+.ns-current {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ns-path {
+  font-size: 0.8rem;
+  color: var(--accent2);
+  font-weight: 600;
+}
+
+.ns-none {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.ns-input-wrap {
+  position: relative;
+  display: flex;
+  gap: 0.35rem;
+}
+
+.ns-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 0 0 4px 4px;
+  max-height: 120px;
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.ns-option {
+  display: block;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ns-option:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 </style>

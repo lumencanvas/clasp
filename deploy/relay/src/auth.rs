@@ -83,6 +83,8 @@ fn build_scopes(user_id: &str) -> Vec<String> {
         "write:/chat/room/*/bans/**".to_string(),
         "write:/chat/room/*/meta".to_string(),
         "write:/chat/registry/rooms/*".to_string(),
+        "write:/chat/registry/ns/**".to_string(),
+        "write:/chat/registry/ns-meta/**".to_string(),
     ]
 }
 

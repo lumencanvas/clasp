@@ -32,7 +32,7 @@ const currentRoom = computed(() => {
   return rooms.value.get(currentRoomId.value) || null
 })
 
-function createRoom({ name, type, isPublic, encrypted = false, passwordHash, passwordSalt }) {
+function createRoom({ name, type, isPublic, encrypted = false, passwordHash, passwordSalt, namespace = null }) {
   const { set, connected } = useClasp()
   const { userId, displayName } = useIdentity()
   if (!connected.value) return null
@@ -52,15 +52,29 @@ function createRoom({ name, type, isPublic, encrypted = false, passwordHash, pas
     roomData.hasPassword = true
   }
 
-  // Register in global registry (public rooms only)
+  // Add namespace reference
+  if (namespace) {
+    roomData.namespace = namespace
+  }
+
+  // Register in global registry (public rooms only, for backward compat)
   if (isPublic) {
     set(`${ADDR.ROOM_REGISTRY}/${roomId}`, roomData)
   }
+
+  // Register in namespace registry if namespace provided
+  if (namespace) {
+    set(`${ADDR.NS_REGISTRY}/${namespace}/${roomId}`, roomData)
+  }
+
   // Set room meta
   const meta = { name, type, description: '', isPublic, encrypted }
   if (passwordHash) {
     meta.passwordHash = passwordHash
     meta.passwordSalt = passwordSalt
+  }
+  if (namespace) {
+    meta.namespace = namespace
   }
   set(`${ADDR.ROOM}/${roomId}/meta`, meta)
 

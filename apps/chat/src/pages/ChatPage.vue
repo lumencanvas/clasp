@@ -10,6 +10,7 @@ import { ROOM_TYPES } from '../lib/constants.js'
 import { useStorage } from '../composables/useStorage.js'
 import { useCrypto } from '../composables/useCrypto.js'
 import { hashPassword, generateSalt } from '../lib/crypto.js'
+import { useNamespaces } from '../composables/useNamespaces.js'
 import AppLayout from '../components/AppLayout.vue'
 import AppHeader from '../components/AppHeader.vue'
 import AppSidebar from '../components/AppSidebar.vue'
@@ -59,6 +60,7 @@ const {
 
 const { exportData, importData } = useStorage()
 const { enableEncryption } = useCrypto()
+const { createNamespace: createNs, registerRoomInNamespace } = useNamespaces()
 const importFileRef = ref(null)
 
 const showMembers = ref(true)
@@ -178,6 +180,14 @@ async function handleCreateRoom(opts) {
     passwordHash = await hashPassword(opts.password, passwordSalt)
   }
 
+  // Create namespace if new (must await to ensure meta is written before room registration)
+  if (opts.namespace && opts.newNamespace) {
+    await createNs(opts.namespace, {
+      isPublic: opts.newNamespace.isPublic,
+      password: opts.newNamespace.password,
+    })
+  }
+
   const roomId = createRoom({
     name: opts.name,
     type: opts.type,
@@ -185,6 +195,7 @@ async function handleCreateRoom(opts) {
     encrypted: opts.encrypted,
     passwordHash,
     passwordSalt,
+    namespace: opts.namespace || null,
   })
   if (roomId) {
     // Enable E2E encryption if requested

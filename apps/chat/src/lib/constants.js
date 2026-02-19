@@ -2,6 +2,8 @@
 export const ADDR = {
   USER_PROFILE: '/chat/user',
   ROOM_REGISTRY: '/chat/registry/rooms',
+  NS_REGISTRY: '/chat/registry/ns',
+  NS_META: '/chat/registry/ns-meta',
   ROOM: '/chat/room',
   REQUESTS: '/chat/requests',
   CRYPTO: '/chat/room', // crypto paths: /chat/room/{rid}/crypto/...
