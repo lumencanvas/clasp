@@ -118,18 +118,19 @@ defineExpose({ sortedParticipants, onlineCount })
         title="Room settings"
         @click="showAdmin = !showAdmin"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
           <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
         </svg>
       </button>
     </div>
-    <AdminPanel
-      v-if="showAdmin"
-      :room-id="roomId"
-      :members="sortedParticipants"
-      @close="showAdmin = false"
-      @delete-room="emit('delete-room', $event)"
-    />
+    <div v-if="showAdmin" class="admin-panel-dropdown">
+      <AdminPanel
+        :room-id="roomId"
+        :members="sortedParticipants"
+        @close="showAdmin = false"
+        @delete-room="emit('delete-room', $event)"
+      />
+    </div>
     <KeyChangeWarning :room-id="roomId" />
     <MessageList
       :messages="messages"
@@ -169,6 +170,7 @@ defineExpose({ sortedParticipants, onlineCount })
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  position: relative;
 }
 
 .chat-header-bar {
@@ -176,6 +178,18 @@ defineExpose({ sortedParticipants, onlineCount })
   align-items: center;
   gap: 0.5rem;
   flex-shrink: 0;
+}
+
+.admin-panel-dropdown {
+  position: absolute;
+  top: 2rem;
+  right: 0.25rem;
+  z-index: 20;
+  width: min(380px, 90vw);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 .encryption-indicator {
@@ -227,19 +241,21 @@ defineExpose({ sortedParticipants, onlineCount })
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   background: transparent;
-  border: none;
-  border-radius: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   color: var(--text-muted);
   cursor: pointer;
   flex-shrink: 0;
   margin-right: 0.5rem;
+  transition: all 0.15s;
 }
 
 .admin-toggle:hover {
   background: var(--bg-tertiary);
   color: var(--text-primary);
+  border-color: var(--text-muted);
 }
 </style>

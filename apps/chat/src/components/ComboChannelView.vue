@@ -154,25 +154,27 @@ function handleSendImage(dataUrl) {
 
 <template>
   <div class="combo-channel">
-    <div v-if="isAdmin" class="combo-header-bar">
+    <!-- Admin overlay (positioned absolutely so it doesn't break row layout) -->
+    <div v-if="isAdmin" class="admin-overlay-wrap">
       <button
         class="admin-toggle"
         aria-label="Room settings"
         title="Room settings"
         @click="showAdmin = !showAdmin"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
           <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
         </svg>
       </button>
+      <div v-if="showAdmin" class="admin-panel-dropdown">
+        <AdminPanel
+          :room-id="roomId"
+          :members="sortedParticipants"
+          @close="showAdmin = false"
+          @delete-room="emit('delete-room', $event)"
+        />
+      </div>
     </div>
-    <AdminPanel
-      v-if="showAdmin"
-      :room-id="roomId"
-      :members="sortedParticipants"
-      @close="showAdmin = false"
-      @delete-room="emit('delete-room', $event)"
-    />
 
     <!-- Video section -->
     <div :class="['combo-video', { collapsed: videoCollapsed }]">
@@ -252,33 +254,47 @@ function handleSendImage(dataUrl) {
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  position: relative;
 }
 
-.combo-header-bar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-shrink: 0;
+.admin-overlay-wrap {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  z-index: 20;
 }
 
 .admin-toggle {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
+  width: 36px;
+  height: 36px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
   color: var(--text-muted);
   cursor: pointer;
   flex-shrink: 0;
-  margin: 0.25rem 0.5rem;
+  transition: all 0.15s;
 }
 
 .admin-toggle:hover {
   background: var(--bg-tertiary);
   color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.admin-panel-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.25rem;
+  width: min(380px, 90vw);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 .combo-video {
