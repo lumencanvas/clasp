@@ -225,6 +225,15 @@ function isEncrypted(roomId) {
  * Rotate the room key after a member is removed.
  * Generates a new AES key, publishes new public key to trigger re-exchange.
  */
+/**
+ * Remove a peer's cached public key (e.g., after banning).
+ * Prevents rotated keys from being sent to evicted users.
+ */
+function removePeerKey(roomId, peerId) {
+  const peers = peerPublicKeys.get(roomId)
+  if (peers) peers.delete(peerId)
+}
+
 async function rotateRoomKey(roomId) {
   if (!roomKeys.has(roomId)) return
 
@@ -286,6 +295,7 @@ export function useCrypto() {
     decrypt,
     isEncrypted,
     rotateRoomKey,
+    removePeerKey,
     markPasswordProtected,
   }
 }

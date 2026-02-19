@@ -14,7 +14,7 @@ export function useAdmin(roomId) {
   const { connected, set, emit: claspEmit, subscribe } = useClasp()
   const { userId } = useIdentity()
   const { currentRoom, updateRoomData } = useRooms()
-  const { isEncrypted, rotateRoomKey } = useCrypto()
+  const { isEncrypted, rotateRoomKey, removePeerKey } = useCrypto()
 
   const bannedUsers = ref(new Map()) // userId -> { id, name, bannedBy, timestamp }
   const adminList = ref(new Map()) // userId -> { role, promotedBy, timestamp }
@@ -221,6 +221,7 @@ export function useAdmin(roomId) {
 
     // Rotate room key if encrypted (so banned user can't decrypt new messages)
     if (isEncrypted(rid)) {
+      removePeerKey(rid, targetUserId)
       rotateRoomKey(rid).catch(e => console.warn('[admin] Key rotation failed:', e))
     }
   }

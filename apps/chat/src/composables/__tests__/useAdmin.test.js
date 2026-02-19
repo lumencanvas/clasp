@@ -34,6 +34,7 @@ vi.mock('../useCrypto.js', () => ({
   useCrypto: () => ({
     isEncrypted: vi.fn(() => false),
     rotateRoomKey: vi.fn(),
+    removePeerKey: vi.fn(),
   }),
 }))
 

@@ -216,13 +216,15 @@ export function useChat(roomId, isActive) {
       }
     })
 
+    // Subscribe to key exchange BEFORE requesting the key, so the keyex
+    // response handler is active when existing members respond
+    unsubCrypto = subscribeKeyExchange(rid)
+
     // If room is already known as encrypted and we don't have the key, request it
     if (isEncrypted(rid) && !existingKey) {
       waitingForKey.value = true
       requestRoomKey(rid)
     }
-
-    unsubCrypto = subscribeKeyExchange(rid)
 
     // Periodically re-request key while waiting
     if (keyRetryInterval) { clearInterval(keyRetryInterval); keyRetryInterval = null }

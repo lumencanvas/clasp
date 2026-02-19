@@ -289,7 +289,8 @@ function handleSendImage(dataUrl) {
   }
 
   .combo-video.collapsed {
-    display: none;
+    flex: 0 0 auto;
+    border-right: 1px solid var(--border);
   }
 }
 </style>
