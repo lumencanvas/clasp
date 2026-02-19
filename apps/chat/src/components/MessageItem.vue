@@ -179,7 +179,7 @@ function handleReact(emoji) {
 }
 
 .message-time {
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
 }
 
@@ -197,7 +197,7 @@ function handleReact(emoji) {
 }
 
 .edited-tag {
-  font-size: 0.6rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   font-style: italic;
 }
@@ -269,8 +269,9 @@ function handleReact(emoji) {
 }
 
 .message-image {
-  max-width: 320px;
+  max-width: min(320px, 100%);
   max-height: 240px;
+  height: auto;
   border-radius: 4px;
   margin-top: 0.25rem;
   cursor: pointer;
@@ -302,14 +303,21 @@ function handleReact(emoji) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   background: transparent;
   border: none;
   border-radius: 3px;
   color: var(--text-muted);
   cursor: pointer;
   transition: all 0.1s;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .action-btn {
+    width: 28px;
+    height: 28px;
+  }
 }
 
 .action-btn svg {
@@ -320,6 +328,11 @@ function handleReact(emoji) {
 .action-btn:hover {
   background: var(--bg-active);
   color: var(--text-primary);
+}
+
+.action-btn:active {
+  transform: scale(0.96);
+  opacity: 0.8;
 }
 
 .action-btn.action-danger:hover {

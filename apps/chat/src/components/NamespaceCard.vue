@@ -54,6 +54,11 @@ const parentPath = computed(() => {
   border-color: var(--text-muted);
 }
 
+.ns-card:active {
+  transform: scale(0.98);
+  opacity: 0.9;
+}
+
 .card-top {
   display: flex;
   justify-content: space-between;
@@ -72,12 +77,12 @@ const parentPath = computed(() => {
 }
 
 .card-count {
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
 }
 
 .card-parent {
-  font-size: 0.6rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   font-family: var(--font-code);
   margin-bottom: -0.2rem;

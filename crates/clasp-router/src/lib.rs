@@ -106,7 +106,10 @@ pub use gesture::{GestureRegistry, GestureResult};
 pub use p2p::{analyze_address, P2PAddressType, P2PCapabilities};
 #[cfg(feature = "quic")]
 pub use router::QuicServerConfig;
-pub use router::{MultiProtocolConfig, Router, RouterConfig, RouterConfigBuilder, SnapshotFilter, TransportConfig, WriteValidator};
+pub use router::{
+    MultiProtocolConfig, Router, RouterConfig, RouterConfigBuilder, SnapshotFilter,
+    TransportConfig, WriteValidator,
+};
 pub use session::{Session, SessionId};
 pub use state::{RouterState, RouterStateConfig};
 pub use subscription::SubscriptionManager;

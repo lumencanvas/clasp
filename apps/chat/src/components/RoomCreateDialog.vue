@@ -305,7 +305,7 @@ function handleCreate() {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  max-height: 70vh;
+  max-height: 70dvh;
   overflow-y: auto;
 }
 

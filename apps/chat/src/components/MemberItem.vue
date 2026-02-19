@@ -121,7 +121,7 @@ async function viewSafetyNumber() {
 }
 
 .you-tag {
-  font-size: 0.6rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -131,20 +131,26 @@ async function viewSafetyNumber() {
 .member-actions {
   display: flex;
   gap: 2px;
-  opacity: 0;
-  transition: opacity 0.1s;
+  opacity: 1;
 }
 
-.member-item:hover .member-actions {
-  opacity: 1;
+@media (hover: hover) and (pointer: fine) {
+  .member-actions {
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+
+  .member-item:hover .member-actions {
+    opacity: 1;
+  }
 }
 
 .action-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 44px;
+  height: 44px;
   background: transparent;
   border: none;
   border-radius: 3px;
@@ -152,9 +158,21 @@ async function viewSafetyNumber() {
   cursor: pointer;
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .action-btn {
+    width: 28px;
+    height: 28px;
+  }
+}
+
 .action-btn:hover {
   background: var(--bg-active);
   color: var(--text-primary);
+}
+
+.action-btn:active {
+  transform: scale(0.96);
+  opacity: 0.8;
 }
 
 .action-btn.action-danger:hover {

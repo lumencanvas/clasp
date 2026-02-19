@@ -67,11 +67,14 @@ const warnings = computed(() => getRoomWarnings(props.roomId))
 
 .accept-btn,
 .dismiss-btn {
-  padding: 0.2rem 0.5rem;
+  padding: 0.4rem 0.65rem;
+  min-height: 36px;
   border: none;
   border-radius: 3px;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   cursor: pointer;
+  display: flex;
+  align-items: center;
 }
 
 .accept-btn {

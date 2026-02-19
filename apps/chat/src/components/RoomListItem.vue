@@ -44,7 +44,7 @@ const typeInfo = computed(() => ROOM_TYPE_INFO[props.room.type] || ROOM_TYPE_INF
   text-align: left;
   border-radius: 4px;
   transition: all 0.1s;
-  min-height: 36px;
+  min-height: 48px;
 }
 
 .room-item:hover {
@@ -55,6 +55,10 @@ const typeInfo = computed(() => ROOM_TYPE_INFO[props.room.type] || ROOM_TYPE_INF
 .room-item.active {
   background: var(--bg-active);
   color: var(--text-primary);
+}
+
+.room-item:active {
+  background: var(--bg-active);
 }
 
 .room-icon {
@@ -83,11 +87,11 @@ const typeInfo = computed(() => ROOM_TYPE_INFO[props.room.type] || ROOM_TYPE_INF
 .unread-badge {
   background: var(--accent);
   color: white;
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-weight: 700;
-  padding: 0.1rem 0.4rem;
+  padding: 0.15rem 0.45rem;
   border-radius: 10px;
-  min-width: 18px;
+  min-width: 20px;
   text-align: center;
   flex-shrink: 0;
 }

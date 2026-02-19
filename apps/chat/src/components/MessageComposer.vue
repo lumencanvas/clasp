@@ -275,8 +275,8 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 36px;
+  height: 36px;
   background: transparent;
   border: none;
   color: var(--text-muted);
@@ -299,6 +299,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   display: flex;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
   background: var(--bg-secondary);
   border-top: 1px solid var(--border);
 }
@@ -307,8 +308,8 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   background: transparent;
   border: none;
   border-radius: 50%;
@@ -329,11 +330,12 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 
 .message-composer input {
   flex: 1;
+  min-width: 0;
   padding: 0.7rem 1rem;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
   border-radius: 20px;
-  font-size: 0.9rem;
+  font-size: 1rem;
   transition: border-color 0.15s;
 }
 
@@ -346,8 +348,8 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   background: var(--accent);
   border: none;
   border-radius: 50%;
@@ -419,5 +421,14 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   right: 0;
   margin-bottom: 8px;
   z-index: var(--z-dropdown);
+}
+
+@media (max-width: 480px) {
+  .emoji-popover {
+    position: fixed;
+    bottom: 70px;
+    left: 0.5rem;
+    right: 0.5rem;
+  }
 }
 </style>

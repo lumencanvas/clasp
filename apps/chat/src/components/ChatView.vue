@@ -185,7 +185,7 @@ defineExpose({ sortedParticipants, onlineCount })
   top: 2rem;
   right: 0.25rem;
   z-index: 20;
-  width: min(380px, 90vw);
+  width: min(380px, calc(100vw - 1rem));
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -200,7 +200,7 @@ defineExpose({ sortedParticipants, onlineCount })
   flex: 1;
   background: color-mix(in srgb, var(--success) 10%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--success) 20%, transparent);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: var(--accent3);
 }
 
@@ -241,8 +241,8 @@ defineExpose({ sortedParticipants, onlineCount })
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 8px;

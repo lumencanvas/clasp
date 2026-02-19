@@ -350,7 +350,7 @@ function handleRemovePassword() {
 <style scoped>
 .admin-panel {
   padding: 1rem;
-  max-height: 60vh;
+  max-height: 60dvh;
   overflow-y: auto;
 }
 
@@ -400,7 +400,7 @@ function handleRemovePassword() {
 }
 
 .section-label {
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -442,7 +442,7 @@ function handleRemovePassword() {
 }
 
 .room-id-hint {
-  font-size: 0.6rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   margin-top: 0.3rem;
 }
@@ -580,8 +580,8 @@ function handleRemovePassword() {
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;
-  font-size: 0.6rem;
-  padding: 0.1rem 0.35rem;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.4rem;
   border-radius: 3px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -604,18 +604,26 @@ function handleRemovePassword() {
 }
 
 .admin-action {
-  padding: 0.2rem 0.5rem;
-  font-size: 0.65rem;
+  padding: 0.4rem 0.65rem;
+  min-height: 36px;
+  font-size: 0.75rem;
   border: 1px solid var(--border);
   border-radius: 3px;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   transition: all 0.1s;
+  display: flex;
+  align-items: center;
 }
 
 .admin-action:hover {
   color: var(--text-primary);
+}
+
+.admin-action:active {
+  transform: scale(0.96);
+  opacity: 0.8;
 }
 
 .admin-action.kick:hover {

@@ -26,6 +26,9 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock* ./
 COPY src ./src
 
+# Strip [patch.crates-io] section (only used for local dev, not Docker builds)
+RUN sed -i '/^\[patch\.crates-io\]/,$d' Cargo.toml
+
 # Build the relay binary
 RUN cargo build --release
 

@@ -688,7 +688,7 @@ onUnmounted(() => {
 .dialog {
   width: 100%;
   max-width: 620px;
-  max-height: 80vh;
+  max-height: 80dvh;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -792,7 +792,7 @@ onUnmounted(() => {
 }
 
 .browse-label {
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -810,6 +810,12 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 0.75rem;
+}
+
+@media (max-width: 480px) {
+  .ns-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .private-ns {
@@ -864,6 +870,12 @@ onUnmounted(() => {
   gap: 0.75rem;
 }
 
+@media (max-width: 480px) {
+  .room-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .discovery-card {
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
@@ -881,14 +893,14 @@ onUnmounted(() => {
 }
 
 .card-type {
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--accent2);
 }
 
 .card-time {
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
 }
 
@@ -1061,7 +1073,7 @@ onUnmounted(() => {
 }
 
 .ns-settings-label {
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -1129,11 +1141,12 @@ onUnmounted(() => {
 
 .search-bar input {
   width: 100%;
-  padding: 0.55rem 2rem 0.55rem 0.8rem;
+  padding: 0.75rem 2rem 0.75rem 0.8rem;
+  min-height: 48px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
   border-radius: 6px;
-  font-size: 0.8rem;
+  font-size: 1rem;
   color: var(--text-primary);
   font-family: var(--font-body);
   box-sizing: border-box;
@@ -1168,7 +1181,13 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.15rem;
   min-width: 0;
-  overflow: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.breadcrumb-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .breadcrumb-sep {
@@ -1305,7 +1324,7 @@ onUnmounted(() => {
 }
 
 .search-group-count {
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   font-weight: 400;
   flex-shrink: 0;
@@ -1332,8 +1351,8 @@ onUnmounted(() => {
 }
 
 .search-preview-tag {
-  font-size: 0.65rem;
-  padding: 0.15rem 0.45rem;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
   border-radius: 3px;
   white-space: nowrap;
   overflow: hidden;
@@ -1353,14 +1372,14 @@ onUnmounted(() => {
 }
 
 .search-preview-more {
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   padding: 0.15rem 0.3rem;
 }
 
 /* Search result namespace path */
 .card-ns-path {
-  font-size: 0.6rem;
+  font-size: 0.75rem;
   color: var(--accent2);
   font-family: var(--font-code);
 }

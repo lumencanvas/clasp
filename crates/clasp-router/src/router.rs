@@ -1352,7 +1352,8 @@ async fn handle_message(
             // Send initial snapshot (chunked if too large), with optional filtering
             let mut full_snapshot = state.full_snapshot();
             if let Some(ref filter) = snapshot_filter {
-                full_snapshot.params = filter.filter_snapshot(full_snapshot.params, &new_session, state);
+                full_snapshot.params =
+                    filter.filter_snapshot(full_snapshot.params, &new_session, state);
             }
             send_chunked_snapshot(sender, full_snapshot).await;
 
@@ -1467,7 +1468,9 @@ async fn handle_message(
 
             // Application-specific write validation
             if let Some(ref validator) = write_validator {
-                if let Err(reason) = validator.validate_write(&set.address, &set.value, session, state) {
+                if let Err(reason) =
+                    validator.validate_write(&set.address, &set.value, session, state)
+                {
                     warn!(
                         "Session {} denied SET to {} by write validator: {}",
                         session.id, set.address, reason
@@ -1603,8 +1606,14 @@ async fn handle_message(
 
             // Application-specific write validation for PUBLISH
             if let Some(ref validator) = write_validator {
-                let pub_value = pub_msg.value.as_ref().cloned().unwrap_or(clasp_core::Value::Null);
-                if let Err(reason) = validator.validate_write(&pub_msg.address, &pub_value, session, state) {
+                let pub_value = pub_msg
+                    .value
+                    .as_ref()
+                    .cloned()
+                    .unwrap_or(clasp_core::Value::Null);
+                if let Err(reason) =
+                    validator.validate_write(&pub_msg.address, &pub_value, session, state)
+                {
                     warn!(
                         "Session {} denied PUBLISH to {} by write validator: {}",
                         session.id, pub_msg.address, reason
@@ -1825,7 +1834,9 @@ async fn handle_message(
 
                         // Application-specific write validation for bundled SET
                         if let Some(ref validator) = write_validator {
-                            if let Err(reason) = validator.validate_write(&set.address, &set.value, session, state) {
+                            if let Err(reason) =
+                                validator.validate_write(&set.address, &set.value, session, state)
+                            {
                                 warn!(
                                     "Session {} denied bundled SET to {} by write validator - rejecting entire bundle: {}",
                                     session.id, set.address, reason
@@ -1869,8 +1880,17 @@ async fn handle_message(
 
                         // Application-specific write validation for bundled PUBLISH
                         if let Some(ref validator) = write_validator {
-                            let pub_value = pub_msg.value.as_ref().cloned().unwrap_or(clasp_core::Value::Null);
-                            if let Err(reason) = validator.validate_write(&pub_msg.address, &pub_value, session, state) {
+                            let pub_value = pub_msg
+                                .value
+                                .as_ref()
+                                .cloned()
+                                .unwrap_or(clasp_core::Value::Null);
+                            if let Err(reason) = validator.validate_write(
+                                &pub_msg.address,
+                                &pub_value,
+                                session,
+                                state,
+                            ) {
                                 warn!(
                                     "Session {} denied bundled PUBLISH to {} by write validator - rejecting entire bundle: {}",
                                     session.id, pub_msg.address, reason

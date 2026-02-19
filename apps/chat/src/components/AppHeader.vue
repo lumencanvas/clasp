@@ -81,8 +81,8 @@ const typeInfo = computed(() => ROOM_TYPE_INFO[props.roomType] || ROOM_TYPE_INFO
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   background: none;
   border: none;
   color: var(--text-secondary);
@@ -123,7 +123,7 @@ const typeInfo = computed(() => ROOM_TYPE_INFO[props.roomType] || ROOM_TYPE_INFO
 }
 
 .online-count {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -138,8 +138,8 @@ const typeInfo = computed(() => ROOM_TYPE_INFO[props.roomType] || ROOM_TYPE_INFO
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   background: none;
   border: none;
   color: var(--text-secondary);

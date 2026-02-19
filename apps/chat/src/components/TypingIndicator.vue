@@ -54,7 +54,7 @@ const text = computed(() => {
 }
 
 .typing-text {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   font-style: italic;
 }

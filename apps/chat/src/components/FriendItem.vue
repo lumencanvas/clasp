@@ -91,8 +91,8 @@ const emit = defineEmits(['message', 'accept', 'decline', 'remove', 'view-profil
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 44px;
+  height: 44px;
   background: transparent;
   border: none;
   border-radius: 4px;
@@ -101,14 +101,26 @@ const emit = defineEmits(['message', 'accept', 'decline', 'remove', 'view-profil
   transition: all 0.1s;
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .action-btn {
+    width: 30px;
+    height: 30px;
+  }
+}
+
 .action-btn svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .action-btn:hover {
   background: var(--bg-active);
   color: var(--text-primary);
+}
+
+.action-btn:active {
+  transform: scale(0.96);
+  opacity: 0.8;
 }
 
 .action-btn.accept:hover {

@@ -102,7 +102,7 @@ function addRecent(emoji) {
 
 <style scoped>
 .emoji-picker {
-  width: 320px;
+  width: min(320px, calc(100vw - 1rem));
   max-height: 360px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -167,7 +167,7 @@ function addRecent(emoji) {
 }
 
 .category-label {
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-muted);

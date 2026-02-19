@@ -268,8 +268,8 @@ function handleSendImage(dataUrl) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -290,7 +290,7 @@ function handleSendImage(dataUrl) {
   top: 100%;
   right: 0;
   margin-top: 0.25rem;
-  width: min(380px, 90vw);
+  width: min(380px, calc(100vw - 1rem));
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -304,8 +304,9 @@ function handleSendImage(dataUrl) {
 }
 
 .combo-video:not(.collapsed) {
-  flex: 0 0 55%;
-  min-height: 200px;
+  flex: 0 0 40%;
+  min-height: 180px;
+  max-height: 40vh;
 }
 
 .collapse-toggle {
@@ -313,6 +314,7 @@ function handleSendImage(dataUrl) {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
+  min-height: 48px;
   background: var(--bg-secondary);
   border: none;
   border-bottom: 1px solid var(--border);
@@ -360,6 +362,7 @@ function handleSendImage(dataUrl) {
   .combo-video:not(.collapsed) {
     flex: 0 0 60%;
     min-height: unset;
+    max-height: none;
   }
 
   .combo-chat {

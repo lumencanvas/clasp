@@ -123,7 +123,8 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   padding: 0.75rem;
   background: var(--bg-secondary);
   border-top: 1px solid var(--border);
@@ -150,6 +151,11 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
 
 .control-btn:hover {
   background: var(--bg-active);
+}
+
+.control-btn:active {
+  transform: scale(0.96);
+  opacity: 0.8;
 }
 
 .control-btn.off {
@@ -188,13 +194,20 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   background: transparent;
   border: none;
   border-radius: 4px;
   color: var(--text-muted);
   transition: all 0.15s;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .layout-btn {
+    width: 32px;
+    height: 32px;
+  }
 }
 
 .layout-btn svg {

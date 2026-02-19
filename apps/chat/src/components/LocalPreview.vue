@@ -203,7 +203,7 @@ function handleJoin() {
 }
 
 .join-btn {
-  min-height: 44px;
+  min-height: 48px;
   padding: 0.75rem 2rem;
   background: var(--success);
   border: none;

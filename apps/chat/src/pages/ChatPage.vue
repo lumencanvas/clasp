@@ -323,7 +323,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <AppLayout ref="layoutRef" :show-members="showMembers && !!currentRoom && !showFriends">
+  <AppLayout ref="layoutRef" :show-members="showMembers && !!currentRoom && !showFriends" @toggle-members="showMembers = !showMembers">
     <template #sidebar="{ closeSidebar }">
       <AppSidebar
         :rooms="joinedRooms"

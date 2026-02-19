@@ -194,6 +194,16 @@ onUnmounted(() => {
 }
 
 @media (max-width: 480px) {
+  .grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .grid-9 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 320px) {
   .grid-4, .grid-9 {
     grid-template-columns: 1fr;
   }

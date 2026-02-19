@@ -28,6 +28,7 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html, body, #app {
@@ -41,6 +42,7 @@ body {
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 h1, h2, h3, h4 {
@@ -57,9 +59,10 @@ button {
   cursor: pointer;
 }
 
-input, textarea {
+input, textarea, select {
   font-family: 'Space Mono', monospace;
   color: var(--text-primary);
+  font-size: 16px;
 }
 
 input::placeholder, textarea::placeholder {
@@ -137,8 +140,8 @@ input::placeholder, textarea::placeholder {
 /* Toast notifications */
 .toast-container {
   position: fixed;
-  top: 1rem;
-  right: 1rem;
+  top: calc(env(safe-area-inset-top) + 1rem);
+  right: calc(env(safe-area-inset-right) + 1rem);
   z-index: var(--z-toast);
   display: flex;
   flex-direction: column;

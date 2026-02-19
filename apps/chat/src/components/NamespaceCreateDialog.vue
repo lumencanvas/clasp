@@ -100,7 +100,7 @@ function handleCreate() {
   border: 1px solid var(--border);
   border-radius: 12px;
   width: min(420px, 90vw);
-  max-height: 85vh;
+  max-height: 85dvh;
   overflow-y: auto;
 }
 
