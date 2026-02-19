@@ -194,6 +194,27 @@ export async function exportAll() {
 }
 
 /**
+ * Delete the entire IndexedDB database (for logout).
+ */
+export async function clearAllData() {
+  // Close existing connection first
+  if (dbPromise) {
+    try {
+      const db = await dbPromise
+      db.close()
+    } catch { /* ignore */ }
+    dbPromise = null
+  }
+
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(DB_NAME)
+    request.onsuccess = () => resolve()
+    request.onerror = () => reject(request.error)
+    request.onblocked = () => resolve() // still ok, will be deleted when unblocked
+  })
+}
+
+/**
  * Import data from JSON.
  */
 export async function importAll(json) {

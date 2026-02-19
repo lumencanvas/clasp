@@ -340,9 +340,29 @@ function handleReact(emoji) {
 }
 
 .picker-popover {
-  position: fixed;
+  position: absolute;
+  bottom: 100%;
+  right: 0;
   z-index: var(--z-popover);
   max-height: 50vh;
   overflow-y: auto;
+}
+
+@media (max-width: 480px) {
+  .message-content {
+    max-width: 90%;
+  }
+
+  .message-actions {
+    right: auto;
+    left: 0;
+  }
+
+  .picker-popover {
+    position: fixed;
+    bottom: 80px;
+    left: 0.5rem;
+    right: 0.5rem;
+  }
 }
 </style>

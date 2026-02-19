@@ -83,10 +83,16 @@ const typeInfo = computed(() => ROOM_TYPE_INFO[props.roomType] || ROOM_TYPE_INFO
   justify-content: center;
   width: 44px;
   height: 44px;
+  flex-shrink: 0;
   background: none;
   border: none;
   color: var(--text-secondary);
   border-radius: 4px;
+}
+
+.hamburger-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 .hamburger-btn:hover {

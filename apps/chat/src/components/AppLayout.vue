@@ -69,6 +69,9 @@ defineExpose({ toggleSidebar, closeSidebar })
   display: flex;
   height: 100dvh;
   overflow: hidden;
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 .sidebar-overlay {

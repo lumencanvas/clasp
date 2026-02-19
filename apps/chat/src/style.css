@@ -36,13 +36,17 @@ html, body, #app {
   overflow: hidden;
 }
 
+html {
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
 body {
   font-family: 'Space Mono', monospace;
   background: var(--bg-primary);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 h1, h2, h3, h4 {

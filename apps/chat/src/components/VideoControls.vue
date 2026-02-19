@@ -224,4 +224,26 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
   color: var(--accent);
   background: var(--bg-active);
 }
+
+@media (max-width: 480px) {
+  .layout-group {
+    display: none;
+  }
+
+  .video-controls {
+    padding: 0.5rem;
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+    gap: 0.35rem;
+  }
+
+  .control-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .control-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+}
 </style>

@@ -238,4 +238,10 @@ function handleJoin() {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+@media (max-width: 767px) {
+  .local-preview {
+    padding: 0.75rem;
+  }
+}
 </style>

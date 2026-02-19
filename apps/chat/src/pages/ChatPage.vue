@@ -11,6 +11,7 @@ import { useStorage } from '../composables/useStorage.js'
 import { useCrypto } from '../composables/useCrypto.js'
 import { hashPassword, generateSalt } from '../lib/crypto.js'
 import { useNamespaces } from '../composables/useNamespaces.js'
+import { clearAllData } from '../lib/storage.js'
 import AppLayout from '../components/AppLayout.vue'
 import AppHeader from '../components/AppHeader.vue'
 import AppSidebar from '../components/AppSidebar.vue'
@@ -280,12 +281,22 @@ function handleDeleteRoom(roomId) {
   }
 }
 
-function handleLogout() {
+async function handleLogout() {
   cleanupFriends()
   disconnect()
-  localStorage.removeItem('clasp-chat-token')
-  localStorage.removeItem('clasp-chat-auth-userId')
-  localStorage.removeItem('clasp-chat-auth-username')
+
+  // Clear all clasp-chat-* keys and related localStorage entries
+  const keysToRemove = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key && key.startsWith('clasp-chat')) keysToRemove.push(key)
+  }
+  keysToRemove.push('recent-emojis')
+  for (const key of keysToRemove) localStorage.removeItem(key)
+
+  // Delete IndexedDB (messages, crypto keys, signing keys, TOFU keys)
+  try { await clearAllData() } catch { /* best effort */ }
+
   router.push('/')
 }
 

@@ -175,7 +175,13 @@ onUnmounted(() => {
   gap: 0.5rem;
   padding: 0.5rem;
   min-height: 0;
+  overflow: hidden;
   align-content: center;
+}
+
+.video-grid > div {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .grid-1 {

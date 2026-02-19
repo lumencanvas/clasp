@@ -22,7 +22,12 @@ const parentPath = computed(() => {
     <div class="card-top">
       <span v-if="namespace.icon" class="card-icon">{{ namespace.icon }}</span>
       <span v-else class="card-icon-default">/</span>
-      <span class="card-count">{{ roomCount }} room{{ roomCount !== 1 ? 's' : '' }}</span>
+      <span class="card-count">
+        <template v-if="roomCount > 0">{{ roomCount }} room{{ roomCount !== 1 ? 's' : '' }}</template>
+        <template v-else>Browse
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="9 18 15 12 9 6"/></svg>
+        </template>
+      </span>
     </div>
     <span v-if="hasParent" class="card-parent">{{ parentPath }}/</span>
     <h4 class="card-name">{{ displayName }}</h4>
@@ -79,6 +84,9 @@ const parentPath = computed(() => {
 .card-count {
   font-size: 0.75rem;
   color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
 }
 
 .card-parent {

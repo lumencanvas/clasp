@@ -339,6 +339,7 @@ function handleSendImage(dataUrl) {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .combo-chat {
@@ -346,6 +347,19 @@ function handleSendImage(dataUrl) {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+@media (max-width: 767px) {
+  .combo-video:not(.collapsed) {
+    min-height: 140px;
+    max-height: 35vh;
+  }
+
+  .collapse-toggle {
+    min-height: 36px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.7rem;
+  }
 }
 
 /* Desktop: side-by-side */
