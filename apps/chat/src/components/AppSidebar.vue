@@ -19,6 +19,7 @@ const emit = defineEmits([
   'toggle-friends',
   'select-dm',
   'status-change',
+  'logout',
 ])
 
 const { displayName, avatarColor, status } = useIdentity()
@@ -85,21 +86,30 @@ const { displayName, avatarColor, status } = useIdentity()
       </div>
     </div>
 
-    <div class="user-bar" @click="emit('status-change')">
-      <UserAvatar
-        :name="displayName"
-        :color="avatarColor"
-        :size="32"
-        :status="status"
-        :show-status="true"
-      />
-      <div class="user-info">
-        <span class="user-name">{{ displayName }}</span>
-        <span class="user-status">
-          <span :class="['status-dot', status]"></span>
-          {{ status === 'dnd' ? 'Do Not Disturb' : status.charAt(0).toUpperCase() + status.slice(1) }}
-        </span>
+    <div class="user-bar">
+      <div class="user-bar-info" @click="emit('status-change')">
+        <UserAvatar
+          :name="displayName"
+          :color="avatarColor"
+          :size="32"
+          :status="status"
+          :show-status="true"
+        />
+        <div class="user-info">
+          <span class="user-name">{{ displayName }}</span>
+          <span class="user-status">
+            <span :class="['status-dot', status]"></span>
+            {{ status === 'dnd' ? 'Do Not Disturb' : status.charAt(0).toUpperCase() + status.slice(1) }}
+          </span>
+        </div>
       </div>
+      <button class="action-btn logout-btn" title="Log out" aria-label="Log out" @click="emit('logout')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </button>
     </div>
   </aside>
 </template>
@@ -233,16 +243,30 @@ const { displayName, avatarColor, status } = useIdentity()
 .user-bar {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  justify-content: space-between;
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+.user-bar-info {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  flex: 1;
   cursor: pointer;
+  border-radius: 4px;
+  padding: 0.15rem;
   transition: background 0.1s;
 }
 
-.user-bar:hover {
+.user-bar-info:hover {
   background: var(--bg-tertiary);
+}
+
+.logout-btn:hover {
+  color: var(--danger) !important;
 }
 
 .user-info {

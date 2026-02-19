@@ -6,23 +6,33 @@ import { useIdentity } from '../composables/useIdentity.js'
 import { AVATAR_COLORS, USER_STATUSES, DEFAULT_RELAY_URL, AUTH_API_URL } from '../lib/constants.js'
 
 const router = useRouter()
-const { connecting, connected, error, url, connect } = useClasp()
+const { connecting, connected, error: claspError, url, connect } = useClasp()
 const { displayName, avatarColor, status, setDisplayName, setAvatarColor, setStatus } = useIdentity()
 
 const nameInput = ref(displayName.value)
 const serverUrl = ref(url.value)
+const localError = ref(null)
 
 async function handleConnect() {
   if (!nameInput.value.trim()) return
+  localError.value = null
   setDisplayName(nameInput.value.trim())
   url.value = serverUrl.value
 
   // Try guest token for auth-enabled relays
   try {
-    const res = await fetch(`${AUTH_API_URL}/auth/guest`, { method: 'POST' })
+    const res = await fetch(`${AUTH_API_URL}/auth/guest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: nameInput.value.trim() }),
+    })
     if (res.ok) {
       const data = await res.json()
       localStorage.setItem('clasp-chat-token', data.token)
+    } else if (res.status === 409) {
+      const data = await res.json()
+      localError.value = data.error || 'That name is taken by a registered user'
+      return
     }
   } catch {
     // Open relay, no auth needed
@@ -109,10 +119,10 @@ async function handleConnect() {
           <span v-else>Connect</span>
         </button>
 
-        <p v-if="error" class="error-text">{{ error }}</p>
+        <p v-if="localError || claspError" class="error-text">{{ localError || claspError }}</p>
 
         <p class="alt-action">
-          Want a persistent account? <router-link to="/auth">Sign in</router-link>
+          Want a persistent account? <router-link to="/auth">Sign up or sign in</router-link>
         </p>
       </form>
     </div>

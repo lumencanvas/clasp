@@ -33,7 +33,7 @@ const currentRoom = computed(() => {
   return rooms.value.get(currentRoomId.value) || null
 })
 
-function createRoom({ name, type, isPublic }) {
+function createRoom({ name, type, isPublic, encrypted = false, passwordHash, passwordSalt }) {
   const { set, connected } = useClasp()
   const { userId, displayName } = useIdentity()
   if (!connected.value) return null
@@ -48,10 +48,20 @@ function createRoom({ name, type, isPublic }) {
     createdAt: Date.now(),
   }
 
+  // Add password flag to registry if password-protected
+  if (passwordHash) {
+    roomData.hasPassword = true
+  }
+
   // Register in global registry
   set(`${ADDR.ROOM_REGISTRY}/${roomId}`, roomData)
   // Set room meta
-  set(`${ADDR.ROOM}/${roomId}/meta`, { name, type, description: '', isPublic })
+  const meta = { name, type, description: '', isPublic, encrypted }
+  if (passwordHash) {
+    meta.passwordHash = passwordHash
+    meta.passwordSalt = passwordSalt
+  }
+  set(`${ADDR.ROOM}/${roomId}/meta`, meta)
 
   // Add locally
   rooms.value.set(roomId, { id: roomId, ...roomData })

@@ -24,7 +24,5 @@ router.beforeEach((to) => {
     return '/auth'
   }
 
-  if (to.path === '/auth' && hasToken) {
-    return '/chat'
-  }
+  // Don't block /auth — users may want to switch from guest to registered
 })

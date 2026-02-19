@@ -1,4 +1,5 @@
 <script setup>
+import { ref } from 'vue'
 import { ROOM_TYPE_INFO } from '../lib/constants.js'
 import { formatRelativeTime } from '../lib/utils.js'
 
@@ -8,6 +9,27 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['join', 'close'])
+
+const passwordPromptRoom = ref(null)
+const passwordInput = ref('')
+const passwordError = ref('')
+
+function handleJoinClick(room) {
+  if (room.hasPassword && !props.joinedRoomIds.has(room.id)) {
+    passwordPromptRoom.value = room
+    passwordInput.value = ''
+    passwordError.value = ''
+  } else {
+    emit('join', room.id)
+  }
+}
+
+function submitPassword() {
+  if (!passwordInput.value) return
+  emit('join', passwordPromptRoom.value.id, passwordInput.value)
+  passwordPromptRoom.value = null
+  passwordInput.value = ''
+}
 </script>
 
 <template>
@@ -33,6 +55,12 @@ const emit = defineEmits(['join', 'close'])
           <div v-for="room in rooms" :key="room.id" class="discovery-card">
             <div class="card-top">
               <span class="card-type">{{ (ROOM_TYPE_INFO[room.type] || ROOM_TYPE_INFO.text).label }}</span>
+              <span v-if="room.hasPassword" class="card-lock" title="Password protected">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+              </span>
               <span class="card-time">{{ formatRelativeTime(room.createdAt) }}</span>
             </div>
             <h4 class="card-name">{{ room.name }}</h4>
@@ -40,10 +68,32 @@ const emit = defineEmits(['join', 'close'])
             <button
               class="join-btn"
               :disabled="joinedRoomIds.has(room.id)"
-              @click="emit('join', room.id)"
+              @click="handleJoinClick(room)"
             >
               {{ joinedRoomIds.has(room.id) ? 'Joined' : 'Join' }}
             </button>
+          </div>
+        </div>
+
+        <!-- Password prompt overlay -->
+        <div v-if="passwordPromptRoom" class="password-overlay" @click.self="passwordPromptRoom = null">
+          <div class="password-dialog">
+            <h4>Enter Room Password</h4>
+            <p>{{ passwordPromptRoom.name }} is password-protected</p>
+            <form @submit.prevent="submitPassword">
+              <input
+                v-model="passwordInput"
+                type="password"
+                placeholder="Room password"
+                autocomplete="off"
+                autofocus
+              />
+              <div v-if="passwordError" class="pw-error">{{ passwordError }}</div>
+              <div class="pw-actions">
+                <button type="button" class="pw-cancel" @click="passwordPromptRoom = null">Cancel</button>
+                <button type="submit" class="pw-submit" :disabled="!passwordInput">Join</button>
+              </div>
+            </form>
           </div>
         </div>
       </div>
@@ -194,5 +244,90 @@ const emit = defineEmits(['join', 'close'])
   background: var(--bg-active);
   color: var(--text-muted);
   cursor: default;
+}
+
+.card-lock {
+  display: flex;
+  align-items: center;
+  color: var(--accent4);
+}
+
+.password-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: calc(var(--z-modal) + 1);
+}
+
+.password-dialog {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.5rem;
+  width: 320px;
+  max-width: 90vw;
+}
+
+.password-dialog h4 {
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+
+.password-dialog p {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+
+.password-dialog input {
+  width: 100%;
+  padding: 0.6rem 0.8rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.password-dialog input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.pw-error {
+  font-size: 0.75rem;
+  color: var(--danger);
+  margin-bottom: 0.5rem;
+}
+
+.pw-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.pw-cancel,
+.pw-submit {
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  border: none;
+}
+
+.pw-cancel {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.pw-submit {
+  background: var(--accent);
+  color: white;
+}
+
+.pw-submit:disabled {
+  opacity: 0.5;
 }
 </style>

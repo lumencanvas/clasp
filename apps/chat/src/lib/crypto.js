@@ -57,9 +57,10 @@ export async function decryptMessage(key, ciphertext, iv) {
 export async function generateECDHKeyPair() {
   const keyPair = await crypto.subtle.generateKey(
     { name: 'ECDH', namedCurve: 'P-256' },
-    true,
+    false,
     ['deriveKey']
   )
+  // Public key still extractable for exchange; private key is non-extractable
   return {
     publicKey: keyPair.publicKey,
     privateKey: keyPair.privateKey,
@@ -118,6 +119,40 @@ export async function importKey(jwk, type = 'aes') {
   }
 }
 
+/**
+ * Hash a password with PBKDF2 (SHA-256, 100k iterations).
+ * Returns base64 hash string.
+ */
+export async function hashPassword(password, salt) {
+  const encoder = new TextEncoder()
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(password),
+    'PBKDF2',
+    false,
+    ['deriveBits']
+  )
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: encoder.encode(salt),
+      iterations: 100000,
+      hash: 'SHA-256',
+    },
+    keyMaterial,
+    256
+  )
+  return arrayBufferToBase64(bits)
+}
+
+/**
+ * Generate a random salt string (base64-encoded 16 bytes).
+ */
+export function generateSalt() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  return arrayBufferToBase64(bytes.buffer)
+}
+
 // --- Helpers ---
 
 function arrayBufferToBase64(buffer) {
@@ -135,5 +170,5 @@ function base64ToArrayBuffer(base64) {
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i)
   }
-  return bytes.buffer
+  return bytes
 }

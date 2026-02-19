@@ -126,21 +126,13 @@ export async function loadCryptoKey(roomId) {
  */
 export async function exportAll() {
   const db = await openDB()
-  const data = { messages: [], cryptoKeys: [] }
+  const data = { messages: [] }
 
-  // Export messages
+  // Export messages only — crypto keys are excluded for security
   await new Promise((resolve, reject) => {
     const tx = db.transaction('messages', 'readonly')
     const request = tx.objectStore('messages').getAll()
     request.onsuccess = () => { data.messages = request.result; resolve() }
-    request.onerror = () => reject(request.error)
-  })
-
-  // Export crypto keys
-  await new Promise((resolve, reject) => {
-    const tx = db.transaction('crypto-keys', 'readonly')
-    const request = tx.objectStore('crypto-keys').getAll()
-    request.onsuccess = () => { data.cryptoKeys = request.result; resolve() }
     request.onerror = () => reject(request.error)
   })
 

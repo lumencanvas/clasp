@@ -2,28 +2,79 @@ import { ref, computed } from 'vue'
 import { useClasp } from './useClasp.js'
 import { useIdentity } from './useIdentity.js'
 import { useRooms } from './useRooms.js'
+import { useCrypto } from './useCrypto.js'
 import { ADDR } from '../lib/constants.js'
 
 /**
  * Admin tools composable.
- * Room creator can kick/ban members and mod-delete messages.
+ * Room creator and promoted admins can kick/ban members and mod-delete messages.
+ * Only the creator can promote/demote admins and delete the room.
  */
 export function useAdmin(roomId) {
   const { connected, set, emit: claspEmit, subscribe } = useClasp()
   const { userId } = useIdentity()
   const { currentRoom } = useRooms()
+  const { isEncrypted, rotateRoomKey } = useCrypto()
 
   const bannedUsers = ref(new Set())
+  const adminList = ref(new Map()) // userId -> { role, promotedBy, timestamp }
 
   const isRoomCreator = computed(() => {
     return currentRoom.value?.creatorId === userId.value
   })
 
+  const isAdmin = computed(() => {
+    return isRoomCreator.value || adminList.value.has(userId.value)
+  })
+
+  /**
+   * Subscribe to admin list for this room.
+   */
+  function subscribeAdmins() {
+    if (!roomId.value) return () => {}
+    return subscribe(`${ADDR.ROOM}/${roomId.value}/admin/*`, (data, address) => {
+      const targetId = address.split('/').pop()
+      if (data === null) {
+        adminList.value.delete(targetId)
+      } else {
+        adminList.value.set(targetId, data)
+      }
+      adminList.value = new Map(adminList.value)
+    })
+  }
+
+  /**
+   * Promote a user to admin (creator-only).
+   */
+  function promoteToAdmin(targetUserId) {
+    if (!connected.value || !roomId.value || !isRoomCreator.value) return
+    set(`${ADDR.ROOM}/${roomId.value}/admin/${targetUserId}`, {
+      role: 'admin',
+      promotedBy: userId.value,
+      timestamp: Date.now(),
+    })
+  }
+
+  /**
+   * Demote an admin (creator-only).
+   */
+  function demoteAdmin(targetUserId) {
+    if (!connected.value || !roomId.value || !isRoomCreator.value) return
+    set(`${ADDR.ROOM}/${roomId.value}/admin/${targetUserId}`, null)
+  }
+
+  /**
+   * Check if a given user is an admin or the creator.
+   */
+  function isUserAdmin(targetUserId) {
+    return targetUserId === currentRoom.value?.creatorId || adminList.value.has(targetUserId)
+  }
+
   /**
    * Kick a user from the room (clear their presence).
    */
   function kickUser(targetUserId) {
-    if (!connected.value || !roomId.value) return
+    if (!connected.value || !roomId.value || !isAdmin.value) return
     const rid = roomId.value
 
     // Clear their presence
@@ -45,7 +96,7 @@ export function useAdmin(roomId) {
    * Ban a user from the room.
    */
   function banUser(targetUserId) {
-    if (!connected.value || !roomId.value) return
+    if (!connected.value || !roomId.value || !isAdmin.value) return
     const rid = roomId.value
 
     // Set ban record
@@ -58,13 +109,18 @@ export function useAdmin(roomId) {
     kickUser(targetUserId)
 
     bannedUsers.value = new Set(bannedUsers.value).add(targetUserId)
+
+    // Rotate room key if encrypted (so banned user can't decrypt new messages)
+    if (isEncrypted(rid)) {
+      rotateRoomKey(rid).catch(e => console.warn('[admin] Key rotation failed:', e))
+    }
   }
 
   /**
    * Delete a message as admin/mod.
    */
   function modDeleteMessage(msgId) {
-    if (!connected.value || !roomId.value) return
+    if (!connected.value || !roomId.value || !isAdmin.value) return
 
     claspEmit(`${ADDR.ROOM}/${roomId.value}/messages`, {
       type: 'delete',
@@ -97,7 +153,13 @@ export function useAdmin(roomId) {
 
   return {
     isRoomCreator,
+    isAdmin,
+    adminList,
     bannedUsers,
+    subscribeAdmins,
+    promoteToAdmin,
+    demoteAdmin,
+    isUserAdmin,
     kickUser,
     banUser,
     modDeleteMessage,

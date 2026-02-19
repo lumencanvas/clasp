@@ -7,6 +7,8 @@ const emit = defineEmits(['create', 'close'])
 const name = ref('')
 const type = ref(ROOM_TYPES.TEXT)
 const isPublic = ref(true)
+const encrypted = ref(false)
+const password = ref('')
 
 function handleCreate() {
   if (!name.value.trim()) return
@@ -14,8 +16,12 @@ function handleCreate() {
     name: name.value.trim(),
     type: type.value,
     isPublic: isPublic.value,
+    encrypted: encrypted.value,
+    password: password.value || null,
   })
   name.value = ''
+  password.value = ''
+  encrypted.value = false
 }
 </script>
 
@@ -92,6 +98,28 @@ function handleCreate() {
             <span class="toggle-knob"></span>
           </button>
           <span class="toggle-hint">{{ isPublic ? 'Visible in Browse' : 'Invite-only' }}</span>
+        </div>
+
+        <div class="field toggle-field">
+          <label>E2E Encryption</label>
+          <button
+            type="button"
+            :class="['toggle', { active: encrypted }]"
+            @click="encrypted = !encrypted"
+          >
+            <span class="toggle-knob"></span>
+          </button>
+          <span class="toggle-hint">{{ encrypted ? 'Messages encrypted end-to-end' : 'Off' }}</span>
+        </div>
+
+        <div class="field">
+          <label>Room Password <span class="optional">(optional)</span></label>
+          <input
+            v-model="password"
+            type="password"
+            placeholder="Leave empty for no password"
+            autocomplete="off"
+          />
         </div>
 
         <button type="submit" class="create-btn" :disabled="!name.trim()">
@@ -270,6 +298,12 @@ function handleCreate() {
 
 .toggle-hint {
   font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.optional {
+  text-transform: none;
+  letter-spacing: normal;
   color: var(--text-muted);
 }
 

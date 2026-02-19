@@ -4,6 +4,9 @@ import { useChat } from '../composables/useChat.js'
 import { useReactions } from '../composables/useReactions.js'
 import { useCrypto } from '../composables/useCrypto.js'
 import { useAdmin } from '../composables/useAdmin.js'
+import { useRooms } from '../composables/useRooms.js'
+import { useClasp } from '../composables/useClasp.js'
+import { ADDR } from '../lib/constants.js'
 import MessageList from './MessageList.vue'
 import MessageComposer from './MessageComposer.vue'
 import TypingIndicator from './TypingIndicator.vue'
@@ -31,22 +34,31 @@ const {
   startEditing,
   cancelEditing,
   handleTyping,
+  waitingForKey,
 } = useChat(roomIdRef, isActiveRef)
 
 const { toggleReaction, getMessageReactions } = useReactions(roomIdRef)
-const { isEncrypted, enableEncryption } = useCrypto()
-const { isRoomCreator, subscribeBans } = useAdmin(roomIdRef)
+const { isEncrypted, enableEncryption, encryptedRooms } = useCrypto()
+const { isRoomCreator, isAdmin, subscribeBans, subscribeAdmins } = useAdmin(roomIdRef)
+const { currentRoom } = useRooms()
+const { set } = useClasp()
 
 const showAdmin = ref(false)
 
-// Subscribe to bans when room is active
+// Subscribe to bans and admin list when room is active
 subscribeBans()
+subscribeAdmins()
 
 const roomIsEncrypted = () => isEncrypted(props.roomId)
 
 async function toggleEncryption() {
   if (!isEncrypted(props.roomId)) {
     await enableEncryption(props.roomId)
+    // Persist encrypted flag in room meta (one-way: can enable, can't disable)
+    set(`${ADDR.ROOM}/${props.roomId}/meta`, {
+      ...currentRoom.value,
+      encrypted: true,
+    })
   }
 }
 
@@ -58,6 +70,8 @@ function handleSendImage(dataUrl) {
   sendMessage('', { image: dataUrl })
 }
 
+const emit = defineEmits(['delete-room'])
+
 defineExpose({ sortedParticipants, onlineCount })
 </script>
 
@@ -65,14 +79,25 @@ defineExpose({ sortedParticipants, onlineCount })
   <div class="chat-view">
     <div class="chat-header-bar">
       <div v-if="roomIsEncrypted()" class="encryption-indicator">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
-        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-      </svg>
-      <span>End-to-end encrypted</span>
-    </div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        <span>End-to-end encrypted</span>
+      </div>
       <button
-        v-if="isRoomCreator"
+        v-if="isRoomCreator && !roomIsEncrypted()"
+        class="encrypt-toggle"
+        title="Enable E2E Encryption"
+        @click="toggleEncryption"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+      </button>
+      <button
+        v-if="isAdmin"
         class="admin-toggle"
         aria-label="Room settings"
         title="Room settings"
@@ -88,6 +113,7 @@ defineExpose({ sortedParticipants, onlineCount })
       :room-id="roomId"
       :members="sortedParticipants"
       @close="showAdmin = false"
+      @delete-room="emit('delete-room', $event)"
     />
     <MessageList
       :messages="messages"
@@ -98,7 +124,15 @@ defineExpose({ sortedParticipants, onlineCount })
       @react="toggleReaction"
     />
     <TypingIndicator :users="typingList" />
+    <div v-if="waitingForKey" class="waiting-for-key">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+      <span>Waiting for room key...</span>
+    </div>
     <MessageComposer
+      v-else
       :reply-to="replyTo"
       :editing-message="editingMessage"
       @send="handleSend"
@@ -135,6 +169,39 @@ defineExpose({ sortedParticipants, onlineCount })
   background: color-mix(in srgb, var(--success) 10%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--success) 20%, transparent);
   font-size: 0.7rem;
+  color: var(--accent3);
+}
+
+.waiting-for-key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.encrypt-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 0.5rem;
+}
+
+.encrypt-toggle:hover {
+  background: var(--bg-tertiary);
   color: var(--accent3);
 }
 

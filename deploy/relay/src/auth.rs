@@ -77,6 +77,9 @@ fn build_scopes(user_id: &str) -> Vec<String> {
         format!("write:/chat/room/*/typing/{}", user_id),
         "write:/chat/room/*/reactions/**".to_string(),
         "write:/chat/room/*/crypto/**".to_string(),
+        "write:/chat/room/*/admin/**".to_string(),
+        "write:/chat/room/*/bans/**".to_string(),
+        "write:/chat/room/*/meta".to_string(),
         "write:/chat/registry/rooms/*".to_string(),
     ]
 }
@@ -229,12 +232,41 @@ async fn login(
     }))
 }
 
+#[derive(Deserialize)]
+pub struct GuestRequest {
+    name: Option<String>,
+}
+
 /// Issue a guest token (anonymous access)
 async fn guest(
     State(state): State<Arc<AuthState>>,
-) -> Json<AuthResponse> {
+    Json(req): Json<GuestRequest>,
+) -> Result<Json<AuthResponse>, (StatusCode, Json<ErrorResponse>)> {
     let user_id = generate_user_id();
-    let guest_name = format!("guest-{}", &user_id[user_id.len()-6..]);
+
+    // Check if requested name conflicts with a registered username
+    if let Some(ref name) = req.name {
+        let name_lower = name.trim().to_lowercase();
+        let taken = {
+            let db = state.db.lock().unwrap();
+            let mut stmt = db
+                .prepare("SELECT 1 FROM users WHERE LOWER(username) = ?1")
+                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
+                    error: "Database error".into(),
+                })))?;
+            stmt.exists([&name_lower]).unwrap_or(false)
+        };
+        if taken {
+            return Err((StatusCode::CONFLICT, Json(ErrorResponse {
+                error: "That name belongs to a registered user. Sign in or pick a different name.".into(),
+            })));
+        }
+    }
+
+    let guest_name = req.name
+        .filter(|n| !n.trim().is_empty())
+        .map(|n| n.trim().to_string())
+        .unwrap_or_else(|| format!("guest-{}", &user_id[user_id.len()-6..]));
 
     let token = CpskValidator::generate_token();
     let scope_strings = build_scopes(&user_id);
@@ -251,11 +283,11 @@ async fn guest(
 
     tracing::info!("Guest joined: {} ({})", guest_name, user_id);
 
-    Json(AuthResponse {
+    Ok(Json(AuthResponse {
         token,
         user_id,
         username: guest_name,
-    })
+    }))
 }
 
 /// Build the auth HTTP router

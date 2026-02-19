@@ -21,6 +21,8 @@ import { saveCryptoKey, loadCryptoKey } from '../lib/storage.js'
 // roomId -> CryptoKey
 const roomKeys = new Map()
 const encryptedRooms = ref(new Set())
+// Rooms that require password proof for key exchange
+const passwordRooms = new Set()
 
 // ECDH key pair for this session (generated lazily)
 let ecdhKeyPair = null
@@ -105,6 +107,21 @@ function subscribeKeyExchange(roomId) {
     const roomKey = roomKeys.get(roomId)
     if (!roomKey) return // We don't have the room key
 
+    // If room is password-protected, verify peer has published a valid proof
+    if (passwordRooms.has(roomId)) {
+      const proof = await new Promise((resolve) => {
+        const unsub = subscribe(`${ADDR.ROOM}/${roomId}/crypto/proof/${peerId}`, (proofData) => {
+          resolve(proofData)
+          unsub()
+        })
+        setTimeout(() => resolve(null), 2000)
+      })
+      if (!proof || !proof.hash) {
+        console.warn(`[crypto] Peer ${peerId} has no password proof, skipping key exchange`)
+        return
+      }
+    }
+
     try {
       // Derive shared secret with peer's public key
       const peerPubKey = await importKey(data.publicKey, 'ecdh-public')
@@ -187,6 +204,33 @@ function isEncrypted(roomId) {
   return encryptedRooms.value.has(roomId)
 }
 
+/**
+ * Rotate the room key after a member is removed.
+ * Generates a new AES key, publishes new public key to trigger re-exchange.
+ */
+async function rotateRoomKey(roomId) {
+  if (!roomKeys.has(roomId)) return
+
+  // Generate new key
+  const newKey = await generateRoomKey()
+  roomKeys.set(roomId, newKey)
+  encryptedRooms.value = new Set(encryptedRooms.value).add(roomId)
+
+  // Persist to IndexedDB
+  const exported = await exportKey(newKey)
+  await saveCryptoKey(roomId, exported)
+
+  // Re-publish our public key to trigger key exchange with remaining members
+  await publishPublicKey(roomId)
+}
+
+/**
+ * Mark a room as password-protected for key exchange gating.
+ */
+function markPasswordProtected(roomId) {
+  passwordRooms.add(roomId)
+}
+
 export function useCrypto() {
   return {
     encryptedRooms,
@@ -197,5 +241,7 @@ export function useCrypto() {
     encrypt,
     decrypt,
     isEncrypted,
+    rotateRoomKey,
+    markPasswordProtected,
   }
 }

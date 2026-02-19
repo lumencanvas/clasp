@@ -29,12 +29,14 @@ mod auth;
 use anyhow::Result;
 use clap::Parser;
 use clasp_core::security::{CpskValidator, TokenValidator, ValidationResult};
+use clasp_core::types::SnapshotMessage;
 use clasp_core::SecurityMode;
-use clasp_router::{MultiProtocolConfig, Router, RouterConfig, RouterStateConfig};
+use clasp_router::{MultiProtocolConfig, Router, RouterConfig, RouterState, RouterStateConfig};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::signal;
 use tracing_subscriber::EnvFilter;
 
 /// Wrapper to share a CpskValidator between the router and auth module.
@@ -147,6 +149,14 @@ struct Cli {
     /// Rendezvous TTL in seconds (how long device registrations last)
     #[arg(long, default_value = "300")]
     rendezvous_ttl: u64,
+
+    /// Path to state snapshot file (enables persistence across restarts)
+    #[arg(long)]
+    persist: Option<PathBuf>,
+
+    /// Snapshot interval in seconds (default: 30)
+    #[arg(long, default_value = "30")]
+    persist_interval: u64,
 }
 
 #[tokio::main]
@@ -226,6 +236,39 @@ async fn main() -> Result<()> {
     };
 
     let mut router = Router::new(config);
+
+    // Restore state from disk if --persist is set and file exists
+    if let Some(ref persist_path) = cli.persist {
+        if persist_path.exists() {
+            match std::fs::read_to_string(persist_path) {
+                Ok(json) => match serde_json::from_str::<SnapshotMessage>(&json) {
+                    Ok(snapshot) => {
+                        let count = snapshot.params.len();
+                        let writer = "restore".to_string();
+                        for pv in snapshot.params {
+                            let _ = router.state().set(
+                                &pv.address,
+                                pv.value,
+                                &writer,
+                                Some(pv.revision),
+                                false,
+                                false,
+                            );
+                        }
+                        tracing::info!("Restored {} params from {}", count, persist_path.display());
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to parse snapshot {}: {}", persist_path.display(), e);
+                    }
+                },
+                Err(e) => {
+                    tracing::warn!("Failed to read snapshot {}: {}", persist_path.display(), e);
+                }
+            }
+        } else {
+            tracing::info!("No existing snapshot at {}, starting fresh", persist_path.display());
+        }
+    }
 
     // Create shared validator and start auth HTTP server if enabled
     if let Some(auth_port) = cli.auth_port {
@@ -383,6 +426,17 @@ async fn main() -> Result<()> {
         osc: osc_config,
     };
 
+    // Log persistence config
+    if let Some(ref persist_path) = cli.persist {
+        tracing::info!(
+            "Persistence: {} (interval: {}s)",
+            persist_path.display(),
+            cli.persist_interval
+        );
+    } else {
+        tracing::info!("Persistence: disabled (use --persist <path> to enable)");
+    }
+
     tracing::info!("Router initialized, accepting connections...");
 
     // Start rendezvous server if enabled
@@ -410,8 +464,81 @@ async fn main() -> Result<()> {
         });
     }
 
-    // Serve all protocols
-    router.serve_all(multi_config).await?;
+    // Get Arc<RouterState> for persistence tasks
+    let (_, _, state_arc) = router.shared_state();
+
+    // Spawn background persistence task if --persist is set
+    if let Some(ref path) = cli.persist {
+        let bg_state = Arc::clone(&state_arc);
+        let bg_path = path.clone();
+        let bg_interval = cli.persist_interval;
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(bg_interval));
+            interval.tick().await; // skip first immediate tick
+            loop {
+                interval.tick().await;
+                write_snapshot(&bg_state, &bg_path);
+            }
+        });
+    }
+
+    // Run serve_all alongside a shutdown signal listener
+    let shutdown_state = Arc::clone(&state_arc);
+    let persist_path_shutdown = cli.persist.clone();
+
+    tokio::select! {
+        result = router.serve_all(multi_config) => {
+            result?;
+        }
+        _ = shutdown_signal() => {
+            tracing::info!("Shutdown signal received");
+            if let Some(ref path) = persist_path_shutdown {
+                tracing::info!("Writing final snapshot before exit...");
+                write_snapshot(&shutdown_state, path);
+            }
+        }
+    }
 
     Ok(())
+}
+
+/// Write a state snapshot atomically (write to .tmp then rename).
+fn write_snapshot(state: &RouterState, path: &std::path::Path) {
+    let snapshot = state.full_snapshot();
+    let count = snapshot.params.len();
+    match serde_json::to_string(&snapshot) {
+        Ok(json) => {
+            let tmp_path = path.with_extension("json.tmp");
+            if let Err(e) = std::fs::write(&tmp_path, &json) {
+                tracing::error!("Failed to write snapshot tmp: {}", e);
+                return;
+            }
+            if let Err(e) = std::fs::rename(&tmp_path, path) {
+                tracing::error!("Failed to rename snapshot: {}", e);
+                return;
+            }
+            tracing::debug!("Snapshot: {} params, {} bytes", count, json.len());
+        }
+        Err(e) => {
+            tracing::error!("Failed to serialize snapshot: {}", e);
+        }
+    }
+}
+
+/// Wait for SIGINT or SIGTERM.
+async fn shutdown_signal() {
+    let ctrl_c = signal::ctrl_c();
+    #[cfg(unix)]
+    {
+        let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("Failed to register SIGTERM handler");
+        tokio::select! {
+            _ = ctrl_c => {}
+            _ = sigterm.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        ctrl_c.await.ok();
+    }
 }

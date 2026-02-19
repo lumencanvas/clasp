@@ -8,6 +8,8 @@ import { useNotifications } from '../composables/useNotifications.js'
 import { useFriends } from '../composables/useFriends.js'
 import { ROOM_TYPES } from '../lib/constants.js'
 import { useStorage } from '../composables/useStorage.js'
+import { useCrypto } from '../composables/useCrypto.js'
+import { hashPassword, generateSalt } from '../lib/crypto.js'
 import AppLayout from '../components/AppLayout.vue'
 import AppHeader from '../components/AppHeader.vue'
 import AppSidebar from '../components/AppSidebar.vue'
@@ -35,6 +37,7 @@ const {
   createDM,
   joinRoom,
   leaveRoom,
+  deleteRoom,
   switchRoom,
   discoverPublicRooms,
   stopDiscovery,
@@ -52,6 +55,7 @@ const {
 } = useFriends()
 
 const { exportData, importData } = useStorage()
+const { enableEncryption } = useCrypto()
 const importFileRef = ref(null)
 
 const showMembers = ref(true)
@@ -92,15 +96,63 @@ function handleSelectRoom(roomId) {
   layoutRef.value?.closeSidebar()
 }
 
-function handleCreateRoom(opts) {
-  const roomId = createRoom(opts)
+async function handleCreateRoom(opts) {
+  // Hash password if provided
+  let passwordHash = null
+  let passwordSalt = null
+  if (opts.password) {
+    passwordSalt = generateSalt()
+    passwordHash = await hashPassword(opts.password, passwordSalt)
+  }
+
+  const roomId = createRoom({
+    name: opts.name,
+    type: opts.type,
+    isPublic: opts.isPublic,
+    encrypted: opts.encrypted,
+    passwordHash,
+    passwordSalt,
+  })
   if (roomId) {
+    // Enable E2E encryption if requested
+    if (opts.encrypted) {
+      await enableEncryption(roomId)
+    }
     switchRoom(roomId)
     showCreateDialog.value = false
   }
 }
 
-function handleBrowseJoin(roomId) {
+async function handleBrowseJoin(roomId, password) {
+  // If room has a password, verify it before joining
+  if (password) {
+    const { subscribe } = useClasp()
+    // Fetch room meta to get password hash/salt
+    const meta = await new Promise((resolve) => {
+      const unsub = subscribe(`/chat/room/${roomId}/meta`, (data) => {
+        resolve(data)
+        unsub()
+      })
+      // Timeout after 3s
+      setTimeout(() => resolve(null), 3000)
+    })
+
+    if (meta && meta.passwordHash && meta.passwordSalt) {
+      const hash = await hashPassword(password, meta.passwordSalt)
+      if (hash !== meta.passwordHash) {
+        // Wrong password — don't join
+        return
+      }
+      // Correct password — publish password proof for crypto gating
+      const { userId: uid } = useIdentity()
+      const { set } = useClasp()
+      set(`/chat/room/${roomId}/crypto/proof/${uid.value}`, {
+        hash,
+        timestamp: Date.now(),
+      })
+    }
+  }
+
   joinRoom(roomId)
   switchRoom(roomId)
   showBrowseDialog.value = false
@@ -136,6 +188,20 @@ function handleViewProfile(member) {
 function handleStatusChange(newStatus) {
   setStatus(newStatus)
   showStatusPicker.value = false
+}
+
+function handleDeleteRoom(roomId) {
+  if (confirm('Delete this room? This cannot be undone.')) {
+    deleteRoom(roomId)
+  }
+}
+
+function handleLogout() {
+  disconnect()
+  localStorage.removeItem('clasp-chat-token')
+  localStorage.removeItem('clasp-chat-auth-userId')
+  localStorage.removeItem('clasp-chat-auth-username')
+  router.push('/')
 }
 
 function handleExport() { exportData() }
@@ -183,6 +249,7 @@ onUnmounted(() => {
         @browse-rooms="handleBrowse"
         @toggle-friends="showFriends = !showFriends"
         @status-change="showStatusPicker = true"
+        @logout="handleLogout"
       />
     </template>
 
@@ -204,6 +271,7 @@ onUnmounted(() => {
         ref="chatViewRef"
         :room-id="currentRoomId"
         :is-active="true"
+        @delete-room="handleDeleteRoom"
       />
       <VideoChannelView
         v-else-if="currentRoom.type === ROOM_TYPES.VIDEO"

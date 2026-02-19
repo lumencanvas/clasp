@@ -16,7 +16,7 @@ services:
     restart: unless-stopped
 
   relay:
-    build: ../relay
+    image: ghcr.io/lumencanvas/clasp-relay:latest
     environment:
       RUST_LOG: info
     command:
@@ -27,6 +27,8 @@ services:
       - "--auth-db"
       - "/data/chat-auth.db"
       - "--no-ttl"
+      - "--persist"
+      - "/data/state.json"
       - "--name"
       - "${RELAY_DOMAIN}"
     volumes:

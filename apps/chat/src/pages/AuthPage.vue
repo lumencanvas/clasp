@@ -7,8 +7,12 @@ import { useIdentity } from '../composables/useIdentity.js'
 
 const router = useRouter()
 const { authError, authLoading, register, login } = useAuth()
-const { connect } = useClasp()
+const { connect, disconnect } = useClasp()
 const { setDisplayName } = useIdentity()
+
+// Clear any stale guest token so we get a fresh auth
+disconnect()
+localStorage.removeItem('clasp-chat-token')
 
 const mode = ref('login') // 'login' | 'register'
 const username = ref('')

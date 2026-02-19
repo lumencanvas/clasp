@@ -17,7 +17,7 @@ export function useChat(roomId, isActive) {
   const { userId, displayName, avatarColor } = useIdentity()
   const { incrementUnread, notifyMessage } = useNotifications()
   const { loadCachedMessages, persistMessage } = useStorage()
-  const { encrypt, decrypt, isEncrypted, loadRoomKey, subscribeKeyExchange } = useCrypto()
+  const { encrypt, decrypt, isEncrypted, loadRoomKey, subscribeKeyExchange, encryptedRooms, markPasswordProtected } = useCrypto()
 
   const messages = ref([])
   const participants = ref(new Map())
@@ -26,6 +26,7 @@ export function useChat(roomId, isActive) {
   const replyTo = ref(null) // { id, from, text } or null
   const editingMessage = ref(null) // message object or null
   const isThrottled = ref(false)
+  const waitingForKey = ref(false)
 
   // Rate limiting: max 5 messages per second
   const MSG_RATE_LIMIT = 5
@@ -48,7 +49,7 @@ export function useChat(roomId, isActive) {
 
   const typingList = computed(() => {
     return Array.from(typingUsers.value.entries())
-      .filter(([id]) => id !== sessionId.value)
+      .filter(([id]) => id !== userId.value)
       .map(([, data]) => data.name)
   })
 
@@ -62,15 +63,31 @@ export function useChat(roomId, isActive) {
       const plaintext = await decrypt(roomId.value, payload.text, payload.iv)
       if (plaintext !== null) {
         payload = { ...payload, text: plaintext }
+      } else if (isEncrypted(roomId.value)) {
+        // Can't decrypt in encrypted room — show placeholder
+        payload = { ...payload, text: '[encrypted message - key unavailable]' }
+      }
+      // Decrypt image if present
+      if (payload.encryptedImage && payload.imageIv) {
+        const imgPlain = await decrypt(roomId.value, payload.encryptedImage, payload.imageIv)
+        if (imgPlain !== null) {
+          payload = { ...payload, image: imgPlain, encryptedImage: undefined, imageIv: undefined }
+        }
       }
     }
 
     // Handle edit messages
     if (payload.type === 'edit') {
       if (payload.fromId === sessionId.value) return
+      // Decrypt edit text if encrypted
+      let editText = payload.text
+      if (payload.encrypted && payload.iv) {
+        const plain = await decrypt(roomId.value, payload.text, payload.iv)
+        if (plain !== null) editText = plain
+      }
       const idx = messages.value.findIndex(m => m.msgId === payload.targetId)
       if (idx !== -1) {
-        messages.value[idx] = { ...messages.value[idx], text: payload.text, edited: true }
+        messages.value[idx] = { ...messages.value[idx], text: editText, edited: true }
       }
       return
     }
@@ -131,7 +148,7 @@ export function useChat(roomId, isActive) {
 
       if (data === null) {
         const user = participants.value.get(uid)
-        if (user && uid !== sessionId.value) {
+        if (user && uid !== userId.value) {
           addSystemMessage(`${user.name} left`)
         }
         participants.value.delete(uid)
@@ -140,7 +157,7 @@ export function useChat(roomId, isActive) {
         const isNew = !participants.value.has(uid)
         participants.value.set(uid, { ...data, lastSeen: Date.now() })
         participants.value = new Map(participants.value)
-        if (isNew && uid !== sessionId.value) {
+        if (isNew && uid !== userId.value) {
           addSystemMessage(`${data.name} joined`)
         }
       }
@@ -163,7 +180,30 @@ export function useChat(roomId, isActive) {
     })
 
     // Setup crypto key exchange for this room
-    loadRoomKey(rid).catch(e => console.warn('[chat] Failed to load room key:', e))
+    const existingKey = await loadRoomKey(rid).catch(e => {
+      console.warn('[chat] Failed to load room key:', e)
+      return null
+    })
+
+    // Subscribe to room meta for encrypted flag (3E: populate encryptedRooms on join)
+    subscribe(`${ADDR.ROOM}/${rid}/meta`, (meta) => {
+      if (meta && meta.encrypted) {
+        encryptedRooms.value = new Set(encryptedRooms.value).add(rid)
+        // If we don't have the key yet, mark as waiting
+        if (!isEncrypted(rid) && !existingKey) {
+          waitingForKey.value = true
+        }
+      }
+      if (meta && meta.passwordHash) {
+        markPasswordProtected(rid)
+      }
+    })
+
+    // If room is already known as encrypted and we don't have the key, set waiting
+    if (isEncrypted(rid) && !existingKey) {
+      waitingForKey.value = true
+    }
+
     unsubCrypto = subscribeKeyExchange(rid)
 
     // Announce presence
@@ -220,6 +260,12 @@ export function useChat(roomId, isActive) {
   async function sendMessage(text, { image } = {}) {
     if (!connected.value || !roomId.value) return
     if (!text.trim() && !image) return
+
+    // Block plaintext in encrypted rooms without key
+    if (waitingForKey.value) {
+      addSystemMessage('Waiting for room key... Cannot send messages yet.')
+      return
+    }
 
     // Client-side rate limiting
     const now = Date.now()
@@ -288,9 +334,18 @@ export function useChat(roomId, isActive) {
     // Encrypt if room is encrypted
     let emitData = msgData
     if (isEncrypted(roomId.value)) {
-      const encrypted = await encrypt(roomId.value, msgData.text)
-      if (encrypted) {
-        emitData = { ...msgData, text: encrypted.ciphertext, iv: encrypted.iv, encrypted: true }
+      const encryptedText = await encrypt(roomId.value, msgData.text)
+      if (encryptedText) {
+        emitData = { ...msgData, text: encryptedText.ciphertext, iv: encryptedText.iv, encrypted: true }
+        // Encrypt image if present
+        if (msgData.image) {
+          const encryptedImg = await encrypt(roomId.value, msgData.image)
+          if (encryptedImg) {
+            emitData.encryptedImage = encryptedImg.ciphertext
+            emitData.imageIv = encryptedImg.iv
+            delete emitData.image
+          }
+        }
       }
     }
 
@@ -301,7 +356,7 @@ export function useChat(roomId, isActive) {
     stopTyping()
   }
 
-  function editMessage(msgId, newText) {
+  async function editMessage(msgId, newText) {
     if (!connected.value || !roomId.value || !newText.trim()) return
 
     // Update locally
@@ -310,14 +365,27 @@ export function useChat(roomId, isActive) {
       messages.value[idx] = { ...messages.value[idx], text: newText.trim(), edited: true }
     }
 
-    // Emit edit to peers
-    emit(`${ADDR.ROOM}/${roomId.value}/messages`, {
+    // Build edit payload
+    const editPayload = {
       type: 'edit',
       fromId: sessionId.value,
       targetId: msgId,
       text: newText.trim(),
       timestamp: Date.now(),
-    })
+    }
+
+    // Encrypt if room is encrypted
+    if (isEncrypted(roomId.value)) {
+      const encrypted = await encrypt(roomId.value, editPayload.text)
+      if (encrypted) {
+        editPayload.text = encrypted.ciphertext
+        editPayload.iv = encrypted.iv
+        editPayload.encrypted = true
+      }
+    }
+
+    // Emit edit to peers
+    emit(`${ADDR.ROOM}/${roomId.value}/messages`, editPayload)
 
     editingMessage.value = null
   }
@@ -380,8 +448,8 @@ export function useChat(roomId, isActive) {
   }
 
   function announcePresence() {
-    if (!connected.value || !sessionId.value || !roomId.value) return
-    set(`${ADDR.ROOM}/${roomId.value}/presence/${sessionId.value}`, {
+    if (!connected.value || !userId.value || !roomId.value) return
+    set(`${ADDR.ROOM}/${roomId.value}/presence/${userId.value}`, {
       name: displayName.value,
       avatarColor: avatarColor.value,
       joinedAt: Date.now(),
@@ -393,7 +461,7 @@ export function useChat(roomId, isActive) {
     const now = Date.now()
     let changed = false
     for (const [uid, data] of participants.value) {
-      if (uid === sessionId.value) continue
+      if (uid === userId.value) continue
       if (now - (data.lastSeen || data.joinedAt || 0) > TTL.PRESENCE_STALE) {
         participants.value.delete(uid)
         changed = true
@@ -419,6 +487,17 @@ export function useChat(roomId, isActive) {
     if (newId) joinChat()
   }, { immediate: true })
 
+  // When key arrives for this room, clear waitingForKey
+  watch(encryptedRooms, (rooms) => {
+    if (roomId.value && rooms.has(roomId.value) && waitingForKey.value) {
+      // Check if we actually have the key now (isEncrypted checks the roomKeys map)
+      if (isEncrypted(roomId.value)) {
+        waitingForKey.value = false
+        addSystemMessage('Room key received. E2E encryption active.')
+      }
+    }
+  }, { deep: true })
+
   // Cleanup
   onUnmounted(() => {
     leaveChat()
@@ -442,6 +521,7 @@ export function useChat(roomId, isActive) {
     handleTyping,
     leaveChat,
     isThrottled,
+    waitingForKey,
     async ensurePluginsReady() { await ensurePlugins() },
     getRegisteredCommands,
   }

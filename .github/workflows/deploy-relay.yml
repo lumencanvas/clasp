@@ -1,0 +1,45 @@
+name: Deploy Relay
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/relay/**'
+      - 'crates/**'
+      - '.github/workflows/deploy-relay.yml'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push relay image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./deploy/relay
+          file: deploy/relay/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/clasp-relay:latest
+
+      - name: Deploy to Droplet
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DROPLET_IP }}
+          username: root
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          script: |
+            cd /opt/clasp
+            docker compose pull relay
+            docker compose up -d relay
+            docker image prune -f

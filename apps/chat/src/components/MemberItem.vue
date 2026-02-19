@@ -6,6 +6,8 @@ import UserAvatar from './UserAvatar.vue'
 const props = defineProps({
   member: { type: Object, required: true },
   isAdmin: { type: Boolean, default: false },
+  memberIsAdmin: { type: Boolean, default: false },
+  isCreator: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['view-profile', 'kick', 'ban'])
@@ -27,6 +29,16 @@ const { userId } = useIdentity()
       :show-status="true"
     />
     <span class="member-name">{{ member.name }}</span>
+    <span v-if="isCreator" class="role-badge creator">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10">
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+      </svg>
+    </span>
+    <span v-else-if="memberIsAdmin" class="role-badge admin">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+    </span>
     <span v-if="member.id === sessionId || member.id === userId" class="you-tag">you</span>
     <div v-if="isAdmin && member.id !== sessionId && member.id !== userId" class="admin-actions" @click.stop>
       <button class="admin-btn" title="Kick" aria-label="Kick member" @click="emit('kick', member.id)">
@@ -64,6 +76,20 @@ const { userId } = useIdentity()
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-secondary);
+}
+
+.role-badge {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.role-badge.creator {
+  color: var(--accent);
+}
+
+.role-badge.admin {
+  color: var(--accent3);
 }
 
 .you-tag {
