@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 
 const props = defineProps({
   stream: { type: MediaStream, default: null },
@@ -10,20 +10,18 @@ const props = defineProps({
 const emit = defineEmits(['join', 'request-camera', 'stop-camera'])
 
 const videoEl = ref(null)
-const audioOn = ref(true)
-const videoOn = ref(true)
+const audioOn = ref(false)
+const videoOn = ref(false)
 
-function attachStream() {
+async function attachStream() {
+  // Wait for Vue to render the <video> element after v-if becomes true
+  await nextTick()
   if (videoEl.value && props.stream) {
     videoEl.value.srcObject = props.stream
   }
 }
 
 watch(() => props.stream, attachStream)
-onMounted(() => {
-  emit('request-camera')
-  attachStream()
-})
 
 function toggleMic() {
   audioOn.value = !audioOn.value
@@ -58,7 +56,7 @@ function handleJoin() {
           <polygon points="23 7 16 12 23 17 23 7"/>
           <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
         </svg>
-        <p>{{ videoOn ? 'Starting camera...' : 'Camera off' }}</p>
+        <p>{{ videoOn && !stream ? 'Starting camera...' : 'Camera off' }}</p>
       </div>
     </div>
 
