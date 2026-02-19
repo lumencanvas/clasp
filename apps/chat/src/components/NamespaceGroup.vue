@@ -25,6 +25,8 @@ function toggleCollapse() {
 const { joinedRoomIds } = useRooms()
 
 const displayName = computed(() => {
+  // Show full path at depth 0, just the last segment when nested
+  if (props.depth === 0) return props.namespace
   const parts = props.namespace.split('/')
   return parts[parts.length - 1]
 })

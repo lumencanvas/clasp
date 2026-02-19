@@ -1,4 +1,6 @@
 <script setup>
+import { computed } from 'vue'
+
 const props = defineProps({
   namespace: { type: Object, required: true },
   isPinned: { type: Boolean, default: false },
@@ -7,7 +9,12 @@ const props = defineProps({
 
 const emit = defineEmits(['click', 'pin', 'unpin'])
 
-const displayName = props.namespace.path.split('/').pop()
+const displayName = computed(() => props.namespace.path.split('/').pop())
+const hasParent = computed(() => props.namespace.path.includes('/'))
+const parentPath = computed(() => {
+  const parts = props.namespace.path.split('/')
+  return parts.slice(0, -1).join('/')
+})
 </script>
 
 <template>
@@ -17,6 +24,7 @@ const displayName = props.namespace.path.split('/').pop()
       <span v-else class="card-icon-default">/</span>
       <span class="card-count">{{ roomCount }} room{{ roomCount !== 1 ? 's' : '' }}</span>
     </div>
+    <span v-if="hasParent" class="card-parent">{{ parentPath }}/</span>
     <h4 class="card-name">{{ displayName }}</h4>
     <p v-if="namespace.description" class="card-desc">{{ namespace.description }}</p>
     <p v-if="namespace.creatorName" class="card-creator">by {{ namespace.creatorName }}</p>
@@ -66,6 +74,13 @@ const displayName = props.namespace.path.split('/').pop()
 .card-count {
   font-size: 0.65rem;
   color: var(--text-muted);
+}
+
+.card-parent {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  font-family: var(--font-code);
+  margin-bottom: -0.2rem;
 }
 
 .card-name {

@@ -165,16 +165,21 @@ function handleCreate() {
 
         <!-- New namespace options -->
         <div v-if="isNewNamespace" class="field ns-new-options">
-          <div class="toggle-field">
-            <label>Private Namespace</label>
-            <button
-              type="button"
-              :class="['toggle', { active: newNsPrivate }]"
-              @click="newNsPrivate = !newNsPrivate"
-            >
-              <span class="toggle-knob"></span>
-            </button>
-            <span class="toggle-hint">{{ newNsPrivate ? 'Hidden from discovery' : 'Public' }}</span>
+          <div class="visibility-field">
+            <label>Visibility</label>
+            <div class="segmented-control">
+              <button
+                type="button"
+                :class="['seg-btn', { active: !newNsPrivate }]"
+                @click="newNsPrivate = false"
+              >Public</button>
+              <button
+                type="button"
+                :class="['seg-btn', { active: newNsPrivate }]"
+                @click="newNsPrivate = true"
+              >Private</button>
+            </div>
+            <span class="visibility-hint">{{ newNsPrivate ? 'Accessed by direct link only' : 'Appears in discovery' }}</span>
           </div>
           <div v-if="newNsPrivate" class="ns-pw-field">
             <input
@@ -480,6 +485,49 @@ function handleCreate() {
 }
 
 .toggle-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Segmented control for visibility */
+.visibility-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.segmented-control {
+  display: flex;
+  background: var(--bg-active);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.seg-btn {
+  flex: 1;
+  padding: 0.4rem 0.75rem;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.seg-btn.active {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.seg-btn:hover:not(.active) {
+  color: var(--text-secondary);
+}
+
+.visibility-hint {
   font-size: 0.75rem;
   color: var(--text-muted);
 }

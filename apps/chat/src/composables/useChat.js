@@ -7,6 +7,7 @@ import { ADDR, TTL } from '../lib/constants.js'
 import { executeCommand, initBuiltinPlugins, getRegisteredCommands } from '../lib/plugins.js'
 import { useStorage } from './useStorage.js'
 import { useCrypto } from './useCrypto.js'
+import { useSigning } from './useSigning.js'
 
 /**
  * Per-room chat composable
@@ -20,6 +21,7 @@ export function useChat(roomId, isActive) {
   const { loadCachedMessages, persistMessage } = useStorage()
   const { updateRoomData } = useRooms()
   const { encrypt, decrypt, isEncrypted, loadRoomKey, requestRoomKey, subscribeKeyExchange, encryptedRooms, markPasswordProtected } = useCrypto()
+  const { initSigning, signMessage, verifyMessage } = useSigning()
 
   const messages = ref([])
   const participants = ref(new Map())
@@ -109,9 +111,16 @@ export function useChat(roomId, isActive) {
     // Skip own messages (already added optimistically)
     if (payload.fromId === sessionId.value) return
 
+    // Verify message signature
+    let verified = 'unknown'
+    if (payload.signature) {
+      verified = await verifyMessage(payload)
+    }
+
     const msgObj = {
       id: Date.now() + Math.random(),
       type: 'message',
+      verified,
       ...payload,
     }
     messages.value.push(msgObj)
@@ -131,6 +140,9 @@ export function useChat(roomId, isActive) {
 
     const rid = roomId.value
     const thisJoinId = ++joinAbortId
+
+    // Initialize message signing
+    initSigning().catch(e => console.warn('[chat] Signing init failed:', e))
 
     // Load cached messages from IndexedDB
     try {
@@ -203,7 +215,7 @@ export function useChat(roomId, isActive) {
         }
       }
       if (meta && meta.passwordHash) {
-        markPasswordProtected(rid)
+        markPasswordProtected(rid, meta.passwordHash)
       }
       // Sync meta changes (name, isPublic) to rooms Map so sidebar stays current
       if (meta) {
@@ -327,11 +339,18 @@ export function useChat(roomId, isActive) {
     const msgData = {
       from: displayName.value,
       fromId: sessionId.value,
+      userId: userId.value,
       msgId,
       text: text.trim(),
       timestamp: Date.now(),
       avatarColor: avatarColor.value,
       type: 'text',
+    }
+
+    // Sign the message
+    const signature = await signMessage(msgData)
+    if (signature) {
+      msgData.signature = signature
     }
 
     // Attach reply reference

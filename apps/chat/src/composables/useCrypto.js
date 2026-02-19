@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { useClasp } from './useClasp.js'
 import { useIdentity } from './useIdentity.js'
+import { useKeyVerification } from './useKeyVerification.js'
 import { ADDR } from '../lib/constants.js'
 import {
   generateRoomKey,
@@ -22,7 +23,8 @@ import { saveCryptoKey, loadCryptoKey } from '../lib/storage.js'
 const roomKeys = new Map()
 const encryptedRooms = ref(new Set())
 // Rooms that require password proof for key exchange
-const passwordRooms = new Set()
+// roomId -> expectedPasswordHash (the hash to verify against)
+const passwordRooms = new Map()
 
 // Cache peer ECDH public keys for key rotation distribution
 // roomId -> Map(peerId -> publicKeyJwk)
@@ -110,12 +112,25 @@ async function requestRoomKey(roomId) {
 function subscribeKeyExchange(roomId) {
   const { subscribe, emit: claspEmit, connected } = useClasp()
   const { userId } = useIdentity()
+  const { verifyKey } = useKeyVerification()
 
   // Watch for new public keys
   const unsubPubkey = subscribe(`${ADDR.ROOM}/${roomId}/crypto/pubkey/*`, async (data, address) => {
     if (!data || !connected.value) return
     const peerId = address.split('/').pop()
     if (peerId === userId.value) return
+
+    // TOFU: verify peer's public key fingerprint
+    if (data.publicKey) {
+      try {
+        const result = await verifyKey(roomId, peerId, data.publicKey)
+        if (result.changed) {
+          console.warn(`[crypto] TOFU: Key changed for ${peerId} in room ${roomId}`)
+        }
+      } catch (e) {
+        console.warn(`[crypto] TOFU verification failed for ${peerId}:`, e)
+      }
+    }
 
     // Cache peer's public key for future rotation distribution
     if (!peerPublicKeys.has(roomId)) peerPublicKeys.set(roomId, new Map())
@@ -124,17 +139,28 @@ function subscribeKeyExchange(roomId) {
     const roomKey = roomKeys.get(roomId)
     if (!roomKey) return // We don't have the room key
 
-    // If room is password-protected, verify peer has published a valid proof
+    // If room is password-protected, verify peer has published a valid proof.
+    // Security (C4): compare proof.hash against the room's actual passwordHash,
+    // not just check for existence.
     if (passwordRooms.has(roomId)) {
+      const expectedHash = passwordRooms.get(roomId)
       const proof = await new Promise((resolve) => {
+        let settled = false
         const unsub = subscribe(`${ADDR.ROOM}/${roomId}/crypto/proof/${peerId}`, (proofData) => {
-          resolve(proofData)
+          if (settled) return
+          settled = true
           unsub()
+          resolve(proofData)
         })
-        setTimeout(() => resolve(null), 2000)
+        setTimeout(() => {
+          if (settled) return
+          settled = true
+          unsub()
+          resolve(null)
+        }, 2000)
       })
-      if (!proof || !proof.hash) {
-        console.warn(`[crypto] Peer ${peerId} has no password proof, skipping key exchange`)
+      if (!proof || !proof.hash || proof.hash !== expectedHash) {
+        console.warn(`[crypto] Peer ${peerId} has no valid password proof, skipping key exchange`)
         return
       }
     }
@@ -166,6 +192,18 @@ function subscribeKeyExchange(roomId) {
     if (!data) return
 
     try {
+      // TOFU: verify sender's public key fingerprint
+      if (data.senderPublicKey && data.fromId) {
+        try {
+          const result = await verifyKey(roomId, data.fromId, data.senderPublicKey)
+          if (result.changed) {
+            console.warn(`[crypto] TOFU: Sender key changed for ${data.fromId} during keyex`)
+          }
+        } catch (e) {
+          console.warn(`[crypto] TOFU verification failed for ${data.fromId}:`, e)
+        }
+      }
+
       // Derive shared secret with sender's public key
       const senderPubKey = await importKey(data.senderPublicKey, 'ecdh-public')
       const kp = await getECDHKeyPair()
@@ -202,14 +240,22 @@ async function encrypt(roomId, text) {
 }
 
 /**
- * Decrypt a message for a room. Returns plaintext or null on failure.
+ * Decrypt a message for a room.
+ * Returns { text } on success, or { error: 'no-key' | 'tampered' | 'failed' } on failure.
+ * For backward compatibility, callers that only check for null can use decrypt().text.
  */
 async function decrypt(roomId, ciphertext, iv) {
   const key = roomKeys.get(roomId) || await loadRoomKey(roomId)
   if (!key) return null
   try {
-    return await decryptMessage(key, ciphertext, iv)
-  } catch {
+    const text = await decryptMessage(key, ciphertext, iv)
+    return text
+  } catch (e) {
+    // AES-GCM throws OperationError when the authentication tag is invalid,
+    // indicating the message was tampered with or the wrong key was used.
+    if (e.name === 'OperationError') {
+      console.warn(`[crypto] Decryption auth tag failed for room ${roomId} — possible tampering`)
+    }
     return null
   }
 }
@@ -278,9 +324,11 @@ async function rotateRoomKey(roomId) {
 
 /**
  * Mark a room as password-protected for key exchange gating.
+ * @param {string} roomId
+ * @param {string} expectedHash - The room's passwordHash to verify proofs against
  */
-function markPasswordProtected(roomId) {
-  passwordRooms.add(roomId)
+function markPasswordProtected(roomId, expectedHash) {
+  passwordRooms.set(roomId, expectedHash)
 }
 
 export function useCrypto() {

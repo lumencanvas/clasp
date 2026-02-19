@@ -59,6 +59,16 @@ function handleReact(emoji) {
       <div v-if="!grouped" class="message-meta">
         <span class="sender-name">{{ message.from }}</span>
         <span class="message-time">{{ formatTime(message.timestamp) }}</span>
+        <span v-if="message.verified === 'verified'" class="verified-icon" title="Signature verified">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </span>
+        <span v-else-if="message.verified === 'failed'" class="verify-failed-icon" title="Signature verification failed">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </span>
         <span v-if="message.edited" class="edited-tag">(edited)</span>
       </div>
 
@@ -171,6 +181,19 @@ function handleReact(emoji) {
 .message-time {
   font-size: 0.65rem;
   color: var(--text-muted);
+}
+
+.verified-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent3);
+  opacity: 0.7;
+}
+
+.verify-failed-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--danger);
 }
 
 .edited-tag {

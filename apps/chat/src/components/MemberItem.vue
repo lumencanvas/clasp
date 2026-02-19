@@ -1,10 +1,13 @@
 <script setup>
+import { ref } from 'vue'
 import { useClasp } from '../composables/useClasp.js'
 import { useIdentity } from '../composables/useIdentity.js'
+import { useKeyVerification } from '../composables/useKeyVerification.js'
 import UserAvatar from './UserAvatar.vue'
 
 const props = defineProps({
   member: { type: Object, required: true },
+  roomId: { type: String, default: null },
   isAdmin: { type: Boolean, default: false },
   memberIsAdmin: { type: Boolean, default: false },
   isCreator: { type: Boolean, default: false },
@@ -14,6 +17,16 @@ const emit = defineEmits(['view-profile', 'kick', 'ban'])
 
 const { sessionId } = useClasp()
 const { userId } = useIdentity()
+const { getStoredFingerprint } = useKeyVerification()
+
+const showFingerprint = ref(false)
+const fingerprint = ref(null)
+
+async function viewSafetyNumber() {
+  if (!props.roomId || !props.member.id) return
+  fingerprint.value = await getStoredFingerprint(props.roomId, props.member.id)
+  showFingerprint.value = true
+}
 </script>
 
 <template>
@@ -40,12 +53,27 @@ const { userId } = useIdentity()
       </svg>
     </span>
     <span v-if="member.id === sessionId || member.id === userId" class="you-tag">you</span>
-    <div v-if="isAdmin && member.id !== sessionId && member.id !== userId" class="admin-actions" @click.stop>
-      <button class="admin-btn" title="Kick" aria-label="Kick member" @click="emit('kick', member.id)">
+    <div class="member-actions" @click.stop>
+      <button v-if="roomId && member.id !== userId" class="action-btn" title="View safety number" aria-label="View safety number" @click="viewSafetyNumber">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+      </button>
+      <button v-if="isAdmin && member.id !== sessionId && member.id !== userId" class="action-btn action-danger" title="Kick" aria-label="Kick member" @click="emit('kick', member.id)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
           <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
         </svg>
       </button>
+    </div>
+    <div v-if="showFingerprint" class="fingerprint-overlay" @click="showFingerprint = false">
+      <div class="fingerprint-card" @click.stop>
+        <h4>Safety Number</h4>
+        <p class="fingerprint-user">{{ member.name }}</p>
+        <code v-if="fingerprint" class="fingerprint-value">{{ fingerprint }}</code>
+        <p v-else class="fingerprint-none">No key fingerprint stored yet.</p>
+        <button class="fingerprint-close" @click="showFingerprint = false">Close</button>
+      </div>
     </div>
   </div>
 </template>
@@ -100,18 +128,18 @@ const { userId } = useIdentity()
   flex-shrink: 0;
 }
 
-.admin-actions {
+.member-actions {
   display: flex;
   gap: 2px;
   opacity: 0;
   transition: opacity 0.1s;
 }
 
-.member-item:hover .admin-actions {
+.member-item:hover .member-actions {
   opacity: 1;
 }
 
-.admin-btn {
+.action-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -124,8 +152,76 @@ const { userId } = useIdentity()
   cursor: pointer;
 }
 
-.admin-btn:hover {
+.action-btn:hover {
   background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.action-btn.action-danger:hover {
   color: var(--danger);
+}
+
+.fingerprint-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.fingerprint-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.25rem;
+  width: min(320px, 90vw);
+  text-align: center;
+}
+
+.fingerprint-card h4 {
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  margin: 0 0 0.5rem;
+}
+
+.fingerprint-user {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin: 0 0 0.75rem;
+}
+
+.fingerprint-value {
+  display: block;
+  font-family: var(--font-code);
+  font-size: 0.75rem;
+  color: var(--accent);
+  background: var(--bg-active);
+  padding: 0.5rem;
+  border-radius: 4px;
+  word-break: break-all;
+  line-height: 1.6;
+  margin-bottom: 0.75rem;
+}
+
+.fingerprint-none {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
+.fingerprint-close {
+  padding: 0.4rem 1rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.fingerprint-close:hover {
+  color: var(--text-primary);
 }
 </style>

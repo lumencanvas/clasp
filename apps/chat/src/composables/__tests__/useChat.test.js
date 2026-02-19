@@ -66,6 +66,16 @@ vi.mock('../useCrypto.js', () => ({
   }),
 }))
 
+// Mock signing
+vi.mock('../useSigning.js', () => ({
+  useSigning: () => ({
+    initialized: ref(false),
+    initSigning: vi.fn(() => Promise.resolve()),
+    signMessage: vi.fn(() => Promise.resolve(null)),
+    verifyMessage: vi.fn(() => Promise.resolve('unknown')),
+  }),
+}))
+
 // Mock plugins
 vi.mock('../../lib/plugins.js', () => ({
   executeCommand: vi.fn(() => false),

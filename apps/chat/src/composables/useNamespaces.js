@@ -423,6 +423,150 @@ async function lookupNamespace(ns) {
   return meta
 }
 
+async function deleteNamespace(ns) {
+  const safePath = sanitizeNsPath(ns)
+  if (!safePath) return
+
+  const { set, connected } = useClasp()
+  const { userId } = useIdentity()
+  if (!connected.value) return
+
+  const node = namespaceTree.value.get(safePath)
+  const meta = node?.meta
+  if (meta && meta.createdBy !== userId.value) return
+
+  // Recursively collect all descendant namespace paths
+  function collectDescendants(path) {
+    const paths = []
+    const n = namespaceTree.value.get(path)
+    if (n?.children) {
+      for (const childPath of n.children) {
+        paths.push(childPath)
+        paths.push(...collectDescendants(childPath))
+      }
+    }
+    return paths
+  }
+
+  const allDescendants = collectDescendants(safePath)
+
+  // Delete all room registry entries under this namespace
+  if (node?.rooms) {
+    for (const roomId of node.rooms.keys()) {
+      set(`${ADDR.NS_REGISTRY}/${safePath}/${roomId}`, null)
+    }
+  }
+
+  // Delete all descendant namespaces (rooms, meta, auth)
+  for (const childPath of allDescendants) {
+    const childNode = namespaceTree.value.get(childPath)
+    if (childNode?.rooms) {
+      for (const roomId of childNode.rooms.keys()) {
+        set(`${ADDR.NS_REGISTRY}/${childPath}/${roomId}`, null)
+      }
+    }
+    set(`${ADDR.NS_META}/${childPath}`, null)
+    set(`${ADDR.NS_META}/${childPath}/__auth`, null)
+    namespaceTree.value.delete(childPath)
+    discoveredNamespaces.value.delete(childPath)
+  }
+
+  // Delete the namespace metadata and auth
+  set(`${ADDR.NS_META}/${safePath}`, null)
+  set(`${ADDR.NS_META}/${safePath}/__auth`, null)
+
+  // Remove from local state
+  namespaceTree.value.delete(safePath)
+  namespaceTree.value = new Map(namespaceTree.value)
+  discoveredNamespaces.value.delete(safePath)
+  discoveredNamespaces.value = new Map(discoveredNamespaces.value)
+
+  // Unpin if pinned
+  unpinNamespace(safePath)
+}
+
+async function changeNamespacePassword(ns, newPassword) {
+  const safePath = sanitizeNsPath(ns)
+  if (!safePath) return
+
+  const { set, connected } = useClasp()
+  const { userId } = useIdentity()
+  if (!connected.value) return
+
+  const node = namespaceTree.value.get(safePath)
+  if (node?.meta?.createdBy && node.meta.createdBy !== userId.value) return
+
+  if (newPassword) {
+    const salt = generateSalt()
+    const hash = await hashPassword(newPassword, salt)
+    set(`${ADDR.NS_META}/${safePath}/__auth`, { passwordHash: hash, passwordSalt: salt })
+  } else {
+    // Remove password
+    set(`${ADDR.NS_META}/${safePath}/__auth`, null)
+  }
+}
+
+function getChildNamespaces(parentPath) {
+  const results = []
+  const prefix = parentPath ? `${parentPath}/` : ''
+  for (const [path, node] of namespaceTree.value) {
+    if (parentPath && path.startsWith(prefix)) {
+      // Direct child only (no further slashes after prefix)
+      const rest = path.slice(prefix.length)
+      if (!rest.includes('/')) {
+        results.push({ path, meta: node.meta, roomCount: node.rooms.size })
+      }
+    }
+  }
+  // Also check discoveredNamespaces for metadata
+  for (const [path, meta] of discoveredNamespaces.value) {
+    if (parentPath && path.startsWith(prefix)) {
+      const rest = path.slice(prefix.length)
+      if (!rest.includes('/') && !results.find(r => r.path === path)) {
+        results.push({ path, meta, roomCount: 0 })
+      }
+    }
+  }
+  return results.sort((a, b) => a.path.localeCompare(b.path))
+}
+
+function searchNamespaces(query) {
+  if (!query || !query.trim()) return { namespaces: [], rooms: [] }
+  const q = query.trim().toLowerCase()
+  const namespaces = []
+  const rooms = []
+
+  // Search discovered namespaces
+  for (const [path, meta] of discoveredNamespaces.value) {
+    if (
+      path.toLowerCase().includes(q) ||
+      (meta.description || '').toLowerCase().includes(q)
+    ) {
+      namespaces.push({ path, ...meta })
+    }
+  }
+
+  // Search tree nodes (includes pinned private namespaces)
+  for (const [path, node] of namespaceTree.value) {
+    if (!namespaces.find(n => n.path === path)) {
+      if (
+        path.toLowerCase().includes(q) ||
+        (node.meta?.description || '').toLowerCase().includes(q)
+      ) {
+        namespaces.push({ path, ...(node.meta || {}), roomCount: node.rooms.size })
+      }
+    }
+    // Search rooms within this namespace
+    for (const [roomId, room] of node.rooms) {
+      if ((room.name || '').toLowerCase().includes(q)) {
+        rooms.push({ ...room, id: roomId, namespace: path })
+      }
+    }
+  }
+
+  return { namespaces, rooms }
+}
+
 function updateNamespaceMeta(ns, updates) {
   const safePath = sanitizeNsPath(ns)
   if (!safePath) return
@@ -496,6 +640,10 @@ export function useNamespaces() {
     isNamespaceUnlocked,
     lookupNamespace,
     updateNamespaceMeta,
+    deleteNamespace,
+    changeNamespacePassword,
+    getChildNamespaces,
+    searchNamespaces,
     initPinnedNamespaces,
     getRoomNamespace,
   }

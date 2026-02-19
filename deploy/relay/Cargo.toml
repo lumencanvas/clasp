@@ -71,3 +71,8 @@ tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 hyper = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+# Use local crate paths for development (WriteValidator/SnapshotFilter traits)
+[patch.crates-io]
+clasp-core = { path = "../../crates/clasp-core" }
+clasp-router = { path = "../../crates/clasp-router" }

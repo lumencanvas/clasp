@@ -1,11 +1,11 @@
 /**
  * IndexedDB wrapper for CLASP Chat persistent storage.
- * DB: clasp-chat, version 1
- * Stores: messages (keyPath: [roomId, msgId]), crypto-keys (keyPath: roomId)
+ * DB: clasp-chat, version 2
+ * Stores: messages, crypto-keys, tofu-keys, signing-keys
  */
 
 const DB_NAME = 'clasp-chat'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 let dbPromise = null
 
@@ -27,6 +27,16 @@ function openDB() {
       // Crypto keys store
       if (!db.objectStoreNames.contains('crypto-keys')) {
         db.createObjectStore('crypto-keys', { keyPath: 'roomId' })
+      }
+
+      // TOFU key fingerprints (Trust On First Use)
+      if (!db.objectStoreNames.contains('tofu-keys')) {
+        db.createObjectStore('tofu-keys', { keyPath: 'id' })
+      }
+
+      // ECDSA signing keys
+      if (!db.objectStoreNames.contains('signing-keys')) {
+        db.createObjectStore('signing-keys', { keyPath: 'userId' })
       }
     }
 
@@ -117,6 +127,50 @@ export async function loadCryptoKey(roomId) {
     const tx = db.transaction('crypto-keys', 'readonly')
     const request = tx.objectStore('crypto-keys').get(roomId)
     request.onsuccess = () => resolve(request.result?.key ?? null)
+    request.onerror = () => reject(request.error)
+  })
+}
+
+/**
+ * Save a TOFU key fingerprint.
+ */
+export async function saveTofuKey(id, data) {
+  const db = await openDB()
+  const tx = db.transaction('tofu-keys', 'readwrite')
+  tx.objectStore('tofu-keys').put({ id, ...data })
+}
+
+/**
+ * Load a TOFU key fingerprint.
+ */
+export async function loadTofuKey(id) {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('tofu-keys', 'readonly')
+    const request = tx.objectStore('tofu-keys').get(id)
+    request.onsuccess = () => resolve(request.result ?? null)
+    request.onerror = () => reject(request.error)
+  })
+}
+
+/**
+ * Save a signing key pair reference.
+ */
+export async function saveSigningKey(userId, data) {
+  const db = await openDB()
+  const tx = db.transaction('signing-keys', 'readwrite')
+  tx.objectStore('signing-keys').put({ userId, ...data })
+}
+
+/**
+ * Load a signing key pair reference.
+ */
+export async function loadSigningKey(userId) {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('signing-keys', 'readonly')
+    const request = tx.objectStore('signing-keys').get(userId)
+    request.onsuccess = () => resolve(request.result ?? null)
     request.onerror = () => reject(request.error)
   })
 }

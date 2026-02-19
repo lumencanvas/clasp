@@ -366,11 +366,13 @@ onUnmounted(() => {
         v-else-if="currentRoom.type === ROOM_TYPES.VIDEO"
         ref="videoViewRef"
         :room-id="currentRoomId"
+        @delete-room="handleDeleteRoom"
       />
       <ComboChannelView
         v-else-if="currentRoom.type === ROOM_TYPES.COMBO"
         ref="comboViewRef"
         :room-id="currentRoomId"
+        @delete-room="handleDeleteRoom"
       />
     </template>
 
@@ -414,6 +416,7 @@ onUnmounted(() => {
       <MemberList
         v-else
         :members="activeMemberList"
+        :room-id="currentRoomId"
         @view-profile="handleViewProfile"
       />
     </template>

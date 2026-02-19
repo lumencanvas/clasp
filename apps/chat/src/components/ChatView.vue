@@ -11,6 +11,7 @@ import MessageList from './MessageList.vue'
 import MessageComposer from './MessageComposer.vue'
 import TypingIndicator from './TypingIndicator.vue'
 import AdminPanel from './AdminPanel.vue'
+import KeyChangeWarning from './KeyChangeWarning.vue'
 
 const props = defineProps({
   roomId: { type: String, required: true },
@@ -129,6 +130,7 @@ defineExpose({ sortedParticipants, onlineCount })
       @close="showAdmin = false"
       @delete-room="emit('delete-room', $event)"
     />
+    <KeyChangeWarning :room-id="roomId" />
     <MessageList
       :messages="messages"
       :get-reactions="getMessageReactions"

@@ -54,6 +54,50 @@ use crate::{
 };
 use std::time::Duration;
 
+/// Application-specific write validation callback.
+///
+/// Called after scope checks but before `state.apply_set()` for SET operations,
+/// and before broadcast for PUBLISH operations. Allows the application to enforce
+/// semantic authorization rules (e.g., "only room creators can modify admin paths").
+pub trait WriteValidator: Send + Sync {
+    /// Validate a write operation.
+    ///
+    /// - `address`: the CLASP address being written to
+    /// - `value`: the value being written
+    /// - `session`: the session performing the write
+    /// - `state`: the current router state (for looking up existing values)
+    ///
+    /// Returns `Ok(())` to allow the write, or `Err(message)` to reject it.
+    fn validate_write(
+        &self,
+        address: &str,
+        value: &clasp_core::Value,
+        session: &Session,
+        state: &RouterState,
+    ) -> std::result::Result<(), String>;
+}
+
+/// Application-specific snapshot filtering callback.
+///
+/// Called before sending the initial SNAPSHOT after WELCOME, and before sending
+/// subscription snapshots. Allows the application to strip sensitive fields
+/// or restrict visibility of certain paths.
+pub trait SnapshotFilter: Send + Sync {
+    /// Filter a snapshot before delivery to a session.
+    ///
+    /// - `params`: the snapshot parameters to filter
+    /// - `session`: the session receiving the snapshot
+    /// - `state`: the current router state
+    ///
+    /// Returns the filtered list of parameters.
+    fn filter_snapshot(
+        &self,
+        params: Vec<clasp_core::ParamValue>,
+        session: &Session,
+        state: &RouterState,
+    ) -> Vec<clasp_core::ParamValue>;
+}
+
 /// Timeout for clients to complete the handshake (send Hello message)
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -253,6 +297,10 @@ pub struct Router {
     p2p_capabilities: Arc<P2PCapabilities>,
     /// Gesture registry for move coalescing
     gesture_registry: Option<Arc<GestureRegistry>>,
+    /// Application-specific write validator
+    write_validator: Option<Arc<dyn WriteValidator>>,
+    /// Application-specific snapshot filter
+    snapshot_filter: Option<Arc<dyn SnapshotFilter>>,
 }
 
 impl Router {
@@ -277,6 +325,8 @@ impl Router {
             token_validator: None,
             p2p_capabilities: Arc::new(P2PCapabilities::new()),
             gesture_registry,
+            write_validator: None,
+            snapshot_filter: None,
         }
     }
 
@@ -289,6 +339,16 @@ impl Router {
     /// Set the token validator
     pub fn set_validator<V: TokenValidator + 'static>(&mut self, validator: V) {
         self.token_validator = Some(Arc::new(validator));
+    }
+
+    /// Set the write validator for application-specific authorization
+    pub fn set_write_validator<V: WriteValidator + 'static>(&mut self, validator: V) {
+        self.write_validator = Some(Arc::new(validator));
+    }
+
+    /// Set the snapshot filter for application-specific data redaction
+    pub fn set_snapshot_filter<F: SnapshotFilter + 'static>(&mut self, filter: F) {
+        self.snapshot_filter = Some(Arc::new(filter));
     }
 
     /// Get a reference to the CPSK validator if one is configured
@@ -814,6 +874,8 @@ impl Router {
             token_validator: self.token_validator.clone(),
             p2p_capabilities: Arc::clone(&self.p2p_capabilities),
             gesture_registry: self.gesture_registry.clone(),
+            write_validator: self.write_validator.clone(),
+            snapshot_filter: self.snapshot_filter.clone(),
         }
     }
 
@@ -841,6 +903,8 @@ impl Router {
         let security_mode = self.config.security_mode;
         let p2p_capabilities = Arc::clone(&self.p2p_capabilities);
         let gesture_registry = self.gesture_registry.clone();
+        let write_validator = self.write_validator.clone();
+        let snapshot_filter = self.snapshot_filter.clone();
 
         tokio::spawn(async move {
             let mut session: Option<Arc<Session>> = None;
@@ -915,6 +979,8 @@ impl Router {
                     &token_validator,
                     &p2p_capabilities,
                     &gesture_registry,
+                    &write_validator,
+                    &snapshot_filter,
                 )
                 .await
                 {
@@ -992,6 +1058,8 @@ impl Router {
                                     &token_validator,
                                     &p2p_capabilities,
                                     &gesture_registry,
+                                    &write_validator,
+                                    &snapshot_filter,
                                 )
                                 .await
                                 {
@@ -1157,6 +1225,8 @@ async fn handle_message(
     token_validator: &Option<Arc<dyn TokenValidator>>,
     p2p_capabilities: &Arc<P2PCapabilities>,
     gesture_registry: &Option<Arc<GestureRegistry>>,
+    write_validator: &Option<Arc<dyn WriteValidator>>,
+    snapshot_filter: &Option<Arc<dyn SnapshotFilter>>,
 ) -> Option<MessageResult> {
     match msg {
         Message::Hello(hello) => {
@@ -1279,8 +1349,11 @@ async fn handle_message(
             // Send welcome first
             let _ = sender.send(response).await;
 
-            // Send initial snapshot (chunked if too large)
-            let full_snapshot = state.full_snapshot();
+            // Send initial snapshot (chunked if too large), with optional filtering
+            let mut full_snapshot = state.full_snapshot();
+            if let Some(ref filter) = snapshot_filter {
+                full_snapshot.params = filter.filter_snapshot(full_snapshot.params, &new_session, state);
+            }
             send_chunked_snapshot(sender, full_snapshot).await;
 
             Some(MessageResult::NewSession(new_session))
@@ -1339,8 +1412,11 @@ async fn handle_message(
 
                     debug!("Session {} subscribed to {}", session.id, sub.pattern);
 
-                    // Send matching current values (chunked if large)
-                    let snapshot = state.snapshot(&sub.pattern);
+                    // Send matching current values (chunked if large), with optional filtering
+                    let mut snapshot = state.snapshot(&sub.pattern);
+                    if let Some(ref filter) = snapshot_filter {
+                        snapshot.params = filter.filter_snapshot(snapshot.params, session, state);
+                    }
                     if !snapshot.params.is_empty() {
                         send_chunked_snapshot(sender, snapshot).await;
                     }
@@ -1387,6 +1463,24 @@ async fn handle_message(
                 });
                 let bytes = codec::encode(&error).ok()?;
                 return Some(MessageResult::Send(bytes));
+            }
+
+            // Application-specific write validation
+            if let Some(ref validator) = write_validator {
+                if let Err(reason) = validator.validate_write(&set.address, &set.value, session, state) {
+                    warn!(
+                        "Session {} denied SET to {} by write validator: {}",
+                        session.id, set.address, reason
+                    );
+                    let error = Message::Error(ErrorMessage {
+                        code: 403,
+                        message: reason,
+                        address: Some(set.address.clone()),
+                        correlation_id: None,
+                    });
+                    let bytes = codec::encode(&error).ok()?;
+                    return Some(MessageResult::Send(bytes));
+                }
             }
 
             // Apply to state
@@ -1461,15 +1555,24 @@ async fn handle_message(
             }
 
             if let Some(param_state) = state.get_state(&get.address) {
-                let snapshot = Message::Snapshot(clasp_core::SnapshotMessage {
-                    params: vec![clasp_core::ParamValue {
-                        address: get.address.clone(),
-                        value: param_state.value,
-                        revision: param_state.revision,
-                        writer: Some(param_state.writer),
-                        timestamp: Some(param_state.timestamp),
-                    }],
-                });
+                let mut params = vec![clasp_core::ParamValue {
+                    address: get.address.clone(),
+                    value: param_state.value,
+                    revision: param_state.revision,
+                    writer: Some(param_state.writer),
+                    timestamp: Some(param_state.timestamp),
+                }];
+
+                // Apply snapshot filter to GET responses (strip sensitive fields)
+                if let Some(ref filter) = snapshot_filter {
+                    params = filter.filter_snapshot(params, session, state);
+                }
+
+                if params.is_empty() {
+                    return Some(MessageResult::None);
+                }
+
+                let snapshot = Message::Snapshot(clasp_core::SnapshotMessage { params });
                 let bytes = codec::encode(&snapshot).ok()?;
                 return Some(MessageResult::Send(bytes));
             }
@@ -1496,6 +1599,25 @@ async fn handle_message(
                 });
                 let bytes = codec::encode(&error).ok()?;
                 return Some(MessageResult::Send(bytes));
+            }
+
+            // Application-specific write validation for PUBLISH
+            if let Some(ref validator) = write_validator {
+                let pub_value = pub_msg.value.as_ref().cloned().unwrap_or(clasp_core::Value::Null);
+                if let Err(reason) = validator.validate_write(&pub_msg.address, &pub_value, session, state) {
+                    warn!(
+                        "Session {} denied PUBLISH to {} by write validator: {}",
+                        session.id, pub_msg.address, reason
+                    );
+                    let error = Message::Error(ErrorMessage {
+                        code: 403,
+                        message: reason,
+                        address: Some(pub_msg.address.clone()),
+                        correlation_id: None,
+                    });
+                    let bytes = codec::encode(&error).ok()?;
+                    return Some(MessageResult::Send(bytes));
+                }
             }
 
             // Check for P2P signaling addresses
@@ -1701,6 +1823,24 @@ async fn handle_message(
                             return Some(MessageResult::Send(err_bytes));
                         }
 
+                        // Application-specific write validation for bundled SET
+                        if let Some(ref validator) = write_validator {
+                            if let Err(reason) = validator.validate_write(&set.address, &set.value, session, state) {
+                                warn!(
+                                    "Session {} denied bundled SET to {} by write validator - rejecting entire bundle: {}",
+                                    session.id, set.address, reason
+                                );
+                                let err = Message::Error(ErrorMessage {
+                                    code: 403,
+                                    message: format!("Bundle rejected: {}", reason),
+                                    address: Some(set.address.clone()),
+                                    correlation_id: None,
+                                });
+                                let err_bytes = codec::encode(&err).ok()?;
+                                return Some(MessageResult::Send(err_bytes));
+                            }
+                        }
+
                         // Lock checks happen during apply_set - the state store
                         // validates locks when actually applying the change
                         validated_sets.push(set);
@@ -1726,6 +1866,26 @@ async fn handle_message(
                             let err_bytes = codec::encode(&err).ok()?;
                             return Some(MessageResult::Send(err_bytes));
                         }
+
+                        // Application-specific write validation for bundled PUBLISH
+                        if let Some(ref validator) = write_validator {
+                            let pub_value = pub_msg.value.as_ref().cloned().unwrap_or(clasp_core::Value::Null);
+                            if let Err(reason) = validator.validate_write(&pub_msg.address, &pub_value, session, state) {
+                                warn!(
+                                    "Session {} denied bundled PUBLISH to {} by write validator - rejecting entire bundle: {}",
+                                    session.id, pub_msg.address, reason
+                                );
+                                let err = Message::Error(ErrorMessage {
+                                    code: 403,
+                                    message: format!("Bundle rejected: {}", reason),
+                                    address: Some(pub_msg.address.clone()),
+                                    correlation_id: None,
+                                });
+                                let err_bytes = codec::encode(&err).ok()?;
+                                return Some(MessageResult::Send(err_bytes));
+                            }
+                        }
+
                         validated_pubs.push(pub_msg);
                     }
                     _ => {

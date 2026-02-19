@@ -1,10 +1,11 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ROOM_TYPE_INFO } from '../lib/constants.js'
 import { formatRelativeTime } from '../lib/utils.js'
 import { useNamespaces } from '../composables/useNamespaces.js'
 import { useIdentity } from '../composables/useIdentity.js'
 import NamespaceCard from './NamespaceCard.vue'
+import NamespaceCreateDialog from './NamespaceCreateDialog.vue'
 
 const props = defineProps({
   rooms: { type: Array, default: () => [] },
@@ -21,12 +22,17 @@ const {
   namespaceTree,
   discoverTopLevelNamespaces,
   discoverChildNamespaces,
+  subscribeNamespace,
   pinNamespace,
   unpinNamespace,
   lookupNamespace,
   unlockNamespace,
   namespacedRoomIds,
   updateNamespaceMeta,
+  createNamespace,
+  deleteNamespace,
+  changeNamespacePassword,
+  searchNamespaces,
 } = useNamespaces()
 
 // Navigation state
@@ -50,6 +56,15 @@ const showNsSettings = ref(false)
 const nsEditDesc = ref('')
 const nsEditIcon = ref('')
 const nsEditPublic = ref(true)
+const nsEditPassword = ref('')
+const showNsDeleteConfirm = ref(false)
+
+// Search
+const searchQuery = ref('')
+let searchDebounce = null
+
+// Create namespace dialog
+const showCreateNs = ref(false)
 
 let childUnsub = null
 
@@ -94,6 +109,68 @@ const currentNsChildren = computed(() => {
   return children.sort((a, b) => a.path.localeCompare(b.path))
 })
 
+// Search results — grouped by top-level namespace
+const searchResults = computed(() => {
+  if (!searchQuery.value.trim()) return null
+  const raw = searchNamespaces(searchQuery.value)
+
+  // Group namespaces and rooms by their top-level namespace
+  const groups = new Map() // topLevel -> { namespace meta, matchingChildren: [], matchingRooms: [] }
+
+  for (const ns of raw.namespaces) {
+    const topLevel = ns.path.split('/')[0]
+    if (!groups.has(topLevel)) {
+      groups.set(topLevel, { matchingChildren: [], matchingRooms: [] })
+    }
+    groups.get(topLevel).matchingChildren.push(ns)
+  }
+
+  for (const room of raw.rooms) {
+    const topLevel = (room.namespace || '').split('/')[0] || '__uncategorized'
+    if (!groups.has(topLevel)) {
+      groups.set(topLevel, { matchingChildren: [], matchingRooms: [] })
+    }
+    groups.get(topLevel).matchingRooms.push(room)
+  }
+
+  // Build sorted list of top-level results with metadata
+  const results = []
+  for (const [topLevel, group] of groups) {
+    // Find metadata for the top-level namespace
+    const meta = discoveredNamespaces.value.get(topLevel)
+      || namespaceTree.value.get(topLevel)?.meta
+      || null
+    results.push({
+      path: topLevel,
+      icon: meta?.icon || '',
+      description: meta?.description || '',
+      creatorName: meta?.creatorName || '',
+      isTopLevel: true,
+      matchCount: group.matchingChildren.length + group.matchingRooms.length,
+      matchingChildren: group.matchingChildren,
+      matchingRooms: group.matchingRooms,
+    })
+  }
+
+  return results.sort((a, b) => a.path.localeCompare(b.path))
+})
+
+const isSearching = computed(() => !!searchQuery.value.trim())
+
+// Breadcrumb segments for current view
+const breadcrumbs = computed(() => {
+  if (currentView.value === 'top') return []
+  const parts = currentView.value.split('/')
+  const crumbs = [{ label: 'Home', path: 'top' }]
+  for (let i = 0; i < parts.length; i++) {
+    crumbs.push({
+      label: parts[i],
+      path: parts.slice(0, i + 1).join('/'),
+    })
+  }
+  return crumbs
+})
+
 // Uncategorized rooms = public rooms NOT in any namespace
 const uncategorizedRooms = computed(() => {
   return props.rooms.filter(r => !namespacedRoomIds.value.has(r.id))
@@ -108,9 +185,11 @@ function navigateToNs(nsPath) {
   viewStack.value.push(currentView.value)
   currentView.value = nsPath
 
-  // Subscribe to child namespaces
+  // Subscribe to child namespace metadata AND rooms in this namespace
   if (childUnsub) childUnsub()
   childUnsub = discoverChildNamespaces(nsPath)
+  // Subscribe to rooms — deduped internally by activeSubscriptions, so no need to unsub on navigate
+  subscribeNamespace(nsPath)
 }
 
 function navigateBack() {
@@ -212,6 +291,56 @@ function saveNsSettings() {
   showNsSettings.value = false
 }
 
+async function handleChangePassword() {
+  if (currentView.value === 'top') return
+  await changeNamespacePassword(currentView.value, nsEditPassword.value || null)
+  nsEditPassword.value = ''
+  showNsSettings.value = false
+}
+
+async function handleDeleteNamespace() {
+  if (currentView.value === 'top') return
+  await deleteNamespace(currentView.value)
+  showNsDeleteConfirm.value = false
+  showNsSettings.value = false
+  currentView.value = 'top'
+  viewStack.value = []
+}
+
+async function handleCreateNamespace(data) {
+  await createNamespace(data.path, {
+    description: data.description,
+    isPublic: data.isPublic,
+    password: data.password,
+    icon: data.icon,
+  })
+  showCreateNs.value = false
+}
+
+function navigateToBreadcrumb(path) {
+  if (path === 'top') {
+    currentView.value = 'top'
+    viewStack.value = []
+  } else {
+    // Build stack from breadcrumb path
+    const parts = path.split('/')
+    viewStack.value = ['top']
+    for (let i = 1; i < parts.length; i++) {
+      viewStack.value.push(parts.slice(0, i).join('/'))
+    }
+    currentView.value = path
+  }
+  if (childUnsub) { childUnsub(); childUnsub = null }
+  if (path !== 'top') {
+    childUnsub = discoverChildNamespaces(path)
+    subscribeNamespace(path)
+  }
+}
+
+function clearSearch() {
+  searchQuery.value = ''
+}
+
 onMounted(() => {
   discoverTopLevelNamespaces()
 })
@@ -232,24 +361,29 @@ onUnmounted(() => {
               <polyline points="12 19 5 12 12 5"/>
             </svg>
           </button>
-          <h3>{{ currentView === 'top' ? 'Browse Public Channels' : currentView }}</h3>
-          <button
-            v-if="currentView !== 'top' && isNsCreator"
-            class="ns-settings-btn"
-            title="Namespace settings"
-            @click="openNsSettings"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-              <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-          </button>
-          <button
-            v-if="currentView !== 'top'"
-            :class="['pin-toggle', { pinned: isNsPinned(currentView) }]"
-            @click="isNsPinned(currentView) ? handleUnpinNs(currentView) : handlePinNs(currentView)"
-          >
-            {{ isNsPinned(currentView) ? 'Pinned' : 'Pin' }}
-          </button>
+          <h3 v-if="currentView === 'top'">Browse Channels</h3>
+          <div v-else class="breadcrumb-nav">
+            <template v-for="(crumb, i) in breadcrumbs" :key="crumb.path">
+              <span v-if="i > 0" class="breadcrumb-sep">/</span>
+              <button
+                :class="['breadcrumb-item', { current: i === breadcrumbs.length - 1 }]"
+                @click="navigateToBreadcrumb(crumb.path)"
+              >{{ crumb.label }}</button>
+            </template>
+          </div>
+          <div class="header-actions">
+            <button
+              v-if="currentView !== 'top' && isNsCreator"
+              class="ns-action-btn"
+              title="Namespace settings"
+              @click="openNsSettings"
+            >Settings</button>
+            <button
+              v-if="currentView !== 'top'"
+              :class="['pin-toggle', { pinned: isNsPinned(currentView) }]"
+              @click="isNsPinned(currentView) ? handleUnpinNs(currentView) : handlePinNs(currentView)"
+            >{{ isNsPinned(currentView) ? 'Pinned' : 'Pin' }}</button>
+          </div>
         </div>
         <button class="close-btn" @click="emit('close')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -259,9 +393,68 @@ onUnmounted(() => {
         </button>
       </div>
 
+      <!-- Search bar -->
+      <div class="search-bar">
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Search namespaces and rooms..."
+          autocomplete="off"
+        />
+        <button v-if="searchQuery" class="search-clear" @click="clearSearch">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
       <div class="dialog-body">
+        <!-- SEARCH RESULTS (grouped by top-level namespace) -->
+        <template v-if="isSearching && searchResults">
+          <div v-if="searchResults.length" class="search-results">
+            <div v-for="group in searchResults" :key="group.path" class="search-group">
+              <button class="search-group-header" @click="clearSearch(); navigateToNs(group.path)">
+                <span v-if="group.icon" class="search-group-icon">{{ group.icon }}</span>
+                <span v-else class="search-group-icon search-group-icon-default">/</span>
+                <span class="search-group-name">{{ group.path }}</span>
+                <span class="search-group-count">{{ group.matchCount }} match{{ group.matchCount !== 1 ? 'es' : '' }}</span>
+                <svg class="search-group-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </button>
+              <div v-if="group.description" class="search-group-desc">{{ group.description }}</div>
+              <!-- Preview of matching items inside -->
+              <div class="search-group-preview">
+                <span
+                  v-for="child in group.matchingChildren.slice(0, 3)"
+                  :key="child.path"
+                  class="search-preview-tag ns-tag"
+                >{{ child.path }}</span>
+                <span
+                  v-for="room in group.matchingRooms.slice(0, 3)"
+                  :key="room.id"
+                  class="search-preview-tag room-tag"
+                ># {{ room.name }}</span>
+                <span
+                  v-if="group.matchCount > 6"
+                  class="search-preview-more"
+                >+{{ group.matchCount - 6 }} more</span>
+              </div>
+            </div>
+          </div>
+          <div v-else class="empty">
+            <p>No results for "{{ searchQuery }}"</p>
+            <span>Try a different search term</span>
+          </div>
+        </template>
+
         <!-- TOP LEVEL VIEW -->
-        <template v-if="currentView === 'top'">
+        <template v-else-if="currentView === 'top'">
+          <!-- Action row: Create namespace -->
+          <div class="action-row">
+            <button class="create-ns-btn" @click="showCreateNs = true">+ Create Namespace</button>
+          </div>
+
           <!-- Namespaces section -->
           <div v-if="namespaceList.length" class="browse-section">
             <div class="browse-label">Namespaces</div>
@@ -315,16 +508,14 @@ onUnmounted(() => {
                   class="join-btn"
                   :disabled="joinedRoomIds.has(room.id)"
                   @click="handleJoinClick(room)"
-                >
-                  {{ joinedRoomIds.has(room.id) ? 'Joined' : 'Join' }}
-                </button>
+                >{{ joinedRoomIds.has(room.id) ? 'Joined' : 'Join' }}</button>
               </div>
             </div>
           </div>
 
           <div v-if="!namespaceList.length && !uncategorizedRooms.length" class="empty">
             <p>No public channels found</p>
-            <span>Create one and make it public!</span>
+            <span>Create a namespace or room and make it public!</span>
           </div>
         </template>
 
@@ -353,7 +544,7 @@ onUnmounted(() => {
           <div class="browse-section">
             <div class="browse-label">Rooms in {{ currentView.split('/').pop() }}</div>
             <div v-if="!currentNsRooms.length" class="empty-small">
-              <span>No rooms in this namespace yet</span>
+              <span>No rooms in this namespace yet. Create a room and assign it to this namespace.</span>
             </div>
             <div v-else class="room-grid">
               <div v-for="room in currentNsRooms" :key="room.id" class="discovery-card">
@@ -373,9 +564,7 @@ onUnmounted(() => {
                   class="join-btn"
                   :disabled="joinedRoomIds.has(room.id)"
                   @click="handleJoinClick(room)"
-                >
-                  {{ joinedRoomIds.has(room.id) ? 'Joined' : 'Join' }}
-                </button>
+                >{{ joinedRoomIds.has(room.id) ? 'Joined' : 'Join' }}</button>
               </div>
             </div>
           </div>
@@ -405,7 +594,7 @@ onUnmounted(() => {
 
         <!-- Namespace settings overlay -->
         <div v-if="showNsSettings" class="password-overlay" @click.self="showNsSettings = false">
-          <div class="password-dialog" style="width: 360px">
+          <div class="password-dialog" style="width: 380px">
             <h4>Namespace Settings</h4>
             <p>{{ currentView }}</p>
             <div class="ns-settings-form">
@@ -413,23 +602,50 @@ onUnmounted(() => {
               <input v-model="nsEditDesc" type="text" placeholder="Description" />
               <label class="ns-settings-label">Icon</label>
               <input v-model="nsEditIcon" type="text" placeholder="Icon character" maxlength="2" />
-              <div class="ns-settings-toggle">
-                <label class="ns-settings-label">Public</label>
-                <button
-                  type="button"
-                  :class="['ns-toggle', { active: nsEditPublic }]"
-                  @click="nsEditPublic = !nsEditPublic"
-                >
-                  <span class="ns-toggle-knob"></span>
-                </button>
+              <label class="ns-settings-label">Visibility</label>
+              <div class="ns-segmented-control">
+                <button type="button" :class="['ns-seg-btn', { active: nsEditPublic }]" @click="nsEditPublic = true">Public</button>
+                <button type="button" :class="['ns-seg-btn', { active: !nsEditPublic }]" @click="nsEditPublic = false">Private</button>
               </div>
+              <span class="ns-visibility-hint">{{ nsEditPublic ? 'Appears in discovery' : 'Accessed by direct link only' }}</span>
               <div class="pw-actions">
                 <button class="pw-cancel" @click="showNsSettings = false">Cancel</button>
                 <button class="pw-submit" @click="saveNsSettings">Save</button>
               </div>
+
+              <hr class="ns-settings-divider" />
+
+              <label class="ns-settings-label">Change Password</label>
+              <div class="ns-pw-row">
+                <input v-model="nsEditPassword" type="password" placeholder="New password (empty to remove)" autocomplete="off" />
+                <button class="pw-change-btn" @click="handleChangePassword">Update</button>
+              </div>
+
+              <hr class="ns-settings-divider" />
+
+              <div class="ns-danger-zone">
+                <label class="ns-settings-label ns-danger-label">Danger Zone</label>
+                <template v-if="!showNsDeleteConfirm">
+                  <button class="ns-delete-btn" @click="showNsDeleteConfirm = true">Delete Namespace</button>
+                </template>
+                <template v-else>
+                  <p class="ns-delete-warning">This will delete the namespace, all room registry entries, and child namespaces. This cannot be undone.</p>
+                  <div class="pw-actions">
+                    <button class="pw-cancel" @click="showNsDeleteConfirm = false">Cancel</button>
+                    <button class="ns-delete-confirm" @click="handleDeleteNamespace">Delete Forever</button>
+                  </div>
+                </template>
+              </div>
             </div>
           </div>
         </div>
+
+        <!-- Create namespace dialog -->
+        <NamespaceCreateDialog
+          v-if="showCreateNs"
+          @create="handleCreateNamespace"
+          @close="showCreateNs = false"
+        />
 
         <!-- Namespace password prompt overlay -->
         <div v-if="nsPasswordPrompt" class="password-overlay" @click.self="nsPasswordPrompt = null">
@@ -867,38 +1083,351 @@ onUnmounted(() => {
   border-color: var(--accent);
 }
 
-.ns-settings-toggle {
+.ns-segmented-control {
+  display: flex;
+  background: var(--bg-active);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.ns-seg-btn {
+  flex: 1;
+  padding: 0.35rem 0.75rem;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ns-seg-btn.active {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.ns-seg-btn:hover:not(.active) {
+  color: var(--text-secondary);
+}
+
+.ns-visibility-hint {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: -0.25rem;
+}
+
+/* Search bar */
+.search-bar {
+  padding: 0 1.25rem;
+  padding-top: 0.75rem;
+  position: relative;
+}
+
+.search-bar input {
+  width: 100%;
+  padding: 0.55rem 2rem 0.55rem 0.8rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  box-sizing: border-box;
+}
+
+.search-bar input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.search-clear {
+  position: absolute;
+  right: 1.6rem;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-top: 0.375rem;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+}
+
+.search-clear:hover {
+  color: var(--text-primary);
+}
+
+/* Breadcrumbs */
+.breadcrumb-nav {
   display: flex;
   align-items: center;
+  gap: 0.15rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.breadcrumb-sep {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.breadcrumb-item {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0.15rem 0.3rem;
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.breadcrumb-item:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.breadcrumb-item.current {
+  color: var(--text-primary);
+  font-weight: 600;
+  cursor: default;
+}
+
+.breadcrumb-item.current:hover {
+  background: none;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.ns-action-btn {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.7rem;
+  background: var(--bg-active);
+  color: var(--text-secondary);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.ns-action-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* Action row */
+.action-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.75rem;
+}
+
+.create-ns-btn {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.75rem;
+  background: var(--accent2);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--font-body);
+}
+
+.create-ns-btn:hover {
+  filter: brightness(1.1);
+}
+
+/* Search results grouped */
+.search-results {
+  display: flex;
+  flex-direction: column;
   gap: 0.5rem;
 }
 
-.ns-toggle {
-  width: 36px;
-  height: 20px;
-  background: var(--bg-active);
+.search-group {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.search-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: none;
   border: none;
-  border-radius: 10px;
-  position: relative;
-  transition: background 0.2s;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s;
 }
 
-.ns-toggle.active {
-  background: var(--success);
+.search-group-header:hover {
+  background: var(--bg-active);
 }
 
-.ns-toggle-knob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  background: white;
-  border-radius: 50%;
-  transition: transform 0.2s;
+.search-group-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
 }
 
-.ns-toggle.active .ns-toggle-knob {
-  transform: translateX(16px);
+.search-group-icon-default {
+  font-weight: 700;
+  color: var(--accent2);
+  opacity: 0.7;
+}
+
+.search-group-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-group-count {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-weight: 400;
+  flex-shrink: 0;
+}
+
+.search-group-arrow {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.search-group-desc {
+  padding: 0 1rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: -0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.search-group-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0 1rem 0.75rem;
+}
+
+.search-preview-tag {
+  font-size: 0.65rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.search-preview-tag.ns-tag {
+  background: color-mix(in srgb, var(--accent2) 15%, transparent);
+  color: var(--accent2);
+  font-family: var(--font-code);
+}
+
+.search-preview-tag.room-tag {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.search-preview-more {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  padding: 0.15rem 0.3rem;
+}
+
+/* Search result namespace path */
+.card-ns-path {
+  font-size: 0.6rem;
+  color: var(--accent2);
+  font-family: var(--font-code);
+}
+
+/* Namespace settings extras */
+.ns-settings-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.5rem 0;
+}
+
+.ns-pw-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ns-pw-row input {
+  flex: 1;
+}
+
+.pw-change-btn {
+  padding: 0.4rem 0.8rem;
+  background: var(--accent2);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.ns-danger-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ns-danger-label {
+  color: var(--danger) !important;
+}
+
+.ns-delete-btn {
+  padding: 0.5rem;
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.ns-delete-btn:hover {
+  background: var(--danger);
+  color: white;
+}
+
+.ns-delete-warning {
+  font-size: 0.75rem;
+  color: var(--danger);
+  line-height: 1.3;
+}
+
+.ns-delete-confirm {
+  padding: 0.5rem 1rem;
+  background: var(--danger);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.8rem;
 }
 </style>

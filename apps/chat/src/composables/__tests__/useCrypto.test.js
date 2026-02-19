@@ -171,7 +171,7 @@ describe('useCrypto', () => {
       // but we can verify via subscribeKeyExchange behavior later.
       // For now, just ensure it doesn't throw.
       const { markPasswordProtected } = useCrypto()
-      expect(() => markPasswordProtected('room-pw')).not.toThrow()
+      expect(() => markPasswordProtected('room-pw', 'expected-hash')).not.toThrow()
     })
   })
 
@@ -309,7 +309,7 @@ describe('useCrypto', () => {
       const { enableEncryption, markPasswordProtected, subscribeKeyExchange } = useCrypto()
 
       await enableEncryption('room-pw-gate')
-      markPasswordProtected('room-pw-gate')
+      markPasswordProtected('room-pw-gate', 'expected-room-hash')
       subscribeKeyExchange('room-pw-gate')
 
       // Capture the pubkey subscription callback
@@ -348,7 +348,7 @@ describe('useCrypto', () => {
       const { enableEncryption, markPasswordProtected, subscribeKeyExchange } = useCrypto()
 
       await enableEncryption('room-pw-ok')
-      markPasswordProtected('room-pw-ok')
+      markPasswordProtected('room-pw-ok', 'valid-proof-hash')
       subscribeKeyExchange('room-pw-ok')
 
       // Capture the pubkey subscription callback

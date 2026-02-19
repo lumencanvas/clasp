@@ -25,6 +25,7 @@
 //! ```
 
 mod auth;
+mod validator;
 
 use anyhow::Result;
 use clap::Parser;
@@ -157,6 +158,11 @@ struct Cli {
     /// Snapshot interval in seconds (default: 30)
     #[arg(long, default_value = "30")]
     persist_interval: u64,
+
+    /// Allowed CORS origin(s) for the auth API (comma-separated).
+    /// If not set, CORS is permissive (development only).
+    #[arg(long)]
+    cors_origin: Option<String>,
 }
 
 #[tokio::main]
@@ -237,6 +243,13 @@ async fn main() -> Result<()> {
 
     let mut router = Router::new(config);
 
+    // Set up chat-specific write validation and snapshot filtering
+    if auth_enabled {
+        router.set_write_validator(validator::ChatWriteValidator);
+        router.set_snapshot_filter(validator::ChatSnapshotFilter);
+        tracing::info!("Chat write validator and snapshot filter enabled");
+    }
+
     // Restore state from disk if --persist is set and file exists
     if let Some(ref persist_path) = cli.persist {
         if persist_path.exists() {
@@ -279,13 +292,16 @@ async fn main() -> Result<()> {
             auth::AuthState::new(&cli.auth_db, validator)
                 .expect("Failed to initialize auth database"),
         );
-        let auth_app = auth::auth_router(auth_state);
+        let auth_app = auth::auth_router(auth_state, cli.cors_origin.as_deref());
         let auth_addr: SocketAddr = format!("{}:{}", cli.host, auth_port).parse()?;
         tracing::info!("Auth HTTP: http://{}", auth_addr);
 
         let listener = tokio::net::TcpListener::bind(auth_addr).await?;
         tokio::spawn(async move {
-            if let Err(e) = axum::serve(listener, auth_app).await {
+            if let Err(e) = axum::serve(
+                listener,
+                auth_app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+            ).await {
                 tracing::error!("Auth server error: {}", e);
             }
         });

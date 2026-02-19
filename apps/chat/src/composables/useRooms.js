@@ -1,6 +1,7 @@
 import { ref, computed, readonly } from 'vue'
 import { useClasp } from './useClasp.js'
 import { useIdentity } from './useIdentity.js'
+import { useNamespaces } from './useNamespaces.js'
 import { ADDR, ROOM_TYPES } from '../lib/constants.js'
 
 const rooms = ref(new Map()) // roomId -> { id, name, type, isPublic, creatorId, creatorName, createdAt }
@@ -127,6 +128,14 @@ function deleteRoom(roomId) {
   const room = rooms.value.get(roomId)
   if (room && room.creatorId === userId.value) {
     set(`${ADDR.ROOM_REGISTRY}/${roomId}`, null)
+
+    // Clean up namespace registry entry if this room was in a namespace
+    const { getRoomNamespace, removeRoomFromNamespace } = useNamespaces()
+    const ns = getRoomNamespace(roomId)
+    if (ns) {
+      removeRoomFromNamespace(ns, roomId)
+    }
+
     rooms.value.delete(roomId)
     rooms.value = new Map(rooms.value)
     leaveRoom(roomId)
