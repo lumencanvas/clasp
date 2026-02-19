@@ -38,6 +38,7 @@ const {
   discoveredRooms,
   createRoom,
   createDM,
+  subscribeDMInbox,
   joinRoom,
   leaveRoom,
   deleteRoom,
@@ -311,12 +312,15 @@ async function handleImportFile(e) {
   e.target.value = ''
 }
 
+let unsubDMInbox = null
+
 onMounted(() => {
   announceProfile()
   requestPermission()
   initFriends()
 
   discoverPublicRooms()
+  unsubDMInbox = subscribeDMInbox()
 
   // Handle invite join from URL
   const joinParam = route.query.join
@@ -330,6 +334,7 @@ onMounted(() => {
 onUnmounted(() => {
   stopDiscovery()
   cleanupFriends()
+  if (unsubDMInbox) unsubDMInbox()
 })
 </script>
 

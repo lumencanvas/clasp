@@ -177,6 +177,14 @@ function createDM(targetUserId, targetName) {
     dmUsers: roomData.dmUsers,
   })
 
+  // Notify the recipient via their DM inbox
+  set(`${ADDR.USER_PROFILE}/${targetUserId}/dms/${roomId}`, {
+    fromId: userId.value,
+    fromName: displayName.value,
+    roomId,
+    timestamp: Date.now(),
+  })
+
   // Add locally
   rooms.value.set(roomId, { id: roomId, ...roomData })
   rooms.value = new Map(rooms.value)
@@ -275,6 +283,74 @@ function updateRoomData(roomId, updates) {
   rooms.value = new Map(rooms.value)
 }
 
+function subscribeDMInbox() {
+  const { subscribe, connected, client } = useClasp()
+  const { userId } = useIdentity()
+  if (!connected.value) return null
+
+  const inboxPattern = `${ADDR.USER_PROFILE}/${userId.value}/dms/*`
+
+  function handleIncomingDM(data, address) {
+    if (!data) return
+    const roomId = address.split('/').pop()
+
+    // Already joined — skip
+    if (joinedRoomIds.value.has(roomId)) return
+
+    // Resolve display name: the other user's name
+    const myId = userId.value
+    const otherName = data.fromId === myId ? 'DM' : data.fromName
+
+    // Add room data so it shows in sidebar
+    rooms.value.set(roomId, {
+      id: roomId,
+      name: otherName,
+      type: ROOM_TYPES.DM,
+      isPublic: false,
+      creatorId: data.fromId,
+      createdAt: data.timestamp || Date.now(),
+      dmUsers: { [data.fromId]: data.fromName },
+    })
+    rooms.value = new Map(rooms.value)
+
+    // Auto-join
+    joinedRoomIds.value.add(roomId)
+    joinedRoomIds.value = new Set(joinedRoomIds.value)
+    persistJoined()
+
+    // Fetch full room meta to get complete dmUsers map
+    fetchRoomMeta(roomId).then((meta) => {
+      if (meta && meta.dmUsers) {
+        const existing = rooms.value.get(roomId)
+        if (existing) {
+          // Display name = the other user, not ourselves
+          const otherUser = Object.entries(meta.dmUsers).find(([id]) => id !== myId)
+          rooms.value.set(roomId, {
+            ...existing,
+            name: otherUser ? otherUser[1] : existing.name,
+            dmUsers: meta.dmUsers,
+          })
+          rooms.value = new Map(rooms.value)
+        }
+      }
+    })
+  }
+
+  const unsub = subscribe(inboxPattern, handleIncomingDM)
+
+  // Process pre-existing inbox entries from snapshot cache
+  if (client.value?.params) {
+    const prefix = `${ADDR.USER_PROFILE}/${userId.value}/dms/`
+    for (const [address, data] of client.value.params) {
+      if (address.startsWith(prefix) && data !== null) {
+        handleIncomingDM(data, address)
+      }
+    }
+  }
+
+  return unsub
+}
+
 function stopDiscovery() {
   if (unsubDiscovery) {
     unsubDiscovery()
@@ -293,6 +369,7 @@ export function useRooms() {
     discoveredRooms: readonly(discoveredRooms),
     createRoom,
     createDM,
+    subscribeDMInbox,
     joinRoom,
     leaveRoom,
     switchRoom,
