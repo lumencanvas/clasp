@@ -38,9 +38,9 @@ rendezvous = ["clasp-discovery"]
 
 [dependencies]
 # Published crates from crates.io
-clasp-core = "3.3"
-clasp-router = "3.3"
-clasp-discovery = { version = "3.3", features = ["rendezvous"], optional = true }
+clasp-core = "3.4"
+clasp-router = "3.4"
+clasp-discovery = { version = "3.4", features = ["rendezvous"], optional = true }
 
 # Runtime
 tokio = { version = "1", features = ["full"] }

@@ -1,5 +1,5 @@
 # CLASP Relay Server Dockerfile
-# 
+#
 # This is a STANDALONE deployment that uses published crates from crates.io.
 # No monorepo dependencies required.
 #
@@ -8,11 +8,8 @@
 #
 # Run:
 #   docker run -p 7330:7330 clasp-relay
-#
-# For development (using local crates), build from repo root with:
-#   docker build -f deploy/relay/Dockerfile.dev -t clasp-relay-dev .
 
-FROM rust:1.85-slim-bookworm as builder
+FROM rust:1.85-slim-bookworm AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
