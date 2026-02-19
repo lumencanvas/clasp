@@ -24,6 +24,10 @@ const encryptedRooms = ref(new Set())
 // Rooms that require password proof for key exchange
 const passwordRooms = new Set()
 
+// Cache peer ECDH public keys for key rotation distribution
+// roomId -> Map(peerId -> publicKeyJwk)
+const peerPublicKeys = new Map()
+
 // ECDH key pair for this session (generated lazily)
 let ecdhKeyPair = null
 
@@ -90,6 +94,15 @@ async function publishPublicKey(roomId) {
 }
 
 /**
+ * Request the room key by publishing our ECDH public key.
+ * Called when joining an encrypted room without a key.
+ */
+async function requestRoomKey(roomId) {
+  if (roomKeys.has(roomId)) return
+  await publishPublicKey(roomId)
+}
+
+/**
  * Subscribe to key exchange events for a room.
  * When a new member publishes their public key, derive a shared secret
  * and send them the room key encrypted with it.
@@ -103,6 +116,10 @@ function subscribeKeyExchange(roomId) {
     if (!data || !connected.value) return
     const peerId = address.split('/').pop()
     if (peerId === userId.value) return
+
+    // Cache peer's public key for future rotation distribution
+    if (!peerPublicKeys.has(roomId)) peerPublicKeys.set(roomId, new Map())
+    peerPublicKeys.get(roomId).set(peerId, data.publicKey)
 
     const roomKey = roomKeys.get(roomId)
     if (!roomKey) return // We don't have the room key
@@ -144,9 +161,9 @@ function subscribeKeyExchange(roomId) {
     }
   })
 
-  // Watch for encrypted room keys sent to us
+  // Watch for encrypted room keys sent to us (accepts re-keying for rotation)
   const unsubKeyex = subscribe(`${ADDR.ROOM}/${roomId}/crypto/keyex/${userId.value}`, async (data) => {
-    if (!data || roomKeys.has(roomId)) return
+    if (!data) return
 
     try {
       // Derive shared secret with sender's public key
@@ -222,6 +239,32 @@ async function rotateRoomKey(roomId) {
 
   // Re-publish our public key to trigger key exchange with remaining members
   await publishPublicKey(roomId)
+
+  // Proactively distribute new key to all cached peers
+  const cachedPeers = peerPublicKeys.get(roomId)
+  if (cachedPeers) {
+    const { emit: claspEmit } = useClasp()
+    const { userId } = useIdentity()
+    const kp = await getECDHKeyPair()
+    const roomKeyJwk = JSON.stringify(await exportKey(newKey))
+
+    for (const [peerId, peerPubKeyJwk] of cachedPeers) {
+      if (peerId === userId.value) continue
+      try {
+        const peerPubKey = await importKey(peerPubKeyJwk, 'ecdh-public')
+        const sharedKey = await deriveSharedSecret(kp.privateKey, peerPubKey)
+        const encrypted = await encryptMessage(sharedKey, roomKeyJwk)
+        claspEmit(`${ADDR.ROOM}/${roomId}/crypto/keyex/${peerId}`, {
+          fromId: userId.value,
+          encryptedKey: encrypted.ciphertext,
+          iv: encrypted.iv,
+          senderPublicKey: await exportKey(kp.publicKey),
+        })
+      } catch (e) {
+        console.warn(`[crypto] Failed to distribute rotated key to ${peerId}:`, e)
+      }
+    }
+  }
 }
 
 /**
@@ -236,6 +279,7 @@ export function useCrypto() {
     encryptedRooms,
     enableEncryption,
     loadRoomKey,
+    requestRoomKey,
     subscribeKeyExchange,
     publishPublicKey,
     encrypt,

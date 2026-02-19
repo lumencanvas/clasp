@@ -270,6 +270,7 @@ function handleDeleteRoom(roomId) {
 }
 
 function handleLogout() {
+  cleanupFriends()
   disconnect()
   localStorage.removeItem('clasp-chat-token')
   localStorage.removeItem('clasp-chat-auth-userId')

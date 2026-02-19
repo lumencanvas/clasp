@@ -196,20 +196,17 @@ export function useVideoRoom(roomId) {
       localStream.value.getTracks().forEach(track => {
         connection.addTrack(track, localStream.value)
       })
-    } else {
-      // Spectator: add recvonly transceivers so SDP includes media sections
-      // and we can receive remote audio/video
-      connection.addTransceiver('audio', { direction: 'recvonly' })
-      connection.addTransceiver('video', { direction: 'recvonly' })
     }
 
     connection.ontrack = (event) => {
-      const [remoteStream] = event.streams
       const existing = peers.get(peerId)
-      if (existing) {
-        existing.stream = remoteStream
-        peers.set(peerId, { ...existing })
+      if (!existing) return
+      const remoteStream = event.streams[0] || existing.stream || new MediaStream()
+      if (!remoteStream.getTrackById(event.track.id)) {
+        remoteStream.addTrack(event.track)
       }
+      existing.stream = remoteStream
+      peers.set(peerId, { ...existing })
     }
 
     connection.onicecandidate = (event) => {
@@ -233,17 +230,24 @@ export function useVideoRoom(roomId) {
       if (state === 'failed') {
         closePeerConnection(peerId)
         peers.delete(peerId)
+        iceCandidateQueues.delete(peerId)
       } else if (state === 'disconnected') {
         setTimeout(() => {
           if (connection.connectionState === 'disconnected') {
             closePeerConnection(peerId)
             peers.delete(peerId)
+            iceCandidateQueues.delete(peerId)
           }
         }, TTL.DISCONNECT_GRACE)
       }
     }
 
     if (initiator) {
+      // Spectator initiator: add recvonly transceivers so SDP includes media sections
+      if (!localStream.value) {
+        connection.addTransceiver('audio', { direction: 'recvonly' })
+        connection.addTransceiver('video', { direction: 'recvonly' })
+      }
       try {
         const offer = await connection.createOffer()
         await connection.setLocalDescription(offer)
@@ -288,7 +292,9 @@ export function useVideoRoom(roomId) {
     const { from, type } = data
 
     if (type === 'offer') {
-      const connection = await createPeerConnection(from, participants.value.get(from)?.name, false)
+      // Support renegotiation: reuse existing connection if present
+      const existingPeer = peers.get(from)
+      const connection = existingPeer?.connection || await createPeerConnection(from, participants.value.get(from)?.name, false)
       try {
         await connection.setRemoteDescription(new RTCSessionDescription(data.sdp))
         await drainIceCandidateQueue(from)
@@ -355,6 +361,88 @@ export function useVideoRoom(roomId) {
     }
   }
 
+  async function getUserMediaSelective({ audio, video }) {
+    if (!audio && !video) {
+      // Spectator mode: no local stream
+      localStream.value = null
+      audioEnabled.value = false
+      videoEnabled.value = false
+      return null
+    }
+    try {
+      const constraints = {}
+      if (audio) constraints.audio = true
+      if (video) constraints.video = { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } }
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      localStream.value = stream
+      audioEnabled.value = audio
+      videoEnabled.value = video
+      return stream
+    } catch (e) {
+      error.value = `Media access failed: ${e.message}`
+      throw e
+    }
+  }
+
+  async function enableAudio() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const audioTrack = stream.getAudioTracks()[0]
+      if (!localStream.value) {
+        localStream.value = new MediaStream([audioTrack])
+      } else {
+        localStream.value.addTrack(audioTrack)
+      }
+      audioEnabled.value = true
+      // Add track to all peer connections and renegotiate
+      for (const [peerId, peer] of peers) {
+        if (peer.connection && peer.connection.connectionState !== 'closed') {
+          peer.connection.addTrack(audioTrack, localStream.value)
+          // Renegotiate if we're the initiator (higher session ID)
+          if (sessionId.value.localeCompare(peerId) > 0) {
+            const offer = await peer.connection.createOffer()
+            await peer.connection.setLocalDescription(offer)
+            const desc = peer.connection.localDescription
+            sendSignal(peerId, { type: 'offer', sdp: { type: desc.type, sdp: desc.sdp } })
+          }
+        }
+      }
+      announcePresence()
+    } catch (e) {
+      error.value = `Microphone access failed: ${e.message}`
+    }
+  }
+
+  async function enableVideo() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
+      })
+      const videoTrack = stream.getVideoTracks()[0]
+      if (!localStream.value) {
+        localStream.value = new MediaStream([videoTrack])
+      } else {
+        localStream.value.addTrack(videoTrack)
+      }
+      videoEnabled.value = true
+      // Add track to all peer connections and renegotiate
+      for (const [peerId, peer] of peers) {
+        if (peer.connection && peer.connection.connectionState !== 'closed') {
+          peer.connection.addTrack(videoTrack, localStream.value)
+          if (sessionId.value.localeCompare(peerId) > 0) {
+            const offer = await peer.connection.createOffer()
+            await peer.connection.setLocalDescription(offer)
+            const desc = peer.connection.localDescription
+            sendSignal(peerId, { type: 'offer', sdp: { type: desc.type, sdp: desc.sdp } })
+          }
+        }
+      }
+      announcePresence()
+    } catch (e) {
+      error.value = `Camera access failed: ${e.message}`
+    }
+  }
+
   async function shareScreen() {
     try {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
@@ -402,6 +490,9 @@ export function useVideoRoom(roomId) {
     participantList,
     getUserMedia,
     getAudioOnly,
+    getUserMediaSelective,
+    enableAudio,
+    enableVideo,
     stopUserMedia,
     joinVideo,
     leaveVideo,

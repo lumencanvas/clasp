@@ -24,7 +24,9 @@ const {
   peerList,
   participantList,
   getUserMedia,
-  getAudioOnly,
+  getUserMediaSelective,
+  enableAudio,
+  enableVideo,
   joinVideo,
   leaveVideo,
   toggleAudio,
@@ -47,33 +49,44 @@ const onlineCount = computed(() => participantList.value.length + (inVideo.value
 
 defineExpose({ sortedParticipants, onlineCount })
 
-async function handleJoinCamera() {
+function requestCameraPreview() {
+  if (!localStream.value) getUserMedia().catch(() => {})
+}
+
+function stopCameraPreview() {
+  stopUserMedia()
+}
+
+async function handleJoin({ audio, video }) {
   mediaLoading.value = true
   try {
-    if (!localStream.value) await getUserMedia()
+    stopUserMedia()
+    await getUserMediaSelective({ audio, video })
     await joinVideo()
   } finally {
     mediaLoading.value = false
   }
-}
-
-async function handleJoinAudio() {
-  mediaLoading.value = true
-  try {
-    await getAudioOnly()
-    await joinVideo()
-  } finally {
-    mediaLoading.value = false
-  }
-}
-
-async function handleJoinSpectator() {
-  await joinVideo()
 }
 
 function handleLeave() {
   leaveVideo()
   stopUserMedia()
+}
+
+async function handleToggleAudio() {
+  if (!localStream.value || !localStream.value.getAudioTracks().length) {
+    await enableAudio()
+  } else {
+    toggleAudio()
+  }
+}
+
+async function handleToggleVideo() {
+  if (!localStream.value || !localStream.value.getVideoTracks().length) {
+    await enableVideo()
+  } else {
+    toggleVideo()
+  }
 }
 </script>
 
@@ -85,9 +98,9 @@ function handleLeave() {
       :stream="localStream"
       :loading="mediaLoading"
       :error="error"
-      @join-camera="handleJoinCamera"
-      @join-audio="handleJoinAudio"
-      @join-spectator="handleJoinSpectator"
+      @join="handleJoin"
+      @request-camera="requestCameraPreview"
+      @stop-camera="stopCameraPreview"
     />
 
     <!-- Active video session -->
@@ -108,8 +121,8 @@ function handleLeave() {
         :video-enabled="videoEnabled"
         :is-screen-sharing="isScreenSharing"
         :layout="layout"
-        @toggle-audio="toggleAudio"
-        @toggle-video="toggleVideo"
+        @toggle-audio="handleToggleAudio"
+        @toggle-video="handleToggleVideo"
         @share-screen="shareScreen"
         @set-layout="setLayout"
         @leave="handleLeave"

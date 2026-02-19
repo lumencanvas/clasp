@@ -1,5 +1,5 @@
 <script setup>
-import { ref, toRef } from 'vue'
+import { ref, toRef, onUnmounted } from 'vue'
 import { useChat } from '../composables/useChat.js'
 import { useReactions } from '../composables/useReactions.js'
 import { useCrypto } from '../composables/useCrypto.js'
@@ -46,8 +46,13 @@ const { set } = useClasp()
 const showAdmin = ref(false)
 
 // Subscribe to bans and admin list when room is active
-subscribeBans()
-subscribeAdmins()
+const unsubBans = subscribeBans()
+const unsubAdmins = subscribeAdmins()
+
+onUnmounted(() => {
+  if (unsubBans) unsubBans()
+  if (unsubAdmins) unsubAdmins()
+})
 
 const roomIsEncrypted = () => isEncrypted(props.roomId)
 

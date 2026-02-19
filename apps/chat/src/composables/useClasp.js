@@ -44,6 +44,7 @@ async function connect(displayName) {
 
     c.onReconnect(() => {
       connected.value = true
+      error.value = null
     })
 
     c.onError((err) => {

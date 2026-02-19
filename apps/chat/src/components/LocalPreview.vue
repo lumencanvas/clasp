@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps({
   stream: { type: MediaStream, default: null },
@@ -7,10 +7,11 @@ const props = defineProps({
   error: { type: String, default: null },
 })
 
-const emit = defineEmits(['join-camera', 'join-audio', 'join-spectator'])
+const emit = defineEmits(['join', 'request-camera', 'stop-camera'])
 
 const videoEl = ref(null)
-const cameraRequested = ref(false)
+const audioOn = ref(true)
+const videoOn = ref(true)
 
 function attachStream() {
   if (videoEl.value && props.stream) {
@@ -18,18 +19,35 @@ function attachStream() {
   }
 }
 
-watch(() => props.stream, (s) => {
+watch(() => props.stream, attachStream)
+onMounted(() => {
+  emit('request-camera')
   attachStream()
-  if (s) cameraRequested.value = true
 })
-onMounted(attachStream)
+
+function toggleMic() {
+  audioOn.value = !audioOn.value
+}
+
+function toggleCamera() {
+  videoOn.value = !videoOn.value
+  if (videoOn.value) {
+    emit('request-camera')
+  } else {
+    emit('stop-camera')
+  }
+}
+
+function handleJoin() {
+  emit('join', { audio: audioOn.value, video: videoOn.value })
+}
 </script>
 
 <template>
   <div class="local-preview">
     <div class="preview-container">
       <video
-        v-if="stream"
+        v-if="stream && videoOn"
         ref="videoEl"
         autoplay
         playsinline
@@ -40,62 +58,60 @@ onMounted(attachStream)
           <polygon points="23 7 16 12 23 17 23 7"/>
           <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
         </svg>
-        <p>Camera preview</p>
+        <p>{{ videoOn ? 'Starting camera...' : 'Camera off' }}</p>
       </div>
     </div>
 
     <p v-if="error" class="error-text">{{ error }}</p>
 
-    <div class="preview-actions">
-      <!-- If camera stream is already active, show simple Join button -->
-      <template v-if="stream">
-        <button class="preview-btn join" @click="emit('join-camera')">
-          Join Video
-        </button>
-      </template>
-
-      <!-- Otherwise show three options -->
-      <template v-else>
-        <button
-          class="preview-btn join"
-          @click="emit('join-camera')"
-          :disabled="loading"
-        >
-          <span v-if="loading" class="spinner"></span>
-          <template v-else>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="23 7 16 12 23 17 23 7"/>
-              <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-            </svg>
-            Join with Camera
-          </template>
-        </button>
-        <button
-          class="preview-btn audio-btn"
-          @click="emit('join-audio')"
-          :disabled="loading"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-            <line x1="12" y1="19" x2="12" y2="23"/>
-            <line x1="8" y1="23" x2="16" y2="23"/>
-          </svg>
-          Join with Audio
-        </button>
-        <button
-          class="preview-btn"
-          @click="emit('join-spectator')"
-          :disabled="loading"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-            <circle cx="12" cy="12" r="3"/>
-          </svg>
-          Spectate
-        </button>
-      </template>
+    <div class="toggle-row">
+      <button
+        :class="['toggle-btn', { off: !audioOn }]"
+        @click="toggleMic"
+        :title="audioOn ? 'Mute mic' : 'Unmute mic'"
+      >
+        <!-- Mic on -->
+        <svg v-if="audioOn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+          <line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+        <!-- Mic off -->
+        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="1" y1="1" x2="23" y2="23"/>
+          <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/>
+          <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2c0 .67-.1 1.32-.27 1.93"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+          <line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+      </button>
+      <button
+        :class="['toggle-btn', { off: !videoOn }]"
+        @click="toggleCamera"
+        :title="videoOn ? 'Turn off camera' : 'Turn on camera'"
+      >
+        <!-- Camera on -->
+        <svg v-if="videoOn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="23 7 16 12 23 17 23 7"/>
+          <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+        </svg>
+        <!-- Camera off -->
+        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10"/>
+          <line x1="1" y1="1" x2="23" y2="23"/>
+        </svg>
+      </button>
     </div>
+
+    <button
+      class="join-btn"
+      @click="handleJoin"
+      :disabled="loading"
+    >
+      <span v-if="loading" class="spinner"></span>
+      <template v-else>Join Call</template>
+    </button>
   </div>
 </template>
 
@@ -151,58 +167,62 @@ onMounted(attachStream)
   font-size: 0.8rem;
 }
 
-.preview-actions {
+.toggle-row {
   display: flex;
   gap: 0.75rem;
-  flex-wrap: wrap;
-  justify-content: center;
 }
 
-.preview-btn {
-  min-height: 44px;
-  padding: 0.75rem 1.25rem;
+.toggle-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
   background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
   color: var(--text-primary);
-  font-size: 0.85rem;
-  transition: all 0.15s;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
 }
 
-.preview-btn svg {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
+.toggle-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
-.preview-btn:hover {
+.toggle-btn:hover {
   background: var(--bg-active);
 }
 
-.preview-btn.join {
+.toggle-btn.off {
+  background: var(--danger);
+  color: white;
+}
+
+.toggle-btn.off:hover {
+  opacity: 0.9;
+}
+
+.join-btn {
+  min-height: 44px;
+  padding: 0.75rem 2rem;
   background: var(--success);
-  border-color: var(--success);
+  border: none;
+  border-radius: 4px;
   color: white;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: opacity 0.15s;
 }
 
-.preview-btn.join:hover {
+.join-btn:hover {
   opacity: 0.9;
 }
 
-.preview-btn.audio-btn {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: white;
-}
-
-.preview-btn.audio-btn:hover {
-  opacity: 0.9;
-}
-
-.preview-btn:disabled {
+.join-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -212,7 +232,7 @@ onMounted(attachStream)
   width: 16px;
   height: 16px;
   border: 2px solid rgba(255,255,255,0.3);
-  border-top-color: var(--text-primary);
+  border-top-color: white;
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
 }

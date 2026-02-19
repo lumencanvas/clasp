@@ -59,6 +59,7 @@ vi.mock('../useCrypto.js', () => ({
     decrypt: mockDecrypt,
     isEncrypted: mockIsEncrypted,
     loadRoomKey: mockLoadRoomKey,
+    requestRoomKey: vi.fn(),
     subscribeKeyExchange: mockSubscribeKeyExchange,
     encryptedRooms: mockEncryptedRooms,
     markPasswordProtected: mockMarkPasswordProtected,

@@ -4,10 +4,10 @@
  * Escapes HTML to prevent XSS.
  */
 
-const ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }
+const ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
 
 function escapeHtml(str) {
-  return str.replace(/[&<>"]/g, c => ESCAPE_MAP[c])
+  return str.replace(/[&<>"']/g, c => ESCAPE_MAP[c])
 }
 
 export function renderMarkdown(text) {

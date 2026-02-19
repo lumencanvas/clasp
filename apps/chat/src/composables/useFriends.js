@@ -141,6 +141,8 @@ const requestCount = computed(() => pendingRequests.value.length)
 function cleanup() {
   if (unsubFriends) { unsubFriends(); unsubFriends = null }
   if (unsubRequests) { unsubRequests(); unsubRequests = null }
+  friends.value = new Map()
+  pendingRequests.value = []
   initialized = false
 }
 

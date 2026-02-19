@@ -19,7 +19,7 @@ export function useChat(roomId, isActive) {
   const { incrementUnread, notifyMessage } = useNotifications()
   const { loadCachedMessages, persistMessage } = useStorage()
   const { updateRoomData } = useRooms()
-  const { encrypt, decrypt, isEncrypted, loadRoomKey, subscribeKeyExchange, encryptedRooms, markPasswordProtected } = useCrypto()
+  const { encrypt, decrypt, isEncrypted, loadRoomKey, requestRoomKey, subscribeKeyExchange, encryptedRooms, markPasswordProtected } = useCrypto()
 
   const messages = ref([])
   const participants = ref(new Map())
@@ -42,6 +42,8 @@ export function useChat(roomId, isActive) {
   let presenceInterval = null
   let typingTimeout = null
   let pruneInterval = null
+  let keyRetryInterval = null
+  let joinAbortId = 0
 
   const sortedParticipants = computed(() => {
     return Array.from(participants.value.entries())
@@ -128,10 +130,12 @@ export function useChat(roomId, isActive) {
     if (!connected.value || !roomId.value) return
 
     const rid = roomId.value
+    const thisJoinId = ++joinAbortId
 
     // Load cached messages from IndexedDB
     try {
       const cached = await loadCachedMessages(rid)
+      if (joinAbortId !== thisJoinId) return
       if (cached.length > 0) {
         const seen = new Set(messages.value.map(m => m.msgId).filter(Boolean))
         const toAdd = cached
@@ -186,14 +190,16 @@ export function useChat(roomId, isActive) {
       console.warn('[chat] Failed to load room key:', e)
       return null
     })
+    if (joinAbortId !== thisJoinId) return
 
     // Subscribe to room meta for encrypted flag (3E: populate encryptedRooms on join)
     subscribe(`${ADDR.ROOM}/${rid}/meta`, (meta) => {
       if (meta && meta.encrypted) {
         encryptedRooms.value = new Set(encryptedRooms.value).add(rid)
-        // If we don't have the key yet, mark as waiting
+        // If we don't have the key yet, mark as waiting and request it
         if (!isEncrypted(rid) && !existingKey) {
           waitingForKey.value = true
+          requestRoomKey(rid)
         }
       }
       if (meta && meta.passwordHash) {
@@ -210,12 +216,21 @@ export function useChat(roomId, isActive) {
       }
     })
 
-    // If room is already known as encrypted and we don't have the key, set waiting
+    // If room is already known as encrypted and we don't have the key, request it
     if (isEncrypted(rid) && !existingKey) {
       waitingForKey.value = true
+      requestRoomKey(rid)
     }
 
     unsubCrypto = subscribeKeyExchange(rid)
+
+    // Periodically re-request key while waiting
+    if (keyRetryInterval) { clearInterval(keyRetryInterval); keyRetryInterval = null }
+    keyRetryInterval = setInterval(() => {
+      if (waitingForKey.value && roomId.value) {
+        requestRoomKey(roomId.value)
+      }
+    }, 5000)
 
     // Announce presence
     announcePresence()
@@ -241,6 +256,7 @@ export function useChat(roomId, isActive) {
     if (presenceInterval) { clearInterval(presenceInterval); presenceInterval = null }
     if (pruneInterval) { clearInterval(pruneInterval); pruneInterval = null }
     if (typingTimeout) { clearTimeout(typingTimeout); typingTimeout = null }
+    if (keyRetryInterval) { clearInterval(keyRetryInterval); keyRetryInterval = null }
 
     // Clear our presence and typing
     if (connected.value && userId.value && rid) {
@@ -504,6 +520,7 @@ export function useChat(roomId, isActive) {
       // Check if we actually have the key now (isEncrypted checks the roomKeys map)
       if (isEncrypted(roomId.value)) {
         waitingForKey.value = false
+        if (keyRetryInterval) { clearInterval(keyRetryInterval); keyRetryInterval = null }
         addSystemMessage('Room key received. E2E encryption active.')
       }
     }

@@ -77,6 +77,7 @@ fn build_scopes(user_id: &str) -> Vec<String> {
         format!("write:/chat/room/*/presence/{}", user_id),
         format!("write:/chat/room/*/typing/{}", user_id),
         "write:/chat/room/*/reactions/**".to_string(),
+        "write:/chat/room/*/video/**".to_string(),
         "write:/chat/room/*/crypto/**".to_string(),
         "write:/chat/room/*/admin/**".to_string(),
         "write:/chat/room/*/bans/**".to_string(),
