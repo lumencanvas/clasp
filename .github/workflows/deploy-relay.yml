@@ -39,7 +39,7 @@ jobs:
           username: root
           key: ${{ secrets.DROPLET_SSH_KEY }}
           script: |
-            cd /opt/clasp
+            cd /opt/clasp/deploy/droplet
             docker compose pull relay
             docker compose up -d relay
             docker image prune -f
