@@ -7,9 +7,9 @@ import { useIdentity } from '../composables/useIdentity.js'
 
 const router = useRouter()
 const route = useRoute()
-const { authError, authLoading, register, login } = useAuth()
+const { authError, authLoading, authUserId, register, login } = useAuth()
 const { connect, disconnect } = useClasp()
-const { setDisplayName } = useIdentity()
+const { userId, setUserId, setDisplayName } = useIdentity()
 
 // Clear any stale guest token so we get a fresh auth
 disconnect()
@@ -32,8 +32,9 @@ async function handleSubmit() {
       authError.value = 'Password must be at least 6 characters'
       return
     }
-    const ok = await register(username.value.trim(), password.value)
+    const ok = await register(username.value.trim(), password.value, userId.value)
     if (ok) {
+      if (authUserId.value) setUserId(authUserId.value)
       setDisplayName(username.value.trim())
       await connect(username.value.trim())
       const joinParam = route.query.join
@@ -42,6 +43,7 @@ async function handleSubmit() {
   } else {
     const ok = await login(username.value.trim(), password.value)
     if (ok) {
+      if (authUserId.value) setUserId(authUserId.value)
       setDisplayName(username.value.trim())
       await connect(username.value.trim())
       const joinParam = route.query.join

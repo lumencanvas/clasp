@@ -8,7 +8,7 @@ import { AVATAR_COLORS, USER_STATUSES, DEFAULT_RELAY_URL, AUTH_API_URL } from '.
 const router = useRouter()
 const route = useRoute()
 const { connecting, connected, error: claspError, url, connect } = useClasp()
-const { displayName, avatarColor, status, setDisplayName, setAvatarColor, setStatus } = useIdentity()
+const { userId, displayName, avatarColor, status, setDisplayName, setAvatarColor, setStatus } = useIdentity()
 
 const nameInput = ref(displayName.value)
 const serverUrl = ref(url.value)
@@ -25,7 +25,7 @@ async function handleConnect() {
     const res = await fetch(`${AUTH_API_URL}/auth/guest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: nameInput.value.trim() }),
+      body: JSON.stringify({ name: nameInput.value.trim(), user_id: userId.value }),
     })
     if (res.ok) {
       const data = await res.json()
@@ -124,7 +124,7 @@ async function handleConnect() {
         <p v-if="localError || claspError" class="error-text">{{ localError || claspError }}</p>
 
         <p class="alt-action">
-          Want a persistent account? <router-link to="/auth">Sign up or sign in</router-link>
+          Want a persistent account? <router-link :to="route.query.join ? { path: '/auth', query: { join: route.query.join } } : '/auth'">Sign up or sign in</router-link>
         </p>
       </form>
     </div>

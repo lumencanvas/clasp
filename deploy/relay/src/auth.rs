@@ -52,6 +52,7 @@ impl AuthState {
 pub struct AuthRequest {
     username: String,
     password: String,
+    user_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -125,7 +126,10 @@ async fn register(
         })))?
         .to_string();
 
-    let user_id = generate_user_id();
+    // Use client-provided user_id if present (inherits guest identity on upgrade)
+    let user_id = req.user_id
+        .filter(|id| !id.trim().is_empty())
+        .unwrap_or_else(generate_user_id);
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -235,6 +239,7 @@ async fn login(
 #[derive(Deserialize)]
 pub struct GuestRequest {
     name: Option<String>,
+    user_id: Option<String>,
 }
 
 /// Issue a guest token (anonymous access)
@@ -242,7 +247,10 @@ async fn guest(
     State(state): State<Arc<AuthState>>,
     Json(req): Json<GuestRequest>,
 ) -> Result<Json<AuthResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let user_id = generate_user_id();
+    // Use client-provided user_id if present (preserves frontend identity for scope matching)
+    let user_id = req.user_id
+        .filter(|id| !id.trim().is_empty())
+        .unwrap_or_else(generate_user_id);
 
     // Check if requested name conflicts with a registered username
     if let Some(ref name) = req.name {

@@ -151,9 +151,12 @@ const activeViewRef = computed(() => {
 const activeMemberList = computed(() => activeViewRef.value?.sortedParticipants ?? [])
 const activeOnlineCount = computed(() => activeViewRef.value?.onlineCount ?? 0)
 
-// Redirect if not connected
+// Redirect if not connected (preserve ?join param across the redirect)
 watch(connected, (val) => {
-  if (!val) router.push('/')
+  if (!val) {
+    const joinParam = route.query.join
+    router.push(joinParam ? { path: '/', query: { join: joinParam } } : '/')
+  }
 }, { immediate: true })
 
 // Mark room as read when switching

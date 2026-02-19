@@ -9,15 +9,17 @@ const authLoading = ref(false)
 
 const isAuthenticated = computed(() => !!token.value)
 
-async function register(username, password) {
+async function register(username, password, existingUserId) {
   authLoading.value = true
   authError.value = null
 
   try {
+    const body = { username, password }
+    if (existingUserId) body.user_id = existingUserId
     const res = await fetch(`${AUTH_API_URL}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify(body),
     })
 
     const data = await res.json()

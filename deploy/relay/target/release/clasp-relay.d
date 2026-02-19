@@ -1,1 +1,1 @@
-/Users/obsidian/Projects/lumencanvas/clasp/deploy/relay/target/release/clasp-relay: /Users/obsidian/Projects/lumencanvas/clasp/deploy/relay/src/main.rs
+/Users/obsidian/Projects/lumencanvas/clasp/deploy/relay/target/release/clasp-relay: /Users/obsidian/Projects/lumencanvas/clasp/deploy/relay/src/auth.rs /Users/obsidian/Projects/lumencanvas/clasp/deploy/relay/src/lib.rs /Users/obsidian/Projects/lumencanvas/clasp/deploy/relay/src/main.rs

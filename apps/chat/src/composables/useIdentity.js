@@ -28,6 +28,11 @@ function setAvatarColor(color) {
   localStorage.setItem('clasp-chat-avatarColor', color)
 }
 
+function setUserId(newId) {
+  userId.value = newId
+  localStorage.setItem('clasp-chat-userId', newId)
+}
+
 function setStatus(newStatus) {
   status.value = newStatus
   localStorage.setItem('clasp-chat-status', newStatus)
@@ -51,6 +56,7 @@ export function useIdentity() {
     displayName,
     avatarColor,
     status,
+    setUserId,
     setDisplayName,
     setAvatarColor,
     setStatus,
