@@ -78,7 +78,7 @@ async function handleConnect() {
               :key="color"
               type="button"
               :class="['color-swatch', { active: avatarColor === color }]"
-              :style="{ background: color }"
+              :style="{ '--swatch-color': color }"
               @click="setAvatarColor(color)"
             />
           </div>
@@ -148,13 +148,14 @@ async function handleConnect() {
 
 <style scoped>
 .join-page {
-  height: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 2rem;
   background: var(--bg-primary);
+  overflow-y: auto;
 }
 
 .join-card {
@@ -163,12 +164,12 @@ async function handleConnect() {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 2.5rem 2rem;
+  padding: 2rem 2rem;
 }
 
 .join-header {
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -177,7 +178,7 @@ async function handleConnect() {
 .header-logo {
   width: 80px;
   height: 80px;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
 }
 
 .header-title {
@@ -185,7 +186,7 @@ async function handleConnect() {
   font-size: 2rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
 }
 
 .title-clasp {
@@ -199,7 +200,7 @@ async function handleConnect() {
 .subtitle {
   font-size: 0.8rem;
   color: var(--text-muted);
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .subtitle a {
@@ -214,13 +215,13 @@ async function handleConnect() {
 .join-form {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1rem;
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .field label {
@@ -231,7 +232,7 @@ async function handleConnect() {
 }
 
 .field input {
-  padding: 0.75rem 1rem;
+  padding: 0.65rem 1rem;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -245,36 +246,37 @@ async function handleConnect() {
 }
 
 .color-picker {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, 32px);
-  gap: 0.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
   justify-content: center;
 }
 
 .color-swatch {
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  border: 2.5px solid transparent;
+  border: 2px solid transparent;
   cursor: pointer;
   transition: all 0.15s;
+  background: var(--swatch-color);
 }
 
 .color-swatch:hover {
-  transform: scale(1.12);
-  border-color: rgba(255,255,255,0.2);
+  transform: scale(1.15);
+  border-color: rgba(255,255,255,0.25);
 }
 
 .color-swatch.active {
   border-color: var(--text-primary);
-  transform: scale(1.12);
-  box-shadow: 0 0 0 2px var(--bg-secondary), 0 0 0 4px currentColor;
+  transform: scale(1.15);
+  box-shadow: 0 0 0 2px var(--bg-secondary), 0 0 0 3.5px var(--swatch-color);
 }
 
 .status-picker {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.4rem;
+  gap: 0.35rem;
 }
 
 .status-option {
@@ -282,7 +284,7 @@ async function handleConnect() {
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  padding: 0.5rem 0.6rem;
+  padding: 0.4rem 0.5rem;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -338,8 +340,8 @@ async function handleConnect() {
 }
 
 .connect-btn {
-  min-height: 46px;
-  padding: 0.8rem 1rem;
+  min-height: 44px;
+  padding: 0.7rem 1rem;
   background: var(--accent);
   color: white;
   border: none;
@@ -348,7 +350,6 @@ async function handleConnect() {
   font-weight: 600;
   letter-spacing: 0.06em;
   transition: all 0.15s;
-  margin-top: 0.25rem;
 }
 
 .connect-btn:hover:not(:disabled) {
@@ -400,11 +401,12 @@ async function handleConnect() {
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  margin-top: 1.25rem;
+  margin-top: 1rem;
   font-size: 0.75rem;
   color: var(--text-muted);
   text-decoration: none;
   transition: color 0.15s;
+  flex-shrink: 0;
 }
 
 .github-footer:hover {
@@ -418,25 +420,50 @@ async function handleConnect() {
 
 @media (max-width: 480px) {
   .join-page {
-    padding: 1rem;
+    padding: 0.75rem;
+    justify-content: flex-start;
+    padding-top: 1.5rem;
   }
 
   .join-card {
-    padding: 1.5rem 1.25rem;
+    padding: 1.25rem 1rem;
+  }
+
+  .join-header {
+    margin-bottom: 1rem;
+  }
+
+  .header-logo {
+    width: 56px;
+    height: 56px;
+    margin-bottom: 0.4rem;
+  }
+
+  .header-title {
+    font-size: 1.6rem;
+    margin-bottom: 0.15rem;
+  }
+
+  .join-form {
+    gap: 0.75rem;
   }
 
   .color-swatch {
-    width: 36px;
-    height: 36px;
+    width: 28px;
+    height: 28px;
   }
 
   .color-picker {
-    grid-template-columns: repeat(auto-fill, 36px);
-    gap: 0.5rem;
+    gap: 0.4rem;
   }
 
   .status-option {
-    min-height: 44px;
+    padding: 0.35rem 0.4rem;
+    font-size: 0.7rem;
+  }
+
+  .github-footer {
+    margin-top: 0.75rem;
   }
 }
 </style>

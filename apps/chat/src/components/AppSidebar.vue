@@ -390,4 +390,10 @@ onMounted(() => {
 .status-dot.away { background: var(--accent4); }
 .status-dot.dnd { background: var(--danger); }
 .status-dot.invisible { background: var(--text-disabled); }
+
+@media (max-width: 768px) {
+  .sidebar-title {
+    height: 32px;
+  }
+}
 </style>
