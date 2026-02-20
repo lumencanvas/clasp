@@ -6,20 +6,11 @@ const props = defineProps({
   pendingRequests: { type: Array, default: () => [] },
 })
 
-const emit = defineEmits(['message', 'accept', 'decline', 'remove', 'view-profile', 'close'])
+const emit = defineEmits(['message', 'accept', 'decline', 'remove', 'view-profile'])
 </script>
 
 <template>
   <div class="friend-list">
-    <div class="friend-header">
-      <span>Friends</span>
-      <button class="close-btn" @click="emit('close')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-
     <div class="friend-entries">
       <!-- Pending requests -->
       <template v-if="pendingRequests.length">
@@ -63,43 +54,6 @@ const emit = defineEmits(['message', 'accept', 'decline', 'remove', 'view-profil
   flex-direction: column;
   height: 100%;
   background: var(--bg-secondary);
-}
-
-.friend-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.75rem;
-  font-size: 0.75rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  font-weight: 700;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.close-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: 4px;
-}
-
-.close-btn svg {
-  width: 14px;
-  height: 14px;
-}
-
-.close-btn:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
 }
 
 .friend-entries {

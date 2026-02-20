@@ -82,7 +82,7 @@ Client sends SET/PUBLISH/SUBSCRIBE
 | `typing/{userId}` | Write restricted to own userId | Prevents typing indicator spoofing |
 | `user/{userId}/**` | Write restricted to own userId | Prevents profile impersonation |
 | `user/*/dms/*` | Write open + WriteValidator | DM notifications require `fromId` matching session identity and server-verified friendship |
-| `requests/*` | Write open + WriteValidator | Friend requests require `fromId` matching session identity |
+| `requests/**` | Write open + WriteValidator | Friend requests require path `fromId` segment and value `fromId` matching session identity |
 
 ### DM Authorization
 

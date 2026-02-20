@@ -28,6 +28,16 @@ vi.mock('../useIdentity.js', () => ({
   }),
 }))
 
+const mockAddToast = vi.fn()
+const mockNotifyFriendRequest = vi.fn()
+
+vi.mock('../useNotifications.js', () => ({
+  useNotifications: () => ({
+    addToast: mockAddToast,
+    notifyFriendRequest: mockNotifyFriendRequest,
+  }),
+}))
+
 import { useFriends } from '../useFriends.js'
 
 describe('useFriends', () => {
@@ -46,23 +56,23 @@ describe('useFriends', () => {
   })
 
   describe('init', () => {
-    it('subscribes to friends list and incoming requests', () => {
+    it('subscribes to friends list and incoming requests (wildcard)', () => {
       const { init } = useFriends()
       init()
 
       const subPaths = mockSubscribe.mock.calls.map(c => c[0])
       expect(subPaths.some(p => p.includes('/chat/user/user-A/friends/*'))).toBe(true)
-      expect(subPaths.some(p => p.includes('/chat/requests/user-A'))).toBe(true)
+      expect(subPaths.some(p => p === '/chat/requests/user-A/*')).toBe(true)
     })
   })
 
   describe('sendRequest', () => {
-    it('emits to /chat/requests/{targetId} with fromId, fromName, fromColor', () => {
+    it('sets to /chat/requests/{targetId}/{fromId} with fromId, fromName, fromColor', () => {
       const { sendRequest } = useFriends()
       sendRequest('user-B', 'Bob')
 
-      expect(mockEmit).toHaveBeenCalledWith(
-        '/chat/requests/user-B',
+      expect(mockSet).toHaveBeenCalledWith(
+        '/chat/requests/user-B/user-A',
         expect.objectContaining({
           fromId: 'user-A',
           fromName: 'Alice',
@@ -75,7 +85,7 @@ describe('useFriends', () => {
     it('blocks self-friending (targetId === userId)', () => {
       const { sendRequest } = useFriends()
       sendRequest('user-A', 'Alice')
-      expect(mockEmit).not.toHaveBeenCalled()
+      expect(mockSet).not.toHaveBeenCalled()
     })
 
     it('blocks duplicate friend request (already friends)', () => {
@@ -83,14 +93,14 @@ describe('useFriends', () => {
       friends.value.set('user-B', { name: 'Bob', addedAt: Date.now() })
 
       sendRequest('user-B', 'Bob')
-      expect(mockEmit).not.toHaveBeenCalled()
+      expect(mockSet).not.toHaveBeenCalled()
     })
 
     it('does nothing when disconnected', () => {
       mockConnected.value = false
       const { sendRequest } = useFriends()
       sendRequest('user-B', 'Bob')
-      expect(mockEmit).not.toHaveBeenCalled()
+      expect(mockSet).not.toHaveBeenCalled()
     })
   })
 
@@ -113,7 +123,7 @@ describe('useFriends', () => {
       )
     })
 
-    it('emits confirmation to requester via emit() at requests path', () => {
+    it('sends confirmation via set() at requests path with 2-segment key', () => {
       const { acceptRequest, pendingRequests } = useFriends()
       pendingRequests.value = [
         { fromId: 'user-B', fromName: 'Bob', fromColor: '#457b9d', timestamp: 1000 },
@@ -121,14 +131,28 @@ describe('useFriends', () => {
 
       acceptRequest('user-B')
 
-      expect(mockEmit).toHaveBeenCalledWith(
-        '/chat/requests/user-B',
+      expect(mockSet).toHaveBeenCalledWith(
+        '/chat/requests/user-B/user-A',
         expect.objectContaining({
           type: 'accepted',
           fromId: 'user-A',
           fromName: 'Alice',
           fromColor: '#e63946',
         })
+      )
+    })
+
+    it('cleans up own inbox via set(null)', () => {
+      const { acceptRequest, pendingRequests } = useFriends()
+      pendingRequests.value = [
+        { fromId: 'user-B', fromName: 'Bob', fromColor: '#457b9d', timestamp: 1000 },
+      ]
+
+      acceptRequest('user-B')
+
+      expect(mockSet).toHaveBeenCalledWith(
+        '/chat/requests/user-A/user-B',
+        null
       )
     })
 
@@ -150,7 +174,7 @@ describe('useFriends', () => {
 
       // Find the requests subscription callback
       const reqSubCall = mockSubscribe.mock.calls.find(
-        c => typeof c[0] === 'string' && c[0].includes('/chat/requests/user-A')
+        c => typeof c[0] === 'string' && c[0] === '/chat/requests/user-A/*'
       )
       expect(reqSubCall).toBeTruthy()
       const onRequest = reqSubCall[1]
@@ -160,9 +184,107 @@ describe('useFriends', () => {
         fromName: 'Charlie',
         fromColor: '#2a9d8f',
         timestamp: Date.now(),
-      })
+      }, '/chat/requests/user-A/user-C')
 
       expect(pendingRequests.value.some(r => r.fromId === 'user-C')).toBe(true)
+    })
+
+    it('incoming request during initial load shows summary toast after batch', () => {
+      vi.useFakeTimers()
+      const { init, showFriends } = useFriends()
+      init()
+
+      const reqSubCall = mockSubscribe.mock.calls.find(
+        c => typeof c[0] === 'string' && c[0] === '/chat/requests/user-A/*'
+      )
+      const onRequest = reqSubCall[1]
+
+      // Request arrives during initial load (SNAPSHOT) — no individual toast
+      onRequest({
+        fromId: 'user-C',
+        fromName: 'Charlie',
+        fromColor: '#2a9d8f',
+        timestamp: Date.now(),
+      }, '/chat/requests/user-A/user-C')
+
+      expect(mockAddToast).not.toHaveBeenCalled()
+      expect(mockNotifyFriendRequest).not.toHaveBeenCalled()
+
+      // After SNAPSHOT batch period, summary toast fires
+      vi.advanceTimersByTime(500)
+      expect(mockAddToast).toHaveBeenCalledWith('1 pending friend request', 'info', 5000, expect.any(Function))
+
+      // Summary toast action opens friends panel
+      const toastAction = mockAddToast.mock.calls[0][3]
+      toastAction()
+      expect(showFriends.value).toBe(true)
+
+      vi.useRealTimers()
+    })
+
+    it('incoming request after initial load triggers individual toast and notification', () => {
+      vi.useFakeTimers()
+      const { init, showFriends } = useFriends()
+      init()
+
+      // Advance past initial load
+      vi.advanceTimersByTime(500)
+      mockAddToast.mockClear()
+
+      const reqSubCall = mockSubscribe.mock.calls.find(
+        c => typeof c[0] === 'string' && c[0] === '/chat/requests/user-A/*'
+      )
+      const onRequest = reqSubCall[1]
+
+      onRequest({
+        fromId: 'user-C',
+        fromName: 'Charlie',
+        fromColor: '#2a9d8f',
+        timestamp: Date.now(),
+      }, '/chat/requests/user-A/user-C')
+
+      expect(mockAddToast).toHaveBeenCalledWith('Friend request from Charlie', 'info', 5000, expect.any(Function))
+      expect(mockNotifyFriendRequest).toHaveBeenCalledWith('Charlie')
+
+      // Toast action opens friends panel
+      const toastAction = mockAddToast.mock.calls[0][3]
+      toastAction()
+      expect(showFriends.value).toBe(true)
+
+      vi.useRealTimers()
+    })
+
+    it('shows plural summary toast for multiple requests during initial load', () => {
+      vi.useFakeTimers()
+      const { init } = useFriends()
+      init()
+
+      const reqSubCall = mockSubscribe.mock.calls.find(
+        c => typeof c[0] === 'string' && c[0] === '/chat/requests/user-A/*'
+      )
+      const onRequest = reqSubCall[1]
+
+      onRequest({ fromId: 'user-C', fromName: 'Charlie', fromColor: '#2a9d8f', timestamp: 1 }, '/chat/requests/user-A/user-C')
+      onRequest({ fromId: 'user-D', fromName: 'Dave', fromColor: '#f77f00', timestamp: 2 }, '/chat/requests/user-A/user-D')
+      onRequest({ fromId: 'user-E', fromName: 'Eve', fromColor: '#9b5de5', timestamp: 3 }, '/chat/requests/user-A/user-E')
+
+      vi.advanceTimersByTime(500)
+      expect(mockAddToast).toHaveBeenCalledWith('3 pending friend requests', 'info', 5000, expect.any(Function))
+
+      vi.useRealTimers()
+    })
+
+    it('does not show summary toast when SNAPSHOT batch has zero requests', () => {
+      vi.useFakeTimers()
+      const { init } = useFriends()
+      init()
+
+      // No requests arrive during initial load
+      vi.advanceTimersByTime(500)
+
+      expect(mockAddToast).not.toHaveBeenCalled()
+
+      vi.useRealTimers()
     })
 
     it('incoming duplicate request is deduplicated (same fromId)', () => {
@@ -170,23 +292,41 @@ describe('useFriends', () => {
       init()
 
       const reqSubCall = mockSubscribe.mock.calls.find(
-        c => typeof c[0] === 'string' && c[0].includes('/chat/requests/user-A')
+        c => typeof c[0] === 'string' && c[0] === '/chat/requests/user-A/*'
       )
       const onRequest = reqSubCall[1]
 
-      onRequest({ fromId: 'user-D', fromName: 'Dave', fromColor: '#f77f00', timestamp: 1 })
-      onRequest({ fromId: 'user-D', fromName: 'Dave', fromColor: '#f77f00', timestamp: 2 })
+      onRequest({ fromId: 'user-D', fromName: 'Dave', fromColor: '#f77f00', timestamp: 1 }, '/chat/requests/user-A/user-D')
+      onRequest({ fromId: 'user-D', fromName: 'Dave', fromColor: '#f77f00', timestamp: 2 }, '/chat/requests/user-A/user-D')
 
       const fromD = pendingRequests.value.filter(r => r.fromId === 'user-D')
       expect(fromD).toHaveLength(1)
     })
 
-    it('incoming type:accepted confirmation writes friend record via set()', () => {
+    it('incoming null removes from pendingRequests (cleanup deletion)', () => {
+      const { init, pendingRequests } = useFriends()
+      init()
+
+      const reqSubCall = mockSubscribe.mock.calls.find(
+        c => typeof c[0] === 'string' && c[0] === '/chat/requests/user-A/*'
+      )
+      const onRequest = reqSubCall[1]
+
+      // Add a request first
+      onRequest({ fromId: 'user-D', fromName: 'Dave', fromColor: '#f77f00', timestamp: 1 }, '/chat/requests/user-A/user-D')
+      expect(pendingRequests.value.some(r => r.fromId === 'user-D')).toBe(true)
+
+      // Null = cleanup
+      onRequest(null, '/chat/requests/user-A/user-D')
+      expect(pendingRequests.value.some(r => r.fromId === 'user-D')).toBe(false)
+    })
+
+    it('incoming type:accepted confirmation writes friend record and cleans up', () => {
       const { init } = useFriends()
       init()
 
       const reqSubCall = mockSubscribe.mock.calls.find(
-        c => typeof c[0] === 'string' && c[0].includes('/chat/requests/user-A')
+        c => typeof c[0] === 'string' && c[0] === '/chat/requests/user-A/*'
       )
       const onRequest = reqSubCall[1]
 
@@ -196,7 +336,7 @@ describe('useFriends', () => {
         fromName: 'Eve',
         fromColor: '#9b5de5',
         timestamp: Date.now(),
-      })
+      }, '/chat/requests/user-A/user-E')
 
       expect(mockSet).toHaveBeenCalledWith(
         '/chat/user/user-A/friends/user-E',
@@ -206,11 +346,16 @@ describe('useFriends', () => {
           addedAt: expect.any(Number),
         })
       )
+      // Should also clean up the accepted request
+      expect(mockSet).toHaveBeenCalledWith(
+        '/chat/requests/user-A/user-E',
+        null
+      )
     })
   })
 
   describe('declineRequest', () => {
-    it('removes from pendingRequests without set/emit', () => {
+    it('removes from pendingRequests and cleans up via set(null)', () => {
       const { declineRequest, pendingRequests } = useFriends()
       pendingRequests.value = [
         { fromId: 'user-F', fromName: 'Frank', fromColor: '#00bbf9', timestamp: 1000 },
@@ -219,8 +364,11 @@ describe('useFriends', () => {
       declineRequest('user-F')
 
       expect(pendingRequests.value.find(r => r.fromId === 'user-F')).toBeUndefined()
-      expect(mockSet).not.toHaveBeenCalled()
-      expect(mockEmit).not.toHaveBeenCalled()
+      // Now does persistent cleanup
+      expect(mockSet).toHaveBeenCalledWith(
+        '/chat/requests/user-A/user-F',
+        null
+      )
     })
   })
 

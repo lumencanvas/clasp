@@ -51,7 +51,7 @@ onMounted(() => {
       <h2 class="sidebar-title">CLASP Chat</h2>
       <div class="sidebar-actions">
         <button
-          :class="['action-btn', { 'has-badge': requestCount > 0 }]"
+          class="action-btn"
           @click="emit('toggle-friends')"
           title="Friends"
           aria-label="Friends"
@@ -62,7 +62,7 @@ onMounted(() => {
             <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
             <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
           </svg>
-          <span v-if="requestCount > 0" class="notification-dot"></span>
+          <span v-if="requestCount > 0" class="request-badge">{{ requestCount > 9 ? '9+' : requestCount }}</span>
         </button>
         <button class="action-btn" @click="emit('create-room')" title="Create channel" aria-label="Create channel">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -202,14 +202,20 @@ onMounted(() => {
   height: 16px;
 }
 
-.notification-dot {
+.request-badge {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 8px;
-  height: 8px;
+  top: 0;
+  right: -2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
   background: var(--danger);
-  border-radius: 50%;
+  color: white;
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  border-radius: 8px;
   border: 1.5px solid var(--bg-secondary);
 }
 

@@ -15,10 +15,11 @@ const { toasts, removeToast } = useNotifications()
       <div
         v-for="toast in toasts"
         :key="toast.id"
-        :class="['toast', toast.type]"
-        @click="removeToast(toast.id)"
+        :class="['toast', toast.type, { actionable: toast.action }]"
+        @click="() => { try { toast.action?.() } finally { removeToast(toast.id) } }"
       >
-        {{ toast.message }}
+        <span class="toast-message">{{ toast.message }}</span>
+        <span v-if="toast.action" class="toast-action">View</span>
       </div>
     </transition-group>
   </div>

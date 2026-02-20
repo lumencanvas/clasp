@@ -155,6 +155,9 @@ input::placeholder, textarea::placeholder {
 
 .toast {
   pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   padding: 0.75rem 1rem;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
@@ -163,6 +166,24 @@ input::placeholder, textarea::placeholder {
   color: var(--text-primary);
   box-shadow: 0 4px 12px rgba(0,0,0,0.4);
   animation: toastIn 0.2s ease-out;
+  cursor: pointer;
+}
+
+.toast.actionable {
+  border-color: var(--accent);
+}
+
+.toast-message {
+  flex: 1;
+}
+
+.toast-action {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
 }
 
 .toast.error {

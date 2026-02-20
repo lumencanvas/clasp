@@ -3,6 +3,7 @@ import { ref } from 'vue'
 
 const props = defineProps({
   showMembers: { type: Boolean, default: false },
+  panelTitle: { type: String, default: 'Members' },
 })
 
 const emit = defineEmits(['toggle-members'])
@@ -52,7 +53,7 @@ defineExpose({ toggleSidebar, closeSidebar })
     <!-- Members panel -->
     <div v-if="showMembers" :class="['members-column', { open: showMembers }]">
       <div class="members-header">
-        <span class="members-title">Members</span>
+        <span class="members-title">{{ panelTitle }}</span>
         <button class="members-close" aria-label="Close members" @click="emit('toggle-members')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -102,6 +103,7 @@ defineExpose({ toggleSidebar, closeSidebar })
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .members-overlay {

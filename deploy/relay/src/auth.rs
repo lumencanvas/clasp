@@ -140,14 +140,14 @@ pub fn build_scopes(user_id: &str) -> Vec<String> {
         "read:/chat/room/**".to_string(),
         // Read: room/namespace discovery
         "read:/chat/registry/**".to_string(),
-        // Read: own friend request inbox
-        format!("read:/chat/requests/{}", user_id),
+        // Read: own friend request inbox (wildcard for per-sender keys)
+        format!("read:/chat/requests/{}/**", user_id),
 
         // User profile & identity
         format!("write:/chat/user/{}/**", user_id),
 
-        // Friend requests (write to target's inbox)
-        "write:/chat/requests/*".to_string(),
+        // Friend requests (write to target's inbox, per-sender key)
+        "write:/chat/requests/**".to_string(),
 
         // DM notifications (write to any user's DM inbox)
         "write:/chat/user/*/dms/*".to_string(),

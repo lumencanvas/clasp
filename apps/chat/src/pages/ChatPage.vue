@@ -53,6 +53,7 @@ const {
   friendList,
   pendingRequests,
   requestCount,
+  showFriends,
   init: initFriends,
   cleanup: cleanupFriends,
   acceptRequest,
@@ -68,7 +69,6 @@ const importFileRef = ref(null)
 const showMembers = ref(true)
 const showCreateDialog = ref(false)
 const showBrowseDialog = ref(false)
-const showFriends = ref(false)
 const showStatusPicker = ref(false)
 const profileTarget = ref(null) // { userId, name, avatarColor, status }
 const layoutRef = ref(null)
@@ -167,6 +167,14 @@ watch(connected, (val) => {
 watch(currentRoomId, (roomId) => {
   if (roomId) markRead(roomId)
 })
+
+function handleToggleMembers() {
+  if (showFriends.value) {
+    showFriends.value = false
+  } else {
+    showMembers.value = !showMembers.value
+  }
+}
 
 function handleSelectRoom(roomId) {
   switchRoom(roomId)
@@ -339,7 +347,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <AppLayout ref="layoutRef" :show-members="showMembers && !!currentRoom && !showFriends" @toggle-members="showMembers = !showMembers">
+  <AppLayout ref="layoutRef" :show-members="showFriends || (showMembers && !!currentRoom)" :panel-title="showFriends ? 'Friends' : 'Members'" @toggle-members="handleToggleMembers">
     <template #sidebar="{ closeSidebar }">
       <AppSidebar
         :rooms="joinedRooms"
@@ -365,7 +373,7 @@ onUnmounted(() => {
         :online-count="activeOnlineCount"
         :show-members="showMembers"
         @toggle-sidebar="toggleSidebar"
-        @toggle-members="showMembers = !showMembers"
+        @toggle-members="handleToggleMembers"
       />
     </template>
 
@@ -427,7 +435,6 @@ onUnmounted(() => {
         @decline="declineRequest"
         @remove="removeFriend"
         @view-profile="handleViewProfile"
-        @close="showFriends = false"
       />
       <MemberList
         v-else

@@ -448,24 +448,25 @@ fn scope_can_read_own_friend_requests() {
         .iter()
         .filter_map(|s| Scope::parse(s).ok())
         .collect();
-    // Explicit read only covers own inbox
-    assert!(read_only_scopes_allow(&scopes, "/chat/requests/alice"));
-    assert!(!read_only_scopes_allow(&scopes, "/chat/requests/bob"),
+    // Explicit read covers own inbox (wildcard for per-sender keys)
+    assert!(read_only_scopes_allow(&scopes, "/chat/requests/alice/bob"));
+    assert!(read_only_scopes_allow(&scopes, "/chat/requests/alice/u-123"));
+    assert!(!read_only_scopes_allow(&scopes, "/chat/requests/bob/alice"),
         "explicit read scope covers other user's friend request inbox");
 }
 
 #[test]
 fn scope_write_implies_read_on_friend_requests_at_action_level() {
-    // Same pattern: write:/chat/requests/* implies read at Action level,
+    // Same pattern: write:/chat/requests/** implies read at Action level,
     // but SUBSCRIBE uses strict read scopes which blocks it.
     let scopes: Vec<Scope> = build_scopes("alice")
         .iter()
         .filter_map(|s| Scope::parse(s).ok())
         .collect();
     let read = clasp_core::Action::Read;
-    assert!(scopes_allow(&scopes, read, "/chat/requests/bob"),
+    assert!(scopes_allow(&scopes, read, "/chat/requests/bob/alice"),
         "write-implies-read exists at Action level");
-    assert!(!read_only_scopes_allow(&scopes, "/chat/requests/bob"),
+    assert!(!read_only_scopes_allow(&scopes, "/chat/requests/bob/alice"),
         "strict read scopes should NOT cover other user's request inbox");
 }
 
@@ -537,14 +538,15 @@ fn strict_read_denies_other_user_friends() {
 #[test]
 fn strict_read_denies_other_user_request_inbox() {
     let session = make_authenticated_session("alice");
-    assert!(!session.has_strict_read_scope("/chat/requests/bob"),
+    assert!(!session.has_strict_read_scope("/chat/requests/bob/alice"),
         "strict read should deny subscribing to other user's request inbox");
 }
 
 #[test]
 fn strict_read_allows_own_request_inbox() {
     let session = make_authenticated_session("alice");
-    assert!(session.has_strict_read_scope("/chat/requests/alice"));
+    assert!(session.has_strict_read_scope("/chat/requests/alice/bob"));
+    assert!(session.has_strict_read_scope("/chat/requests/alice/u-123"));
 }
 
 #[test]

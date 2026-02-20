@@ -50,13 +50,20 @@ fn parse_dm_inbox_path(address: &str) -> Option<(&str, &str)> {
     Some((target_id, room_id))
 }
 
-/// Parse friend request path: /chat/requests/{targetId}
-fn parse_friend_request_path(address: &str) -> Option<&str> {
-    let target = address.strip_prefix("/chat/requests/")?;
-    if target.is_empty() || target.contains('/') {
+/// Parse friend request path: /chat/requests/{targetId}/{fromId}
+/// Returns (target_id, from_id) for 2-segment paths.
+fn parse_friend_request_path(address: &str) -> Option<(&str, &str)> {
+    let rest = address.strip_prefix("/chat/requests/")?;
+    if rest.is_empty() {
         return None;
     }
-    Some(target)
+    let slash = rest.find('/')?;
+    let target_id = &rest[..slash];
+    let from_id = &rest[slash + 1..];
+    if target_id.is_empty() || from_id.is_empty() || from_id.contains('/') {
+        return None;
+    }
+    Some((target_id, from_id))
 }
 
 /// Chat-specific write validator.
@@ -246,9 +253,17 @@ impl WriteValidator for ChatWriteValidator {
             return Ok(());
         }
 
-        // Friend request writes: /chat/requests/{targetId}
-        if let Some(_target_id) = parse_friend_request_path(address) {
-            // Allow null writes (cleanup) without checks
+        // Friend request writes: /chat/requests/{targetId}/{fromId}
+        if let Some((_target_id, path_from_id)) = parse_friend_request_path(address) {
+            // Path fromId segment must match session subject (prevents writing to others' keys)
+            if path_from_id != writer_id {
+                return Err(format!(
+                    "Friend request path fromId '{}' does not match session identity '{}'",
+                    path_from_id, writer_id
+                ));
+            }
+
+            // Allow null writes (cleanup) without value checks
             if !matches!(_value, Value::Null) {
                 // Require fromId field (prevents anonymous/unattributed requests)
                 let from_id = match Self::extract_from_id(_value) {
@@ -260,7 +275,7 @@ impl WriteValidator for ChatWriteValidator {
                     }
                 };
 
-                // Enforce fromId matches the session subject (prevents impersonation)
+                // Enforce value fromId matches the session subject (prevents impersonation)
                 if from_id != writer_id {
                     return Err(format!(
                         "Friend request fromId '{}' does not match session identity '{}'",
@@ -269,6 +284,11 @@ impl WriteValidator for ChatWriteValidator {
                 }
             }
             return Ok(());
+        } else if address.starts_with("/chat/requests/") {
+            // Reject old 1-segment paths or malformed request paths
+            return Err(
+                "Invalid friend request path: must be /chat/requests/{targetId}/{fromId}".to_string()
+            );
         }
 
         // All other paths: pass through (existing scope check is sufficient)
@@ -341,6 +361,20 @@ impl SnapshotFilter for ChatSnapshotFilter {
                         if path_user != user_id && sub != "profile" {
                             debug!(
                                 "Filtering other user's private path from snapshot: {}",
+                                pv.address
+                            );
+                            return None;
+                        }
+                    }
+                }
+
+                // Filter other users' friend requests
+                if let Some(rest) = pv.address.strip_prefix("/chat/requests/") {
+                    if let Some(slash) = rest.find('/') {
+                        let target_id = &rest[..slash];
+                        if target_id != user_id {
+                            debug!(
+                                "Filtering other user's friend request from snapshot: {}",
                                 pv.address
                             );
                             return None;
@@ -512,12 +546,16 @@ mod tests {
 
     #[test]
     fn test_parse_friend_request_path() {
-        assert_eq!(parse_friend_request_path("/chat/requests/alice"), Some("alice"));
-        assert_eq!(parse_friend_request_path("/chat/requests/u-123-abc"), Some("u-123-abc"));
-        // Sub-path
-        assert_eq!(parse_friend_request_path("/chat/requests/alice/extra"), None);
-        // Empty target
+        // 2-segment: /chat/requests/{targetId}/{fromId}
+        assert_eq!(parse_friend_request_path("/chat/requests/alice/bob"), Some(("alice", "bob")));
+        assert_eq!(parse_friend_request_path("/chat/requests/u-123/u-456"), Some(("u-123", "u-456")));
+        // Missing fromId segment
+        assert_eq!(parse_friend_request_path("/chat/requests/alice"), None);
+        // Empty target or fromId
         assert_eq!(parse_friend_request_path("/chat/requests/"), None);
+        assert_eq!(parse_friend_request_path("/chat/requests/alice/"), None);
+        // Extra segment
+        assert_eq!(parse_friend_request_path("/chat/requests/alice/bob/extra"), None);
         // Wrong prefix
         assert_eq!(parse_friend_request_path("/chat/user/alice"), None);
         assert_eq!(parse_friend_request_path("/chat/requests"), None);
@@ -660,21 +698,41 @@ mod tests {
     fn test_friend_request_allows_valid_from_id() {
         let state = RouterState::new();
         let val = make_friend_request("alice");
-        assert!(validate("/chat/requests/bob", &val, "alice", &state).is_ok());
+        // 2-segment path: /chat/requests/{targetId}/{fromId}
+        assert!(validate("/chat/requests/bob/alice", &val, "alice", &state).is_ok());
     }
 
     #[test]
     fn test_friend_request_rejects_spoofed_from_id() {
         let state = RouterState::new();
         let spoofed = make_friend_request("charlie");
-        let err = validate("/chat/requests/bob", &spoofed, "alice", &state).unwrap_err();
+        // Path fromId matches session, but value fromId doesn't
+        let err = validate("/chat/requests/bob/alice", &spoofed, "alice", &state).unwrap_err();
+        assert!(err.contains("does not match session identity"), "got: {}", err);
+    }
+
+    #[test]
+    fn test_friend_request_rejects_wrong_path_from_id() {
+        let state = RouterState::new();
+        let val = make_friend_request("alice");
+        // Path fromId doesn't match session subject
+        let err = validate("/chat/requests/bob/charlie", &val, "alice", &state).unwrap_err();
         assert!(err.contains("does not match session identity"), "got: {}", err);
     }
 
     #[test]
     fn test_friend_request_null_write_allowed() {
         let state = RouterState::new();
-        assert!(validate("/chat/requests/bob", &Value::Null, "alice", &state).is_ok());
+        // Null cleanup: path fromId must still match session
+        assert!(validate("/chat/requests/bob/alice", &Value::Null, "alice", &state).is_ok());
+    }
+
+    #[test]
+    fn test_friend_request_null_write_wrong_path_rejected() {
+        let state = RouterState::new();
+        // Null cleanup with wrong path fromId
+        let err = validate("/chat/requests/bob/charlie", &Value::Null, "alice", &state).unwrap_err();
+        assert!(err.contains("does not match session identity"), "got: {}", err);
     }
 
     #[test]
@@ -684,8 +742,23 @@ mod tests {
         let mut map = HashMap::new();
         map.insert("message".to_string(), Value::String("hi".to_string()));
         let val = Value::Map(map);
-        let err = validate("/chat/requests/bob", &val, "alice", &state).unwrap_err();
+        let err = validate("/chat/requests/bob/alice", &val, "alice", &state).unwrap_err();
         assert!(err.contains("must include a fromId"), "got: {}", err);
+    }
+
+    #[test]
+    fn test_friend_request_rejects_1_segment_path() {
+        let state = RouterState::new();
+        let val = make_friend_request("alice");
+        let err = validate("/chat/requests/bob", &val, "alice", &state).unwrap_err();
+        assert!(err.contains("Invalid friend request path"), "got: {}", err);
+    }
+
+    #[test]
+    fn test_friend_request_rejects_1_segment_null() {
+        let state = RouterState::new();
+        let err = validate("/chat/requests/bob", &Value::Null, "alice", &state).unwrap_err();
+        assert!(err.contains("Invalid friend request path"), "got: {}", err);
     }
 
     // ===========================================================
@@ -1180,6 +1253,55 @@ mod tests {
         assert_eq!(result[0].revision, 42);
         assert_eq!(result[0].writer, Some("session-xyz".to_string()));
         assert_eq!(result[0].timestamp, Some(12345));
+    }
+
+    // ===========================================================
+    //  Snapshot filter — Friend request privacy
+    // ===========================================================
+
+    #[test]
+    fn test_snapshot_allows_own_friend_requests() {
+        let state = RouterState::new();
+        let params = vec![
+            make_pv("/chat/requests/alice/bob", make_friend_request("bob")),
+            make_pv("/chat/requests/alice/charlie", make_friend_request("charlie")),
+        ];
+        let addresses = filter(params, "alice", &state);
+        assert_eq!(addresses.len(), 2, "own requests should pass: {:?}", addresses);
+    }
+
+    #[test]
+    fn test_snapshot_strips_other_users_friend_requests() {
+        let state = RouterState::new();
+        let params = vec![
+            make_pv("/chat/requests/bob/alice", make_friend_request("alice")),
+            make_pv("/chat/requests/charlie/alice", make_friend_request("alice")),
+        ];
+        let addresses = filter(params, "alice", &state);
+        assert!(addresses.is_empty(), "other users' requests leaked: {:?}", addresses);
+    }
+
+    #[test]
+    fn test_snapshot_mixed_friend_requests() {
+        let state = RouterState::new();
+        let params = vec![
+            make_pv("/chat/requests/alice/bob", make_friend_request("bob")),
+            make_pv("/chat/requests/bob/alice", make_friend_request("alice")),
+        ];
+        let addresses = filter(params, "alice", &state);
+        assert_eq!(addresses, vec!["/chat/requests/alice/bob"]);
+    }
+
+    #[test]
+    fn test_snapshot_anonymous_session_blocks_all_friend_requests() {
+        let state = RouterState::new();
+        let session = make_anonymous_session();
+        let params = vec![
+            make_pv("/chat/requests/alice/bob", make_friend_request("bob")),
+            make_pv("/chat/requests/bob/alice", make_friend_request("alice")),
+        ];
+        let result = ChatSnapshotFilter.filter_snapshot(params, &session, &state);
+        assert!(result.is_empty(), "anonymous session should not see any friend requests");
     }
 
     // ===========================================================

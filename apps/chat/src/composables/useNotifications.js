@@ -20,9 +20,9 @@ function getUnread(roomId) {
   return unreadCounts.value.get(roomId) || 0
 }
 
-function addToast(message, type = 'info', duration = 3000) {
+function addToast(message, type = 'info', duration = 3000, action = null) {
   const id = ++toastId
-  toasts.value.push({ id, message, type })
+  toasts.value.push({ id, message, type, action })
   setTimeout(() => removeToast(id), duration)
 }
 
@@ -54,6 +54,16 @@ function notifyMessage(roomId, sender, text) {
   setTimeout(() => n.close(), 4000)
 }
 
+function notifyFriendRequest(fromName) {
+  if (!permissionGranted || document.hasFocus()) return
+  const n = new Notification('Friend Request', {
+    body: `${fromName} sent you a friend request`,
+    icon: '/favicon.svg',
+    tag: 'clasp-chat-friend-request',
+  })
+  setTimeout(() => n.close(), 5000)
+}
+
 export function useNotifications() {
   return {
     unreadCounts: readonly(unreadCounts),
@@ -65,5 +75,6 @@ export function useNotifications() {
     removeToast,
     requestPermission,
     notifyMessage,
+    notifyFriendRequest,
   }
 }
