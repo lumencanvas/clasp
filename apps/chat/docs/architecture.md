@@ -54,7 +54,9 @@ ChatPage.vue
 │   │   ├── FriendList.vue
 │   │   │   └── FriendItem.vue (per friend)
 │   │   ├── RoomDiscovery.vue
-│   │   │   └── NamespaceCard.vue (per namespace)
+│   │   │   ├── NamespaceCard.vue (per namespace)
+│   │   │   └── NamespaceCreateDialog.vue
+│   │   ├── NamespaceGroup.vue (per pinned namespace)
 │   │   ├── RoomCreateDialog.vue
 │   │   └── StatusPicker.vue
 │   │
@@ -74,17 +76,27 @@ ChatPage.vue
 │       │   │   └── MemberItem.vue
 │       │   │       └── UserAvatar.vue
 │       │   ├── TypingIndicator.vue
+│       │   ├── KeyChangeWarning.vue
 │       │   └── AdminPanel.vue
 │       │
 │       ├── VideoChannelView.vue (video rooms)
 │       │   ├── VideoGrid.vue
 │       │   │   └── VideoTile.vue (per participant)
 │       │   ├── VideoControls.vue
-│       │   └── LocalPreview.vue
+│       │   ├── LocalPreview.vue
+│       │   └── AdminPanel.vue
 │       │
 │       └── ComboChannelView.vue (combo rooms)
-│           ├── ChatView.vue
-│           └── VideoGrid.vue
+│           ├── [Video section]
+│           │   ├── LocalPreview.vue
+│           │   ├── VideoGrid.vue
+│           │   │   └── VideoTile.vue (per participant)
+│           │   └── VideoControls.vue
+│           ├── [Chat section — inlined, not ChatView]
+│           │   ├── MessageList.vue
+│           │   ├── MessageComposer.vue
+│           │   └── TypingIndicator.vue
+│           └── AdminPanel.vue
 ```
 
 ### Composable Layer
@@ -97,16 +109,19 @@ All state management uses Vue 3 composables (the Composition API). Each composab
 | `useIdentity` | User identity (userId, displayName, avatarColor, status), profile announcement |
 | `useAuth` | HTTP auth API calls (register, login, logout), token/credential storage |
 | `useRooms` | Room CRUD, join/leave, room registry discovery, DM creation |
-| `useChat` | Per-room messaging: send/receive/edit/delete, presence, typing, key request lifecycle |
+| `useChat` | Per-room messaging: send/receive/edit/delete, presence, typing, message signing and verification |
 | `useCrypto` | E2E encryption: AES-256-GCM room keys, ECDH key exchange, key rotation, password proof gating |
+| `useSigning` | ECDSA P-256 message signing: non-extractable keypair generation, sign/verify, peer key cache |
+| `useKeyVerification` | TOFU key verification: peer signing key fingerprints, key change warnings, per-room warning state |
 | `useAdmin` | Room administration: kick/ban/unban, promote/demote admins, room meta updates |
 | `useNamespaces` | Namespace tree management: create/browse/subscribe, password protection, nested hierarchy |
 | `useFriends` | Friend requests: send/accept/reject, two-step handshake via CLASP state |
-| `useVideoRoom` | WebRTC video calls: SFU-less mesh via CLASP signaling, track management |
-| `useVideoLayout` | Video grid layout calculations (responsive tile sizing) |
+| `useVideoRoom` | WebRTC video calls: SFU-less mesh via CLASP signaling, track management, per-peer audio level detection |
+| `useVideoLayout` | Video layout modes (grid/spotlight/sidebar), peer pinning, active speaker auto-spotlight |
+| `useAudioLevel` | Audio level detection via Web Audio API AnalyserNode; returns reactive `isSpeaking` and `audioLevel` |
 | `useReactions` | Message reactions: add/remove, per-message reaction aggregation |
 | `useNotifications` | Browser notifications, per-room unread counts |
-| `useStorage` | IndexedDB persistence for messages and crypto keys |
+| `useStorage` | IndexedDB persistence for messages, crypto keys, and TOFU fingerprints |
 
 ### Dependency Graph
 
@@ -114,6 +129,7 @@ All state management uses Vue 3 composables (the Composition API). Each composab
 useChat ──────> useClasp
     │           useIdentity
     │           useCrypto ──────> useClasp, useIdentity
+    │           useSigning ────> useClasp, useIdentity
     │           useNotifications
     │           useStorage
     │           useRooms
@@ -121,7 +137,10 @@ useChat ──────> useClasp
 useAdmin ─────> useClasp, useIdentity, useRooms, useCrypto
 useNamespaces > useClasp, useIdentity
 useFriends ──> useClasp, useIdentity
-useVideoRoom > useClasp, useIdentity
+useVideoRoom > useClasp, useIdentity, useAudioLevel
+useVideoLayout > (receives isScreenSharing + speakingPeerIds from useVideoRoom)
+useAudioLevel  > (standalone, used internally by useVideoRoom)
+useKeyVerification > (standalone, uses IndexedDB via storage.js)
 useAuth ──────> (standalone HTTP, no CLASP dependency)
 ```
 
@@ -129,10 +148,13 @@ useAuth ──────> (standalone HTTP, no CLASP dependency)
 
 | Module | Location | Purpose |
 |--------|----------|---------|
-| `crypto.js` | `src/lib/` | Web Crypto API wrappers: AES-GCM, ECDH P-256, HKDF-SHA256, PBKDF2, key import/export |
-| `storage.js` | `src/lib/` | IndexedDB operations: message cache, crypto key persistence |
+| `crypto.js` | `src/lib/` | Web Crypto API wrappers: AES-GCM, ECDH P-256, ECDSA P-256, HKDF-SHA256, PBKDF2, key import/export |
+| `storage.js` | `src/lib/` | IndexedDB operations: message cache, crypto key persistence, TOFU fingerprint storage |
 | `constants.js` | `src/lib/` | CLASP address prefixes, TTL values, room types, avatar colors |
 | `plugins.js` | `src/lib/` | Slash command system for chat (extensible plugin architecture) |
+| `markdown.js` | `src/lib/` | Lightweight markdown renderer (bold, italic, code, links, strikethrough) with XSS protection |
+| `utils.js` | `src/lib/` | Helper functions: `generateId`, `formatTime`, `formatRelativeTime`, `getInitials`, `getAvatarColor`, `truncate` |
+| `emoji-data.js` | `src/lib/` | Emoji dataset for the emoji picker component |
 
 ## Relay Server Architecture
 
@@ -277,6 +299,44 @@ User fills RoomCreateDialog
 | Video | `video` | WebRTC video/audio room with mesh topology |
 | Combo | `combo` | Combined text chat + video grid |
 | DM | `dm` | Direct message (two users, deterministic room ID, no registry listing) |
+
+### Video Features
+
+Video rooms (`video` and `combo` types) support multiple layout modes, active speaker detection, and peer pinning.
+
+#### Layout Modes
+
+| Mode | Description |
+|------|-------------|
+| Grid | Auto-fit responsive grid. All peers shown at equal size, tiles reflow based on container dimensions. |
+| Spotlight | Large main tile + horizontal strip of thumbnails. The main tile shows the pinned or active speaker. |
+| Sidebar | Large main tile + vertical strip of thumbnails. Same priority as spotlight, vertical layout. |
+
+The layout is controlled by `useVideoLayout`, which exposes `setLayout(mode)`. Screen sharing automatically switches to spotlight and restores the previous layout when sharing stops.
+
+#### Active Speaker Detection
+
+`useAudioLevel` uses the Web Audio API `AnalyserNode` to detect speech:
+
+- Samples audio at ~15fps (`fftSize: 256`, `getByteFrequencyData`)
+- Speaking threshold: average frequency bin value > 15
+- Debounce: 300ms timeout before marking a peer as no longer speaking
+- `useVideoRoom` creates an `useAudioLevel` instance for each peer's audio track (local and remote)
+- Speaking peer IDs are collected in a reactive `speakingPeerIds` Set (`'__local__'` for local user)
+
+#### Peer Pinning
+
+- Click or double-tap a video tile to pin that peer as the spotlight focus
+- Pinned peer overrides automatic active speaker selection
+- Click again to unpin and return to auto-speaker mode
+
+#### Swipe Navigation
+
+In spotlight mode on mobile, horizontal swipe on the main tile cycles through peers.
+
+#### Resizable Combo Split
+
+Combo rooms (`ComboChannelView`) render video and chat in a split layout with a draggable resize handle. The split is clamped between 20% and 80% of the container.
 
 ### DM Flow
 

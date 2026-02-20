@@ -32,31 +32,32 @@ function handleCreate() {
   <div class="dialog-overlay" @click.self="emit('close')" @keydown.escape="emit('close')" tabindex="-1">
     <div class="ns-create-dialog">
       <div class="ns-create-header">
-        <h3>Create Namespace</h3>
+        <h3>Create Channel Group</h3>
         <button class="close-btn" @click="emit('close')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
 
       <form class="ns-create-form" @submit.prevent="handleCreate">
+        <p class="ns-create-explainer">A group organizes related channels together, like folders for your rooms.</p>
         <div class="field">
-          <label>Name</label>
-          <input v-model="name" type="text" placeholder="my-namespace" autocomplete="off" autofocus />
+          <label>Group Name</label>
+          <input v-model="name" type="text" placeholder="e.g. gaming, design, book-club" autocomplete="off" autofocus />
         </div>
 
         <div class="field">
-          <label>Parent Namespace (optional)</label>
-          <input v-model="parentNamespace" type="text" placeholder="e.g. gaming" autocomplete="off" />
+          <label>Parent Group (optional)</label>
+          <input v-model="parentNamespace" type="text" placeholder="Nest inside another group, e.g. gaming" autocomplete="off" />
         </div>
 
         <div v-if="fullPath" class="field path-preview">
-          <label>Path</label>
+          <label>Group Path</label>
           <code>{{ fullPath }}</code>
         </div>
 
         <div class="field">
           <label>Description</label>
-          <input v-model="description" type="text" placeholder="What is this namespace for?" autocomplete="off" />
+          <input v-model="description" type="text" placeholder="What is this group for?" autocomplete="off" />
         </div>
 
         <div class="field">
@@ -70,15 +71,15 @@ function handleCreate() {
             <button type="button" :class="['seg-btn', { active: !isPrivate }]" @click="isPrivate = false">Public</button>
             <button type="button" :class="['seg-btn', { active: isPrivate }]" @click="isPrivate = true">Private</button>
           </div>
-          <span class="hint">{{ isPrivate ? 'Accessed by direct link only' : 'Appears in discovery' }}</span>
+          <span class="hint">{{ isPrivate ? 'Only people who know the name can find it' : 'Anyone can find and browse this group' }}</span>
         </div>
 
         <div v-if="isPrivate" class="field">
           <label>Password (optional)</label>
-          <input v-model="password" type="password" placeholder="Namespace password" autocomplete="off" />
+          <input v-model="password" type="password" placeholder="Require a password to join" autocomplete="off" />
         </div>
 
-        <button type="submit" class="create-btn" :disabled="!fullPath">Create Namespace</button>
+        <button type="submit" class="create-btn" :disabled="!fullPath">Create Group</button>
       </form>
     </div>
   </div>
@@ -213,6 +214,13 @@ function handleCreate() {
 .hint {
   font-size: 0.7rem;
   color: var(--text-muted);
+}
+
+.ns-create-explainer {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-bottom: 0.25rem;
 }
 
 .create-btn {

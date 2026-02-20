@@ -48,7 +48,7 @@ onMounted(() => {
 <template>
   <aside class="sidebar">
     <div class="sidebar-top">
-      <h2 class="sidebar-title">CLASP Chat</h2>
+      <img src="/logo-wordmark.svg" alt="CLASP Chat" class="sidebar-title" />
       <div class="sidebar-actions">
         <button
           class="action-btn"
@@ -88,7 +88,7 @@ onMounted(() => {
 
       <!-- Pinned Namespaces -->
       <div v-if="pinnedNamespaceList.length" class="ns-section">
-        <div class="section-label">Namespaces</div>
+        <div class="section-label" title="Pinned channel groups from Browse">Pinned Groups</div>
         <NamespaceGroup
           v-for="ns in pinnedNamespaceList"
           :key="ns"
@@ -100,6 +100,12 @@ onMounted(() => {
           @select-room="emit('select-room', $event)"
           @join-room="emit('select-room', $event)"
         />
+      </div>
+
+      <div v-if="!pinnedNamespaceList.length && connected" class="ns-nudge">
+        <button class="ns-nudge-btn" @click="emit('browse-rooms')">
+          Browse channel groups
+        </button>
       </div>
 
       <!-- DM section -->
@@ -173,20 +179,24 @@ onMounted(() => {
 .sidebar-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0.75rem 1rem;
+  padding: 0.6rem 0.4rem 0.6rem 0.6rem;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  gap: 0;
 }
 
 .sidebar-title {
-  font-size: 0.85rem;
-  letter-spacing: 0.12em;
+  height: 44px;
+  width: auto;
+  min-width: 0;
+  flex-shrink: 1;
+  margin-right: auto;
 }
 
 .sidebar-actions {
   display: flex;
-  gap: 0.25rem;
+  gap: 0;
+  flex-shrink: 0;
 }
 
 .action-btn {
@@ -353,6 +363,27 @@ onMounted(() => {
   height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+.ns-nudge {
+  padding: 0.5rem 0.75rem;
+}
+
+.ns-nudge-btn {
+  width: 100%;
+  padding: 0.5rem;
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ns-nudge-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .status-dot.online { background: var(--success); }

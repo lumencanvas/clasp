@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" width="320" height="80">
+  <defs>
+    <filter id="rough" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="4" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5"/>
+    </filter>
+  </defs>
+  <g filter="url(#rough)">
+    <g transform="translate(5, 2) scale(0.42)">
+      <path d="M 30 100 L 30 45 Q 30 20, 55 20 L 145 20 Q 170 20, 170 45 L 170 100 L 170 125 Q 170 150, 145 150 L 90 150 L 60 180 L 65 150 L 55 150 Q 30 150, 30 125 Z" fill="none" stroke="#e8e8e8" stroke-width="12" stroke-linejoin="round"/>
+      <line x1="60" y1="65" x2="140" y2="65" stroke="#e85d3b" stroke-width="5" stroke-linecap="round"/>
+      <line x1="60" y1="88" x2="140" y2="88" stroke="#e8e8e8" stroke-width="5" stroke-linecap="round"/>
+      <line x1="60" y1="111" x2="140" y2="111" stroke="#e85d3b" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="100" cy="88" r="10" fill="#0a0a0a" stroke="#e8e8e8" stroke-width="4"/>
+      <circle cx="100" cy="88" r="4" fill="#e85d3b"/>
+    </g>
+  </g>
+  <text x="95" y="52" font-family="'Oswald', 'Arial Narrow', sans-serif" font-size="38" font-weight="700" letter-spacing="4">
+    <tspan fill="#e8e8e8">CLASP</tspan><tspan fill="#e85d3b">.chat</tspan>
+  </text>
+</svg>

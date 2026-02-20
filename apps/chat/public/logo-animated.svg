@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <filter id="rough" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="4" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="2"/>
+    </filter>
+  </defs>
+  <style>
+    .bubble { stroke-dasharray: 600; stroke-dashoffset: 600; animation: draw 1.2s cubic-bezier(0.4,0,0.2,1) 0.2s forwards; }
+    .l1 { stroke-dasharray: 80; stroke-dashoffset: 80; animation: line 0.4s ease-out 1.2s forwards; }
+    .l2 { stroke-dasharray: 80; stroke-dashoffset: 80; animation: line 0.4s ease-out 1.35s forwards; }
+    .l3 { stroke-dasharray: 80; stroke-dashoffset: 80; animation: line 0.4s ease-out 1.5s forwards; }
+    .no { opacity: 0; animation: pop 0.3s cubic-bezier(0.34,1.56,0.64,1) 1.6s forwards; transform-origin: 100px 88px; }
+    .ni { opacity: 0; animation: pop 0.3s cubic-bezier(0.34,1.56,0.64,1) 1.75s forwards; transform-origin: 100px 88px; }
+    @keyframes draw { to { stroke-dashoffset: 0; } }
+    @keyframes line { to { stroke-dashoffset: 0; } }
+    @keyframes pop { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+  </style>
+  <g filter="url(#rough)">
+    <path class="bubble" d="M 30 100 L 30 45 Q 30 20, 55 20 L 145 20 Q 170 20, 170 45 L 170 100 L 170 125 Q 170 150, 145 150 L 90 150 L 60 180 L 65 150 L 55 150 Q 30 150, 30 125 Z" fill="none" stroke="#e8e8e8" stroke-width="12" stroke-linejoin="round"/>
+    <line class="l1" x1="60" y1="65" x2="140" y2="65" stroke="#e85d3b" stroke-width="5" stroke-linecap="round"/>
+    <line class="l2" x1="60" y1="88" x2="140" y2="88" stroke="#e8e8e8" stroke-width="5" stroke-linecap="round"/>
+    <line class="l3" x1="60" y1="111" x2="140" y2="111" stroke="#e85d3b" stroke-width="5" stroke-linecap="round"/>
+    <circle class="no" cx="100" cy="88" r="10" fill="#0a0a0a" stroke="#e8e8e8" stroke-width="4"/>
+    <circle class="ni" cx="100" cy="88" r="4" fill="#e85d3b"/>
+  </g>
+</svg>

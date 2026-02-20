@@ -13,6 +13,7 @@ const { userId, displayName, avatarColor, status, setDisplayName, setAvatarColor
 const nameInput = ref(displayName.value)
 const serverUrl = ref(url.value)
 const localError = ref(null)
+const showAdvanced = ref(false)
 
 async function handleConnect() {
   if (!nameInput.value.trim()) return
@@ -51,13 +52,9 @@ async function handleConnect() {
   <div class="join-page">
     <div class="join-card">
       <div class="join-header">
-        <div class="logo">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-          </svg>
-        </div>
-        <h1>CLASP Chat</h1>
-        <p class="subtitle">Real-time messaging powered by the CLASP protocol</p>
+        <img src="/logo.svg" alt="CLASP" class="header-logo" />
+        <h1 class="header-title"><span class="title-clasp">CLASP</span><span class="title-dot">.chat</span></h1>
+        <p class="subtitle">Real-time messaging powered by the <a href="https://clasp.to" target="_blank" rel="noopener noreferrer">CLASP protocol</a></p>
       </div>
 
       <form class="join-form" @submit.prevent="handleConnect">
@@ -103,7 +100,18 @@ async function handleConnect() {
           </div>
         </div>
 
-        <div class="field">
+        <button
+          type="button"
+          class="advanced-toggle"
+          @click="showAdvanced = !showAdvanced"
+        >
+          <svg :class="['advanced-chevron', { open: showAdvanced }]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+          Advanced
+        </button>
+
+        <div v-if="showAdvanced" class="field">
           <label>Server URL</label>
           <input
             v-model="serverUrl"
@@ -151,43 +159,56 @@ async function handleConnect() {
 
 .join-card {
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 2rem;
+  border-radius: 12px;
+  padding: 2.5rem 2rem;
 }
 
 .join-header {
   text-align: center;
   margin-bottom: 2rem;
-}
-
-.logo {
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  margin-bottom: 1rem;
 }
 
-.logo svg {
-  width: 48px;
-  height: 48px;
-  color: var(--accent);
+.header-logo {
+  width: 80px;
+  height: 80px;
+  margin-bottom: 0.75rem;
 }
 
-.join-header h1 {
-  font-size: 1.5rem;
-  letter-spacing: 0.12em;
+.header-title {
+  font-family: 'Oswald', 'Arial Narrow', sans-serif;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   margin-bottom: 0.5rem;
+}
+
+.title-clasp {
+  color: var(--text-primary);
+}
+
+.title-dot {
+  color: var(--accent);
 }
 
 .subtitle {
   font-size: 0.8rem;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   line-height: 1.5;
+}
+
+.subtitle a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.subtitle a:hover {
+  text-decoration: underline;
 }
 
 .join-form {
@@ -213,7 +234,7 @@ async function handleConnect() {
   padding: 0.75rem 1rem;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 0.9rem;
   transition: border-color 0.15s;
 }
@@ -224,43 +245,47 @@ async function handleConnect() {
 }
 
 .color-picker {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 32px);
+  gap: 0.4rem;
+  justify-content: center;
 }
 
 .color-swatch {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  border: 2px solid transparent;
+  border: 2.5px solid transparent;
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .color-swatch:hover {
-  transform: scale(1.15);
+  transform: scale(1.12);
+  border-color: rgba(255,255,255,0.2);
 }
 
 .color-swatch.active {
   border-color: var(--text-primary);
-  transform: scale(1.15);
+  transform: scale(1.12);
+  box-shadow: 0 0 0 2px var(--bg-secondary), 0 0 0 4px currentColor;
 }
 
 .status-picker {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
 }
 
 .status-option {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.4rem 0.75rem;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 6px;
   color: var(--text-secondary);
   font-size: 0.75rem;
   cursor: pointer;
@@ -270,11 +295,13 @@ async function handleConnect() {
 .status-option:hover {
   background: var(--bg-active);
   color: var(--text-primary);
+  border-color: var(--text-muted);
 }
 
 .status-option.active {
   border-color: var(--accent);
   color: var(--text-primary);
+  background: rgba(230,57,70,0.06);
 }
 
 .status-swatch {
@@ -284,21 +311,48 @@ async function handleConnect() {
   flex-shrink: 0;
 }
 
+.advanced-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: color 0.15s;
+}
+
+.advanced-toggle:hover {
+  color: var(--text-secondary);
+}
+
+.advanced-chevron {
+  transition: transform 0.2s;
+}
+
+.advanced-chevron.open {
+  transform: rotate(90deg);
+}
+
 .connect-btn {
-  min-height: 44px;
-  padding: 0.75rem 1rem;
+  min-height: 46px;
+  padding: 0.8rem 1rem;
   background: var(--accent);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 0.9rem;
-  letter-spacing: 0.08em;
-  transition: opacity 0.15s;
-  margin-top: 0.5rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  transition: all 0.15s;
+  margin-top: 0.25rem;
 }
 
 .connect-btn:hover:not(:disabled) {
-  opacity: 0.9;
+  filter: brightness(1.1);
 }
 
 .connect-btn:disabled {
@@ -346,7 +400,7 @@ async function handleConnect() {
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  margin-top: 1rem;
+  margin-top: 1.25rem;
   font-size: 0.75rem;
   color: var(--text-muted);
   text-decoration: none;
@@ -368,12 +422,17 @@ async function handleConnect() {
   }
 
   .join-card {
-    padding: 1.25rem;
+    padding: 1.5rem 1.25rem;
   }
 
   .color-swatch {
     width: 36px;
     height: 36px;
+  }
+
+  .color-picker {
+    grid-template-columns: repeat(auto-fill, 36px);
+    gap: 0.5rem;
   }
 
   .status-option {

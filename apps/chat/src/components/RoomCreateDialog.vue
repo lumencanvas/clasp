@@ -137,7 +137,8 @@ function handleCreate() {
 
         <!-- Namespace picker -->
         <div class="field">
-          <label>Namespace <span class="optional">(optional)</span></label>
+          <label>Group <span class="optional">(optional)</span></label>
+          <span class="field-hint">Organize this channel under a group so related channels appear together.</span>
           <div class="ns-input-wrap">
             <input
               v-model="namespace"
@@ -160,13 +161,13 @@ function handleCreate() {
               </button>
             </div>
           </div>
-          <span v-if="isNewNamespace" class="ns-new-hint">New namespace will be created</span>
+          <span v-if="isNewNamespace" class="ns-new-hint">A new group "{{ namespace.trim() }}" will be created</span>
         </div>
 
         <!-- New namespace options -->
         <div v-if="isNewNamespace" class="field ns-new-options">
           <div class="visibility-field">
-            <label>Visibility</label>
+            <label>Group Visibility</label>
             <div class="segmented-control">
               <button
                 type="button"
@@ -179,13 +180,13 @@ function handleCreate() {
                 @click="newNsPrivate = true"
               >Private</button>
             </div>
-            <span class="visibility-hint">{{ newNsPrivate ? 'Accessed by direct link only' : 'Appears in discovery' }}</span>
+            <span class="visibility-hint">{{ newNsPrivate ? 'Only people who know the name can find it' : 'Anyone can find and browse this group' }}</span>
           </div>
           <div v-if="newNsPrivate" class="ns-pw-field">
             <input
               v-model="newNsPassword"
               type="password"
-              placeholder="Namespace password (optional)"
+              placeholder="Group password (optional)"
               autocomplete="off"
             />
           </div>
@@ -415,6 +416,12 @@ function handleCreate() {
 .ns-option:hover {
   background: var(--bg-tertiary);
   color: var(--text-primary);
+}
+
+.field-hint {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: -0.25rem;
 }
 
 .ns-new-hint {

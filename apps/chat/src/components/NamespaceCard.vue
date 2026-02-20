@@ -18,7 +18,7 @@ const parentPath = computed(() => {
 </script>
 
 <template>
-  <div class="ns-card" @click="emit('click', namespace.path)">
+  <div class="ns-card" @click="emit('click', namespace.path)" title="Browse channels in this group">
     <div class="card-top">
       <span v-if="namespace.icon" class="card-icon">{{ namespace.icon }}</span>
       <span v-else class="card-icon-default">/</span>
@@ -32,12 +32,14 @@ const parentPath = computed(() => {
     <span v-if="hasParent" class="card-parent">{{ parentPath }}/</span>
     <h4 class="card-name">{{ displayName }}</h4>
     <p v-if="namespace.description" class="card-desc">{{ namespace.description }}</p>
+    <p v-else class="card-desc card-desc-default">Channel group</p>
     <p v-if="namespace.creatorName" class="card-creator">by {{ namespace.creatorName }}</p>
     <button
       :class="['pin-btn', { pinned: isPinned }]"
+      :title="isPinned ? 'This group is in your sidebar' : 'Add this group to your sidebar'"
       @click.stop="isPinned ? emit('unpin', namespace.path) : emit('pin', namespace.path)"
     >
-      {{ isPinned ? 'Pinned' : 'Pin' }}
+      {{ isPinned ? 'Pinned' : 'Pin to Sidebar' }}
     </button>
   </div>
 </template>
@@ -107,6 +109,11 @@ const parentPath = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.card-desc-default {
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .card-creator {

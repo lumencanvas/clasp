@@ -14,7 +14,7 @@ npm install
 npm run dev
 ```
 
-The app defaults to `wss://relay.clasp.to` and `https://relay.clasp.to` for the relay and auth API. Override with environment variables:
+The app defaults to `wss://relay.clasp.chat` and `https://relay.clasp.chat` for the relay and auth API. Override with environment variables:
 
 ```bash
 VITE_RELAY_URL=ws://localhost:7330 VITE_AUTH_API_URL=http://localhost:7350 npm run dev
@@ -31,7 +31,7 @@ Output goes to `dist/`. It's a static SPA — serve it from anywhere.
 To build with custom relay URLs:
 
 ```bash
-VITE_AUTH_API_URL=https://relay.clasp.to VITE_RELAY_URL=wss://relay.clasp.to npm run build
+VITE_AUTH_API_URL=https://relay.clasp.chat VITE_RELAY_URL=wss://relay.clasp.chat npm run build
 ```
 
 ## Deploy the SPA
@@ -48,8 +48,8 @@ The built `dist/` folder is plain static files. Deploy it wherever you host stat
 
 ```bash
 docker build \
-  --build-arg VITE_AUTH_API_URL=https://relay.clasp.to \
-  --build-arg VITE_RELAY_URL=wss://relay.clasp.to \
+  --build-arg VITE_AUTH_API_URL=https://relay.clasp.chat \
+  --build-arg VITE_RELAY_URL=wss://relay.clasp.chat \
   -t clasp-chat .
 
 docker run -p 8080:80 clasp-chat
@@ -61,7 +61,7 @@ The chat app needs a CLASP relay server to connect to. The relay handles WebSock
 
 ### Use the public relay
 
-By default the app connects to `relay.clasp.to`. No setup needed — just build and deploy the SPA.
+By default the app connects to `relay.clasp.chat`. No setup needed — just build and deploy the SPA.
 
 ### Self-host a relay
 
@@ -92,7 +92,7 @@ VITE_RELAY_URL=ws://localhost:7330 VITE_AUTH_API_URL=http://localhost:7350 npm r
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VITE_RELAY_URL` | `wss://relay.clasp.to` | WebSocket URL for the CLASP relay |
-| `VITE_AUTH_API_URL` | `https://relay.clasp.to` | HTTP URL for the auth API (login/register) |
+| `VITE_RELAY_URL` | `wss://relay.clasp.chat` | WebSocket URL for the CLASP relay |
+| `VITE_AUTH_API_URL` | `https://relay.clasp.chat` | HTTP URL for the auth API (login/register) |
 
 Both are baked in at build time via Vite.

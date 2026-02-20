@@ -31,7 +31,7 @@
 
 ### Prerequisites
 
-- Node.js 18+ (for the frontend)
+- Node.js 20+ (for the frontend)
 - Rust 1.75+ (for the relay)
 
 ### Frontend

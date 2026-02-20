@@ -57,12 +57,7 @@ async function handleSubmit() {
   <div class="auth-page">
     <div class="auth-card">
       <div class="auth-header">
-        <div class="logo">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-          </svg>
-        </div>
-        <h1>CLASP Chat</h1>
+        <img src="/logo-wordmark.svg" alt="CLASP Chat" class="header-wordmark" />
         <p class="subtitle">Secure, real-time messaging</p>
       </div>
 
@@ -160,35 +155,26 @@ async function handleSubmit() {
 
 .auth-card {
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 2rem;
+  border-radius: 12px;
+  padding: 2.5rem 2rem;
 }
 
 .auth-header {
   text-align: center;
   margin-bottom: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-.logo {
-  display: inline-flex;
-  width: 56px;
-  height: 56px;
-  margin-bottom: 1rem;
-}
-
-.logo svg {
-  width: 48px;
-  height: 48px;
-  color: var(--accent);
-}
-
-.auth-header h1 {
-  font-size: 1.5rem;
-  letter-spacing: 0.12em;
-  margin-bottom: 0.5rem;
+.header-wordmark {
+  width: 100%;
+  max-width: 280px;
+  height: auto;
+  margin-bottom: 0.75rem;
 }
 
 .subtitle {
@@ -200,9 +186,9 @@ async function handleSubmit() {
   display: flex;
   gap: 0;
   margin-bottom: 1.5rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  overflow: hidden;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  padding: 3px;
 }
 
 .tab {
@@ -210,7 +196,8 @@ async function handleSubmit() {
   padding: 0.6rem;
   background: transparent;
   border: none;
-  color: var(--text-secondary);
+  border-radius: 6px;
+  color: var(--text-muted);
   font-size: 0.85rem;
   cursor: pointer;
   transition: all 0.15s;
@@ -219,6 +206,7 @@ async function handleSubmit() {
 .tab.active {
   background: var(--accent);
   color: white;
+  font-weight: 600;
 }
 
 .auth-form {
@@ -244,7 +232,7 @@ async function handleSubmit() {
   padding: 0.75rem 1rem;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 0.9rem;
   transition: border-color 0.15s;
 }
@@ -255,20 +243,21 @@ async function handleSubmit() {
 }
 
 .submit-btn {
-  min-height: 44px;
-  padding: 0.75rem 1rem;
+  min-height: 46px;
+  padding: 0.8rem 1rem;
   background: var(--accent);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 0.9rem;
-  letter-spacing: 0.08em;
-  transition: opacity 0.15s;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  transition: all 0.15s;
   margin-top: 0.25rem;
 }
 
 .submit-btn:hover:not(:disabled) {
-  opacity: 0.9;
+  filter: brightness(1.1);
 }
 
 .submit-btn:disabled {
@@ -338,7 +327,7 @@ async function handleSubmit() {
   }
 
   .auth-card {
-    padding: 1.25rem;
+    padding: 1.5rem 1.25rem;
   }
 
   .tab {

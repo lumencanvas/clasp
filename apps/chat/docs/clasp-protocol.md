@@ -124,20 +124,24 @@ The chat app uses a structured address space under `/chat/`:
 ### User Addresses
 
 ```
-/chat/user/{userId}/profile          User profile (name, avatarColor, status)
+/chat/user/{userId}/profile              User profile (name, avatarColor, status)
+/chat/user/{userId}/signingKey           ECDSA public key for message verification
+/chat/user/{userId}/friends/{friendId}   Friend record (name, avatarColor, addedAt)
+/chat/user/{userId}/dms/{roomId}         DM inbox notification
 ```
 
 ### Room Addresses
 
 ```
-/chat/room/{roomId}/meta             Room metadata (name, type, encrypted, password, namespace)
-/chat/room/{roomId}/messages         Message events (emit only, not persisted on relay)
-/chat/room/{roomId}/presence/{uid}   User presence (set with heartbeat, null on leave)
-/chat/room/{roomId}/typing/{uid}     Typing indicators (set true/null)
-/chat/room/{roomId}/admin/{uid}      Admin role records
-/chat/room/{roomId}/bans/{uid}       Ban records
-/chat/room/{roomId}/reactions/{mid}  Message reactions
-/chat/room/{roomId}/video/{uid}      WebRTC signaling for video rooms
+/chat/room/{roomId}/meta                            Room metadata (name, type, encrypted, password, namespace)
+/chat/room/{roomId}/messages                        Message events (emit only, not persisted on relay)
+/chat/room/{roomId}/presence/{uid}                  User presence (set with heartbeat, null on leave)
+/chat/room/{roomId}/typing/{uid}                    Typing indicators (set true/null)
+/chat/room/{roomId}/admin/{uid}                     Admin role records
+/chat/room/{roomId}/bans/{uid}                      Ban records
+/chat/room/{roomId}/reactions/{msgId}/{emoji}        Reaction record ({users: []})
+/chat/room/{roomId}/video/presence/{sessionId}       Video presence heartbeat
+/chat/room/{roomId}/video/signal/{sessionId}         WebRTC signaling (offer/answer/ICE)
 ```
 
 ### Crypto Addresses
@@ -160,7 +164,7 @@ The chat app uses a structured address space under `/chat/`:
 ### Friend Addresses
 
 ```
-/chat/requests/{targetUserId}                Friend request inbox
+/chat/requests/{targetId}/{fromId}           Friend request (two-step handshake)
 ```
 
 ## Scope Enforcement

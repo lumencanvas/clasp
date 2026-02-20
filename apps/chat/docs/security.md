@@ -109,6 +109,8 @@ The DM message content itself flows through `/chat/room/*/messages` (a separate 
 | Message encryption | AES-256-GCM | 256-bit | Encrypt/decrypt chat messages |
 | Key exchange | ECDH P-256 | 256-bit | Establish shared secret between peers |
 | Key derivation | HKDF-SHA256 | 256-bit | Derive AES key from ECDH shared secret |
+| Message signing | ECDSA P-256-SHA256 | 256-bit | Sign/verify chat messages |
+| Key fingerprint | SHA-256 | 256-bit | TOFU fingerprint for peer signing keys |
 | Password hashing | PBKDF2-SHA256 | 256-bit | Hash room/namespace passwords (client-side) |
 | IV generation | `crypto.getRandomValues` | 96-bit | Random IV per encryption operation |
 
@@ -242,6 +244,57 @@ Room keys are persisted in IndexedDB (`clasp-chat` database, `crypto-keys` objec
 
 **Known limitation**: Device seizure exposes all room keys. Local key encryption (derived from user password) is a Phase 3 remediation item.
 
+## Message Signing
+
+The `useSigning` composable provides ECDSA P-256-SHA256 message signatures to authenticate message authorship.
+
+### How It Works
+
+1. On initialization, `useSigning` generates a non-extractable ECDSA P-256 keypair via the Web Crypto API
+2. The public key (as JWK) is published to `/chat/user/{userId}/signingKey` along with the algorithm identifier and timestamp
+3. When sending a message, `useChat` calls `signMessage(payload)` which:
+   - Creates a canonical form: `{text, fromId, msgId, timestamp}`
+   - Signs the canonical JSON with the private key
+   - Attaches the base64 signature to the outgoing message
+4. On receipt, `useChat` calls `verifyMessage(payload)` which:
+   - Fetches the sender's public key from CLASP state (with 2s timeout and deduplication)
+   - Caches peer signing keys in memory
+   - Returns `'verified'` (valid signature), `'failed'` (invalid signature), or `'unknown'` (no key available)
+
+### Signing Key Storage
+
+- **Private key**: Held in memory only (non-extractable `CryptoKey`). Lost on page refresh; a new keypair is generated each session.
+- **Public key**: Published to CLASP state and persisted in IndexedDB via `saveSigningKey()`.
+- **Peer keys**: Cached in-memory Map, fetched from CLASP on first encounter.
+
+## TOFU Key Verification
+
+The `useKeyVerification` composable implements Trust On First Use (TOFU) verification for peer signing keys.
+
+### How It Works
+
+1. When a peer's signing key is first seen, its SHA-256 fingerprint is computed and stored in IndexedDB (`tofu-keys` store via `saveTofuKey()`)
+2. On subsequent encounters, the stored fingerprint is compared against the current key
+3. If the fingerprint matches, the key is trusted silently
+4. If the fingerprint has changed, a warning is surfaced via the `keyWarnings` reactive Map
+
+### Key Change Warnings
+
+- Key changes are displayed by `KeyChangeWarning.vue` in the chat view
+- Users can **accept** the new key (updates the stored fingerprint) or **dismiss** the warning (hides it without updating)
+- `getRoomWarnings(roomId)` returns active warnings for a specific room
+- Warnings are scoped per `roomId:userId` pair
+
+### Verification API
+
+| Function | Description |
+|----------|-------------|
+| `verifyKey(roomId, userId, publicKeyJwk, displayName)` | Returns `{trusted, firstSeen, changed, fingerprint}` |
+| `acceptKeyChange(roomId, userId)` | Updates stored fingerprint to current key |
+| `dismissWarning(roomId, userId)` | Hides warning without updating fingerprint |
+| `getStoredFingerprint(roomId, userId)` | Retrieves stored fingerprint for display |
+| `getRoomWarnings(roomId)` | Returns active key change warnings for a room |
+
 ## CORS Configuration
 
 The auth HTTP server supports configurable CORS:
@@ -273,11 +326,9 @@ Production deployments should always set `--cors-origin` to the chat frontend's 
 |------------|-------------|-------------------|
 | Per-room read scoping | Granular read scopes in place, but per-room access requires membership tracking | Phase 2 |
 | Namespace admin enforcement | Room admin/ban/meta enforced server-side by WriteValidator; namespace admin still client-side | Phase 2 |
-| No message signatures | Messages can be forged by any room member | Phase 2 |
 | No forward secrecy | Single ECDH key pair per session, static room keys | Phase 3 |
 | Unencrypted local keys | IndexedDB stores room key JWKs in plaintext | Phase 3 |
 | Plaintext state snapshot | Relay writes all state to disk as JSON | Phase 3 |
-| No key verification UI | No safety numbers or key fingerprints for TOFU | Phase 2 |
 
 ## Security Audit History
 

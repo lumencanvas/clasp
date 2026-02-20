@@ -222,7 +222,7 @@ async function handleLookupNs() {
   const meta = await lookupNamespace(path)
 
   if (!meta) {
-    nsLookupError.value = 'Namespace not found'
+    nsLookupError.value = 'Group not found'
     return
   }
 
@@ -382,7 +382,8 @@ onUnmounted(() => {
               v-if="currentView !== 'top'"
               :class="['pin-toggle', { pinned: isNsPinned(currentView) }]"
               @click="isNsPinned(currentView) ? handleUnpinNs(currentView) : handlePinNs(currentView)"
-            >{{ isNsPinned(currentView) ? 'Pinned' : 'Pin' }}</button>
+              :title="isNsPinned(currentView) ? 'This group is in your sidebar' : 'Add this group to your sidebar'"
+            >{{ isNsPinned(currentView) ? 'Pinned' : 'Pin to Sidebar' }}</button>
           </div>
         </div>
         <button class="close-btn" @click="emit('close')">
@@ -398,7 +399,7 @@ onUnmounted(() => {
         <input
           v-model="searchQuery"
           type="text"
-          placeholder="Search namespaces and rooms..."
+          placeholder="Search groups and channels..."
           autocomplete="off"
         />
         <button v-if="searchQuery" class="search-clear" @click="clearSearch">
@@ -409,6 +410,10 @@ onUnmounted(() => {
       </div>
 
       <div class="dialog-body">
+        <p v-if="currentView === 'top' && !isSearching" class="browse-explainer">
+          Channels are organized into groups. Pin a group to your sidebar to stay connected.
+        </p>
+
         <!-- SEARCH RESULTS (grouped by top-level namespace) -->
         <template v-if="isSearching && searchResults">
           <div v-if="searchResults.length" class="search-results">
@@ -452,12 +457,12 @@ onUnmounted(() => {
         <template v-else-if="currentView === 'top'">
           <!-- Action row: Create namespace -->
           <div class="action-row">
-            <button class="create-ns-btn" @click="showCreateNs = true">+ Create Namespace</button>
+            <button class="create-ns-btn" @click="showCreateNs = true">+ New Group</button>
           </div>
 
           <!-- Namespaces section -->
           <div v-if="namespaceList.length" class="browse-section">
-            <div class="browse-label">Namespaces</div>
+            <div class="browse-label">Channel Groups</div>
             <div class="ns-grid">
               <NamespaceCard
                 v-for="ns in namespaceList"
@@ -474,12 +479,13 @@ onUnmounted(() => {
 
           <!-- Private namespace entry -->
           <div class="browse-section private-ns">
-            <div class="browse-label">Join Private Namespace</div>
+            <div class="browse-label">Join a Private Group</div>
+            <p class="private-ns-hint">Know the name of a private group? Enter it here to request access.</p>
             <form class="ns-lookup-row" @submit.prevent="handleLookupNs">
               <input
                 v-model="nsPathInput"
                 type="text"
-                placeholder="namespace path (e.g. secret-club)"
+                placeholder="group name, e.g. secret-club"
                 autocomplete="off"
               />
               <button type="submit" :disabled="!nsPathInput.trim()">Unlock</button>
@@ -489,7 +495,7 @@ onUnmounted(() => {
 
           <!-- Uncategorized rooms -->
           <div v-if="uncategorizedRooms.length" class="browse-section">
-            <div class="browse-label">Uncategorized Rooms</div>
+            <div class="browse-label">Channels</div>
             <div class="room-grid">
               <div v-for="room in uncategorizedRooms" :key="room.id" class="discovery-card">
                 <div class="card-top">
@@ -514,8 +520,8 @@ onUnmounted(() => {
           </div>
 
           <div v-if="!namespaceList.length && !uncategorizedRooms.length" class="empty">
-            <p>No public channels found</p>
-            <span>Create a namespace or room and make it public!</span>
+            <p>No public channels yet</p>
+            <span>Create a group to organize channels, or create a standalone channel.</span>
           </div>
         </template>
 
@@ -525,7 +531,7 @@ onUnmounted(() => {
 
           <!-- Sub-namespaces -->
           <div v-if="currentNsChildren.length" class="browse-section">
-            <div class="browse-label">Sub-namespaces</div>
+            <div class="browse-label">Sub-groups</div>
             <div class="ns-grid">
               <NamespaceCard
                 v-for="child in currentNsChildren"
@@ -542,9 +548,9 @@ onUnmounted(() => {
 
           <!-- Rooms in namespace -->
           <div class="browse-section">
-            <div class="browse-label">Rooms in {{ currentView.split('/').pop() }}</div>
+            <div class="browse-label">Channels in {{ currentView.split('/').pop() }}</div>
             <div v-if="!currentNsRooms.length" class="empty-small">
-              <span>No rooms in this namespace yet. Create a room and assign it to this namespace.</span>
+              <span>No channels in this group yet. Create a channel and assign it to this group.</span>
             </div>
             <div v-else class="room-grid">
               <div v-for="room in currentNsRooms" :key="room.id" class="discovery-card">
@@ -595,7 +601,7 @@ onUnmounted(() => {
         <!-- Namespace settings overlay -->
         <div v-if="showNsSettings" class="password-overlay" @click.self="showNsSettings = false">
           <div class="password-dialog" style="width: 380px">
-            <h4>Namespace Settings</h4>
+            <h4>Group Settings</h4>
             <p>{{ currentView }}</p>
             <div class="ns-settings-form">
               <label class="ns-settings-label">Description</label>
@@ -607,7 +613,7 @@ onUnmounted(() => {
                 <button type="button" :class="['ns-seg-btn', { active: nsEditPublic }]" @click="nsEditPublic = true">Public</button>
                 <button type="button" :class="['ns-seg-btn', { active: !nsEditPublic }]" @click="nsEditPublic = false">Private</button>
               </div>
-              <span class="ns-visibility-hint">{{ nsEditPublic ? 'Appears in discovery' : 'Accessed by direct link only' }}</span>
+              <span class="ns-visibility-hint">{{ nsEditPublic ? 'Anyone can find and browse this group' : 'Only people who know the name can find it' }}</span>
               <div class="pw-actions">
                 <button class="pw-cancel" @click="showNsSettings = false">Cancel</button>
                 <button class="pw-submit" @click="saveNsSettings">Save</button>
@@ -626,10 +632,10 @@ onUnmounted(() => {
               <div class="ns-danger-zone">
                 <label class="ns-settings-label ns-danger-label">Danger Zone</label>
                 <template v-if="!showNsDeleteConfirm">
-                  <button class="ns-delete-btn" @click="showNsDeleteConfirm = true">Delete Namespace</button>
+                  <button class="ns-delete-btn" @click="showNsDeleteConfirm = true">Delete Group</button>
                 </template>
                 <template v-else>
-                  <p class="ns-delete-warning">This will delete the namespace, all room registry entries, and child namespaces. This cannot be undone.</p>
+                  <p class="ns-delete-warning">This will delete this group, all channel registry entries, and sub-groups. This cannot be undone.</p>
                   <div class="pw-actions">
                     <button class="pw-cancel" @click="showNsDeleteConfirm = false">Cancel</button>
                     <button class="ns-delete-confirm" @click="handleDeleteNamespace">Delete Forever</button>
@@ -650,13 +656,13 @@ onUnmounted(() => {
         <!-- Namespace password prompt overlay -->
         <div v-if="nsPasswordPrompt" class="password-overlay" @click.self="nsPasswordPrompt = null">
           <div class="password-dialog">
-            <h4>Unlock Namespace</h4>
+            <h4>Unlock Group</h4>
             <p>"{{ nsPasswordPrompt.path }}" is password-protected</p>
             <form @submit.prevent="handleNsPasswordSubmit">
               <input
                 v-model="nsPasswordInput"
                 type="password"
-                placeholder="Namespace password"
+                placeholder="Group password"
                 autocomplete="off"
                 autofocus
               />
@@ -1439,6 +1445,19 @@ onUnmounted(() => {
   font-size: 0.75rem;
   color: var(--danger);
   line-height: 1.3;
+}
+
+.browse-explainer {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+  line-height: 1.4;
+}
+
+.private-ns-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
 }
 
 .ns-delete-confirm {
