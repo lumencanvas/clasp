@@ -12,7 +12,11 @@ const props = defineProps({
   peers: { type: Array, default: () => [] },
   layout: { type: String, default: 'grid' },
   spotlightPeer: { type: String, default: null },
+  pinnedPeerId: { type: String, default: null },
+  speakingPeerIds: { default: () => new Set() },
 })
+
+const emit = defineEmits(['pin'])
 
 const allTiles = computed(() => {
   const local = {
@@ -50,22 +54,52 @@ const stripTiles = computed(() => {
 
 const totalTiles = computed(() => allTiles.value.length)
 
-const gridClass = computed(() => {
-  const n = totalTiles.value
-  if (n <= 1) return 'grid-1'
-  if (n <= 4) return 'grid-4'
-  return 'grid-9'
-})
-
 // IntersectionObserver: only attach streams for visible tiles
 const gridRef = ref(null)
 const visibleTileIds = ref(new Set())
 let observer = null
 
 function isTileVisible(id) {
-  // For small counts, always visible
   if (totalTiles.value <= 9) return true
   return visibleTileIds.value.has(id)
+}
+
+function handlePin(id) {
+  if (props.layout === 'grid') {
+    // In grid, clicking a tile switches to spotlight with that peer pinned
+    emit('pin', id)
+  } else {
+    // In spotlight/sidebar, clicking a strip tile pins it
+    emit('pin', id)
+  }
+}
+
+// Swipe gesture for spotlight main tile (mobile)
+let swipeStartX = 0
+let swipeStartY = 0
+
+function handlePointerDown(e) {
+  swipeStartX = e.clientX
+  swipeStartY = e.clientY
+}
+
+function handlePointerUp(e) {
+  const dx = e.clientX - swipeStartX
+  const dy = e.clientY - swipeStartY
+  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 2) {
+    // Horizontal swipe detected
+    const tiles = allTiles.value
+    const currentIdx = tiles.findIndex(t => t.id === spotlightTile.value.id)
+    if (dx < 0) {
+      // Swipe left - next peer
+      const nextIdx = (currentIdx + 1) % tiles.length
+      emit('pin', tiles[nextIdx].id)
+    } else {
+      // Swipe right - previous peer
+      const prevIdx = (currentIdx - 1 + tiles.length) % tiles.length
+      emit('pin', tiles[prevIdx].id)
+    }
+  }
 }
 
 onMounted(() => {
@@ -91,7 +125,7 @@ onUnmounted(() => {
 
 <template>
   <!-- Grid layout -->
-  <div v-if="layout === 'grid'" ref="gridRef" :class="['video-grid', gridClass]">
+  <div v-if="layout === 'grid'" ref="gridRef" :class="['video-grid', { 'grid-single': totalTiles <= 1 }]">
     <div v-for="tile in allTiles" :key="tile.id" :data-tile-id="tile.id">
       <VideoTile
         :stream="isTileVisible(tile.id) ? tile.stream : null"
@@ -102,13 +136,20 @@ onUnmounted(() => {
         :is-screen-share="tile.isScreenShare"
         :avatar-color="tile.avatarColor"
         :muted="tile.isLocal"
+        :is-pinned="pinnedPeerId === tile.id"
+        :is-speaking="speakingPeerIds.has(tile.id)"
+        @pin="handlePin(tile.id)"
       />
     </div>
   </div>
 
   <!-- Spotlight layout: one large + horizontal strip below -->
   <div v-else-if="layout === 'spotlight'" class="video-spotlight">
-    <div class="spotlight-main">
+    <div
+      class="spotlight-main"
+      @pointerdown="handlePointerDown"
+      @pointerup="handlePointerUp"
+    >
       <VideoTile
         :stream="spotlightTile.stream"
         :name="spotlightTile.name"
@@ -118,6 +159,9 @@ onUnmounted(() => {
         :is-screen-share="spotlightTile.isScreenShare"
         :avatar-color="spotlightTile.avatarColor"
         :muted="spotlightTile.isLocal"
+        :is-pinned="pinnedPeerId === spotlightTile.id"
+        :is-speaking="speakingPeerIds.has(spotlightTile.id)"
+        @pin="handlePin(spotlightTile.id)"
       />
     </div>
     <div v-if="stripTiles.length" class="spotlight-strip">
@@ -132,13 +176,20 @@ onUnmounted(() => {
         :is-screen-share="tile.isScreenShare"
         :avatar-color="tile.avatarColor"
         :muted="tile.isLocal"
+        :is-pinned="pinnedPeerId === tile.id"
+        :is-speaking="speakingPeerIds.has(tile.id)"
+        @pin="handlePin(tile.id)"
       />
     </div>
   </div>
 
   <!-- Sidebar layout: one large left + vertical strip right -->
   <div v-else class="video-sidebar">
-    <div class="sidebar-main">
+    <div
+      class="sidebar-main"
+      @pointerdown="handlePointerDown"
+      @pointerup="handlePointerUp"
+    >
       <VideoTile
         :stream="spotlightTile.stream"
         :name="spotlightTile.name"
@@ -148,6 +199,9 @@ onUnmounted(() => {
         :is-screen-share="spotlightTile.isScreenShare"
         :avatar-color="spotlightTile.avatarColor"
         :muted="spotlightTile.isLocal"
+        :is-pinned="pinnedPeerId === spotlightTile.id"
+        :is-speaking="speakingPeerIds.has(spotlightTile.id)"
+        @pin="handlePin(spotlightTile.id)"
       />
     </div>
     <div v-if="stripTiles.length" class="sidebar-strip">
@@ -162,6 +216,9 @@ onUnmounted(() => {
         :is-screen-share="tile.isScreenShare"
         :avatar-color="tile.avatarColor"
         :muted="tile.isLocal"
+        :is-pinned="pinnedPeerId === tile.id"
+        :is-speaking="speakingPeerIds.has(tile.id)"
+        @pin="handlePin(tile.id)"
       />
     </div>
   </div>
@@ -177,6 +234,7 @@ onUnmounted(() => {
   min-height: 0;
   overflow: hidden;
   align-content: center;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }
 
 .video-grid > div {
@@ -184,35 +242,11 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.grid-1 {
+.video-grid.grid-single {
   grid-template-columns: 1fr;
   max-width: 800px;
   margin: 0 auto;
   width: 100%;
-}
-
-.grid-4 {
-  grid-template-columns: repeat(2, 1fr);
-}
-
-.grid-9 {
-  grid-template-columns: repeat(3, 1fr);
-}
-
-@media (max-width: 480px) {
-  .grid-4 {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .grid-9 {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 320px) {
-  .grid-4, .grid-9 {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* Spotlight layout */
@@ -240,7 +274,7 @@ onUnmounted(() => {
   gap: 0.5rem;
   flex-shrink: 0;
   overflow-x: auto;
-  height: 120px;
+  height: 140px;
 }
 
 .spotlight-strip :deep(.video-tile) {
@@ -276,7 +310,7 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 0.5rem;
   overflow-y: auto;
-  min-width: 0;
+  min-width: 180px;
 }
 
 .sidebar-strip :deep(.video-tile) {
@@ -284,6 +318,18 @@ onUnmounted(() => {
 }
 
 @media (max-width: 480px) {
+  .video-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+
+  .spotlight-strip {
+    height: 80px;
+  }
+
+  .spotlight-strip :deep(.video-tile) {
+    min-width: 120px;
+  }
+
   .video-sidebar {
     flex-direction: column;
   }
@@ -296,12 +342,19 @@ onUnmounted(() => {
     flex-direction: row;
     overflow-x: auto;
     overflow-y: hidden;
-    height: 100px;
+    height: 80px;
+    min-width: unset;
   }
 
   .sidebar-strip :deep(.video-tile) {
-    min-width: 140px;
+    min-width: 120px;
     height: 100%;
+  }
+}
+
+@media (max-width: 320px) {
+  .video-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

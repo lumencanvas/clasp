@@ -4,13 +4,33 @@ import { ref, computed, watch } from 'vue'
  * Video layout mode composable
  * Manages grid/spotlight/sidebar layouts and peer pinning
  */
-export function useVideoLayout(isScreenSharing) {
+export function useVideoLayout(isScreenSharing, speakingPeerIds) {
   const layout = ref('grid')
   const pinnedPeerId = ref(null)
 
   let layoutBeforeScreenShare = null
 
-  const spotlightPeer = computed(() => pinnedPeerId.value || null)
+  const activeSpeakerId = computed(() => {
+    if (!speakingPeerIds?.value) return null
+    const ids = speakingPeerIds.value
+    if (ids.size === 0) return null
+    // Prefer non-local speaker
+    for (const id of ids) {
+      if (id !== '__local__') return id
+    }
+    // Fall back to local if only local is speaking
+    return ids.values().next().value
+  })
+
+  const spotlightPeer = computed(() => {
+    // Pinned peer always takes priority
+    if (pinnedPeerId.value) return pinnedPeerId.value
+    // Auto-speaker in spotlight/sidebar layouts
+    if ((layout.value === 'spotlight' || layout.value === 'sidebar') && activeSpeakerId.value) {
+      return activeSpeakerId.value
+    }
+    return null
+  })
 
   function setLayout(mode) {
     if (['grid', 'spotlight', 'sidebar'].includes(mode)) {
@@ -19,7 +39,12 @@ export function useVideoLayout(isScreenSharing) {
   }
 
   function pinPeer(id) {
-    pinnedPeerId.value = id
+    // Toggle: if already pinned, unpin
+    if (pinnedPeerId.value === id) {
+      pinnedPeerId.value = null
+    } else {
+      pinnedPeerId.value = id
+    }
   }
 
   function unpinPeer() {
@@ -48,6 +73,7 @@ export function useVideoLayout(isScreenSharing) {
   return {
     layout,
     pinnedPeerId,
+    activeSpeakerId,
     spotlightPeer,
     setLayout,
     pinPeer,

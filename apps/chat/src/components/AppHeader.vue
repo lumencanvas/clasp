@@ -167,6 +167,12 @@ const typeInfo = computed(() => ROOM_TYPE_INFO[props.roomType] || ROOM_TYPE_INFO
   height: 18px;
 }
 
+@media (max-width: 360px) {
+  .online-count {
+    display: none;
+  }
+}
+
 @media (min-width: 768px) {
   .hamburger-btn {
     display: none;

@@ -4,9 +4,10 @@ const props = defineProps({
   videoEnabled: { type: Boolean, default: true },
   isScreenSharing: { type: Boolean, default: false },
   layout: { type: String, default: 'grid' },
+  hasPinnedPeer: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave', 'set-layout'])
+const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave', 'set-layout', 'toggle-pin'])
 </script>
 
 <template>
@@ -58,6 +59,18 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
         <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
         <line x1="8" y1="21" x2="16" y2="21"/>
         <line x1="12" y1="17" x2="12" y2="21"/>
+      </svg>
+    </button>
+
+    <!-- Pin/unpin button -->
+    <button
+      :class="['control-btn', { active: hasPinnedPeer }]"
+      @click="emit('toggle-pin')"
+      :title="hasPinnedPeer ? 'Unpin speaker' : 'Pin active speaker'"
+      :aria-label="hasPinnedPeer ? 'Unpin speaker' : 'Pin active speaker'"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
       </svg>
     </button>
 
@@ -123,12 +136,13 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.5rem;
   padding: 0.75rem;
   background: var(--bg-secondary);
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+  overflow-x: auto;
 }
 
 .control-btn {
@@ -142,6 +156,7 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
   border-radius: 50%;
   color: var(--text-primary);
   transition: all 0.15s;
+  flex-shrink: 0;
 }
 
 .control-btn svg {
@@ -164,7 +179,8 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
   color: var(--danger);
 }
 
-.control-btn.sharing {
+.control-btn.sharing,
+.control-btn.active {
   background: rgba(var(--accent-rgb),0.15);
   border-color: var(--accent);
   color: var(--accent);
@@ -188,6 +204,7 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 2px;
+  flex-shrink: 0;
 }
 
 .layout-btn {
@@ -226,10 +243,6 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
 }
 
 @media (max-width: 480px) {
-  .layout-group {
-    display: none;
-  }
-
   .video-controls {
     padding: 0.5rem;
     padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
@@ -244,6 +257,20 @@ const emit = defineEmits(['toggle-audio', 'toggle-video', 'share-screen', 'leave
   .control-btn svg {
     width: 16px;
     height: 16px;
+  }
+
+  .layout-group {
+    padding: 1px;
+  }
+
+  .layout-btn {
+    width: 28px;
+    height: 28px;
+  }
+
+  .layout-btn svg {
+    width: 14px;
+    height: 14px;
   }
 }
 </style>

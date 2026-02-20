@@ -63,6 +63,7 @@ const {
   error: videoError,
   peerList,
   participantList,
+  speakingPeerIds,
   getUserMedia,
   getUserMediaSelective,
   enableAudio,
@@ -75,10 +76,46 @@ const {
   stopUserMedia,
 } = useVideoRoom(roomIdRef)
 
-const { layout, spotlightPeer, setLayout } = useVideoLayout(isScreenSharing)
+const { layout, pinnedPeerId, spotlightPeer, setLayout, pinPeer, unpinPeer } = useVideoLayout(isScreenSharing, speakingPeerIds)
 
 const mediaLoading = ref(false)
 const videoCollapsed = ref(false)
+
+// Resizable split
+const splitRatio = ref(typeof window !== 'undefined' && window.innerWidth < 768 ? 40 : 60)
+const isResizing = ref(false)
+const comboRef = ref(null)
+
+function startResize(e) {
+  e.preventDefault()
+  isResizing.value = true
+
+  function onMove(ev) {
+    const containerEl = comboRef.value
+    if (!containerEl) return
+    const rect = containerEl.getBoundingClientRect()
+
+    // Detect if horizontal (desktop) or vertical (mobile/tablet)
+    if (window.innerWidth >= 1024) {
+      const clientX = ev.clientX || (ev.touches && ev.touches[0].clientX)
+      const ratio = ((clientX - rect.left) / rect.width) * 100
+      splitRatio.value = Math.min(80, Math.max(20, ratio))
+    } else {
+      const clientY = ev.clientY || (ev.touches && ev.touches[0].clientY)
+      const ratio = ((clientY - rect.top) / rect.height) * 100
+      splitRatio.value = Math.min(80, Math.max(20, ratio))
+    }
+  }
+
+  function onUp() {
+    isResizing.value = false
+    document.removeEventListener('pointermove', onMove)
+    document.removeEventListener('pointerup', onUp)
+  }
+
+  document.addEventListener('pointermove', onMove)
+  document.addEventListener('pointerup', onUp)
+}
 
 // Merge chat + video participants for member list
 const sortedParticipants = computed(() => {
@@ -150,10 +187,23 @@ function handleSend(text) {
 function handleSendImage(dataUrl) {
   sendMessage('', { image: dataUrl })
 }
+
+function handlePin(id) {
+  pinPeer(id)
+  if (layout.value === 'grid') {
+    setLayout('spotlight')
+  }
+}
+
+function handleTogglePin() {
+  if (pinnedPeerId.value) {
+    unpinPeer()
+  }
+}
 </script>
 
 <template>
-  <div class="combo-channel">
+  <div ref="comboRef" :class="['combo-channel', { resizing: isResizing }]">
     <!-- Admin overlay (positioned absolutely so it doesn't break row layout) -->
     <div v-if="isAdmin" class="admin-overlay-wrap">
       <button
@@ -177,7 +227,10 @@ function handleSendImage(dataUrl) {
     </div>
 
     <!-- Video section -->
-    <div :class="['combo-video', { collapsed: videoCollapsed }]">
+    <div
+      :class="['combo-video', { collapsed: videoCollapsed }]"
+      :style="!videoCollapsed ? { flexBasis: splitRatio + '%' } : undefined"
+    >
       <button class="collapse-toggle" @click="videoCollapsed = !videoCollapsed">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline v-if="videoCollapsed" points="6 9 12 15 18 9"/>
@@ -207,21 +260,33 @@ function handleSendImage(dataUrl) {
             :peers="peerList"
             :layout="layout"
             :spotlight-peer="spotlightPeer"
+            :pinned-peer-id="pinnedPeerId"
+            :speaking-peer-ids="speakingPeerIds"
+            @pin="handlePin"
           />
           <VideoControls
             :audio-enabled="audioEnabled"
             :video-enabled="videoEnabled"
             :is-screen-sharing="isScreenSharing"
             :layout="layout"
+            :has-pinned-peer="!!pinnedPeerId"
             @toggle-audio="handleToggleAudio"
             @toggle-video="handleToggleVideo"
             @share-screen="shareScreen"
             @set-layout="setLayout"
+            @toggle-pin="handleTogglePin"
             @leave="handleLeaveVideo"
           />
         </template>
       </div>
     </div>
+
+    <!-- Resize handle -->
+    <div
+      v-if="!videoCollapsed"
+      class="resize-handle"
+      @pointerdown="startResize"
+    ></div>
 
     <!-- Chat section -->
     <div class="combo-chat">
@@ -255,6 +320,10 @@ function handleSendImage(dataUrl) {
   height: 100%;
   min-height: 0;
   position: relative;
+}
+
+.combo-channel.resizing {
+  user-select: none;
 }
 
 .admin-overlay-wrap {
@@ -300,13 +369,12 @@ function handleSendImage(dataUrl) {
 .combo-video {
   display: flex;
   flex-direction: column;
-  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .combo-video:not(.collapsed) {
-  flex: 0 0 40%;
-  min-height: 180px;
-  max-height: 40vh;
+  min-height: 120px;
+  max-height: 80%;
 }
 
 .collapse-toggle {
@@ -342,6 +410,19 @@ function handleSendImage(dataUrl) {
   overflow: hidden;
 }
 
+.resize-handle {
+  flex-shrink: 0;
+  height: 6px;
+  cursor: row-resize;
+  background: var(--border);
+  transition: background 0.15s;
+  touch-action: none;
+}
+
+.resize-handle:hover {
+  background: var(--accent);
+}
+
 .combo-chat {
   flex: 1;
   display: flex;
@@ -351,8 +432,8 @@ function handleSendImage(dataUrl) {
 
 @media (max-width: 767px) {
   .combo-video:not(.collapsed) {
-    min-height: 140px;
-    max-height: 35vh;
+    min-height: 120px;
+    max-height: 80%;
   }
 
   .collapse-toggle {
@@ -369,14 +450,14 @@ function handleSendImage(dataUrl) {
   }
 
   .combo-video {
-    border-bottom: none;
     border-right: 1px solid var(--border);
   }
 
   .combo-video:not(.collapsed) {
-    flex: 0 0 60%;
     min-height: unset;
     max-height: none;
+    min-width: 20%;
+    max-width: 80%;
   }
 
   .combo-chat {
@@ -386,6 +467,12 @@ function handleSendImage(dataUrl) {
   .combo-video.collapsed {
     flex: 0 0 auto;
     border-right: 1px solid var(--border);
+  }
+
+  .resize-handle {
+    width: 6px;
+    height: auto;
+    cursor: col-resize;
   }
 }
 </style>

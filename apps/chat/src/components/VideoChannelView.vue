@@ -38,6 +38,7 @@ const {
   error,
   peerList,
   participantList,
+  speakingPeerIds,
   getUserMedia,
   getUserMediaSelective,
   enableAudio,
@@ -50,7 +51,7 @@ const {
   stopUserMedia,
 } = useVideoRoom(roomIdRef)
 
-const { layout, spotlightPeer, setLayout } = useVideoLayout(isScreenSharing)
+const { layout, pinnedPeerId, spotlightPeer, setLayout, pinPeer, unpinPeer } = useVideoLayout(isScreenSharing, speakingPeerIds)
 
 const mediaLoading = ref(false)
 
@@ -103,6 +104,19 @@ async function handleToggleVideo() {
     toggleVideo()
   }
 }
+
+function handlePin(id) {
+  pinPeer(id)
+  if (layout.value === 'grid') {
+    setLayout('spotlight')
+  }
+}
+
+function handleTogglePin() {
+  if (pinnedPeerId.value) {
+    unpinPeer()
+  }
+}
 </script>
 
 <template>
@@ -152,16 +166,21 @@ async function handleToggleVideo() {
         :peers="peerList"
         :layout="layout"
         :spotlight-peer="spotlightPeer"
+        :pinned-peer-id="pinnedPeerId"
+        :speaking-peer-ids="speakingPeerIds"
+        @pin="handlePin"
       />
       <VideoControls
         :audio-enabled="audioEnabled"
         :video-enabled="videoEnabled"
         :is-screen-sharing="isScreenSharing"
         :layout="layout"
+        :has-pinned-peer="!!pinnedPeerId"
         @toggle-audio="handleToggleAudio"
         @toggle-video="handleToggleVideo"
         @share-screen="shareScreen"
         @set-layout="setLayout"
+        @toggle-pin="handleTogglePin"
         @leave="handleLeave"
       />
     </template>

@@ -174,10 +174,12 @@ defineExpose({ toggleSidebar, closeSidebar })
     width: min(280px, 85vw);
     padding-left: env(safe-area-inset-left);
     box-shadow: 4px 0 20px rgba(0,0,0,0.3);
+    animation: slide-in-left 0.2s ease-out;
   }
 
   .sidebar-overlay {
     display: block;
+    animation: fade-in 0.2s ease-out;
   }
 }
 
@@ -204,10 +206,12 @@ defineExpose({ toggleSidebar, closeSidebar })
     width: min(280px, 85vw);
     z-index: 100;
     box-shadow: -4px 0 20px rgba(0,0,0,0.3);
+    animation: slide-in-right 0.2s ease-out;
   }
 
   .members-overlay {
     display: block;
+    animation: fade-in 0.2s ease-out;
   }
 }
 
@@ -221,5 +225,20 @@ defineExpose({ toggleSidebar, closeSidebar })
   .members-overlay {
     display: none !important;
   }
+}
+
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 </style>

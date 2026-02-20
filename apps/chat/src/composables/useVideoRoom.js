@@ -1,6 +1,7 @@
 import { ref, reactive, computed, watch, onUnmounted } from 'vue'
 import { useClasp } from './useClasp.js'
 import { useIdentity } from './useIdentity.js'
+import { useAudioLevel } from './useAudioLevel.js'
 import { ADDR, TTL } from '../lib/constants.js'
 
 const ICE_SERVERS = [
@@ -25,6 +26,17 @@ export function useVideoRoom(roomId) {
   const participants = ref(new Map())
 
   const iceCandidateQueues = new Map()
+  const speakingPeerIds = ref(new Set())
+  const peerAudioLevels = new Map() // peerId -> { isSpeaking, cleanup }
+
+  // Local audio level detection
+  const localAudioLevel = useAudioLevel(localStream)
+  watch(localAudioLevel.isSpeaking, (speaking) => {
+    const s = new Set(speakingPeerIds.value)
+    if (speaking) s.add('__local__')
+    else s.delete('__local__')
+    speakingPeerIds.value = s
+  })
 
   let unsubPresence = null
   let unsubSignal = null
@@ -131,6 +143,12 @@ export function useVideoRoom(roomId) {
     peers.clear()
     participants.value.clear()
     iceCandidateQueues.clear()
+    // Clean up all audio level tracking
+    for (const [, al] of peerAudioLevels) {
+      al.cleanup()
+    }
+    peerAudioLevels.clear()
+    speakingPeerIds.value = new Set()
 
     if (unsubPresence) { unsubPresence(); unsubPresence = null }
     if (unsubSignal) { unsubSignal(); unsubSignal = null }
@@ -166,6 +184,12 @@ export function useVideoRoom(roomId) {
     closePeerConnection(peerId)
     peers.delete(peerId)
     iceCandidateQueues.delete(peerId)
+    // Clean up audio level tracking
+    const al = peerAudioLevels.get(peerId)
+    if (al) { al.cleanup(); peerAudioLevels.delete(peerId) }
+    const s = new Set(speakingPeerIds.value)
+    s.delete(peerId)
+    speakingPeerIds.value = s
   }
 
   function pruneStaleParticipants() {
@@ -207,6 +231,19 @@ export function useVideoRoom(roomId) {
       }
       existing.stream = remoteStream
       peers.set(peerId, { ...existing })
+
+      // Set up audio level detection for remote peer
+      if (event.track.kind === 'audio' && !peerAudioLevels.has(peerId)) {
+        const streamRef = ref(remoteStream)
+        const { isSpeaking, cleanup } = useAudioLevel(streamRef)
+        peerAudioLevels.set(peerId, { isSpeaking, cleanup })
+        watch(isSpeaking, (speaking) => {
+          const s = new Set(speakingPeerIds.value)
+          if (speaking) s.add(peerId)
+          else s.delete(peerId)
+          speakingPeerIds.value = s
+        })
+      }
     }
 
     connection.onicecandidate = (event) => {
@@ -488,6 +525,7 @@ export function useVideoRoom(roomId) {
     peers,
     peerList,
     participantList,
+    speakingPeerIds,
     getUserMedia,
     getAudioOnly,
     getUserMediaSelective,
