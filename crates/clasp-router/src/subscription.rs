@@ -1,8 +1,13 @@
-//! Subscription management
+//! Subscription management — segment-level trie for O(k) pattern matching
+//!
+//! Replaces the previous prefix-based DashMap approach (O(n) per prefix bucket)
+//! with a trie where each node represents a path segment. Wildcards (`*`) and
+//! globstars (`**`) are dedicated child branches, giving O(k) lookup where
+//! k = number of address segments (typically 3-5).
 
 use clasp_core::{address::Pattern, SignalType, SubscribeOptions};
-use dashmap::DashMap;
-use std::collections::HashSet;
+use parking_lot::RwLock;
+use std::collections::{HashMap, HashSet};
 
 use crate::SessionId;
 
@@ -60,65 +65,299 @@ impl Subscription {
     }
 }
 
-/// Manages all subscriptions
+// ---------------------------------------------------------------------------
+// Trie internals
+// ---------------------------------------------------------------------------
+
+/// Subscriber entry stored in trie leaf nodes
+#[derive(Debug, Clone)]
+struct SubscriberEntry {
+    session_id: SessionId,
+    sub_id: u32,
+    types: HashSet<SignalType>,
+    /// When set, this entry was placed in a wildcard/globstar bucket due to a
+    /// partial wildcard segment (e.g. `zone5*`). The full pattern string is
+    /// stored here for glob-match verification at query time.
+    verify_pattern: Option<String>,
+}
+
+/// Segment-level trie node
+#[derive(Debug, Default)]
+struct TrieNode {
+    /// Literal segment children
+    children: HashMap<String, TrieNode>,
+    /// Single-segment wildcard (`*`) child
+    wildcard: Option<Box<TrieNode>>,
+    /// Multi-segment globstar (`**`) child
+    globstar: Option<Box<TrieNode>>,
+    /// Subscriptions terminating at this node
+    subscribers: Vec<SubscriberEntry>,
+}
+
+impl TrieNode {
+    fn is_empty(&self) -> bool {
+        self.subscribers.is_empty()
+            && self.children.is_empty()
+            && self.wildcard.is_none()
+            && self.globstar.is_none()
+    }
+
+    /// Insert a subscriber entry at the path described by `segments`.
+    fn insert(&mut self, segments: &[&str], entry: SubscriberEntry) {
+        if segments.is_empty() {
+            self.subscribers.push(entry);
+            return;
+        }
+
+        let seg = segments[0];
+        let rest = &segments[1..];
+
+        if seg == "**" {
+            self.globstar
+                .get_or_insert_with(|| Box::new(TrieNode::default()))
+                .insert(rest, entry);
+        } else if seg == "*" || seg.contains('*') {
+            // Pure `*` and partial wildcards (e.g. `zone5*`) both go into the
+            // wildcard branch. Partial wildcards carry a verify_pattern for
+            // post-match verification.
+            self.wildcard
+                .get_or_insert_with(|| Box::new(TrieNode::default()))
+                .insert(rest, entry);
+        } else {
+            self.children
+                .entry(seg.to_string())
+                .or_default()
+                .insert(rest, entry);
+        }
+    }
+
+    /// Remove a specific subscriber entry by walking the segment path.
+    fn remove(&mut self, segments: &[&str], session_id: &str, sub_id: u32) -> bool {
+        if segments.is_empty() {
+            let before = self.subscribers.len();
+            self.subscribers
+                .retain(|e| !(e.session_id == session_id && e.sub_id == sub_id));
+            return self.subscribers.len() < before;
+        }
+
+        let seg = segments[0];
+        let rest = &segments[1..];
+
+        if seg == "**" {
+            if let Some(ref mut gs) = self.globstar {
+                let removed = gs.remove(rest, session_id, sub_id);
+                if gs.is_empty() {
+                    self.globstar = None;
+                }
+                return removed;
+            }
+            false
+        } else if seg == "*" || seg.contains('*') {
+            if let Some(ref mut wc) = self.wildcard {
+                let removed = wc.remove(rest, session_id, sub_id);
+                if wc.is_empty() {
+                    self.wildcard = None;
+                }
+                return removed;
+            }
+            false
+        } else {
+            let key = seg.to_string();
+            if let Some(child) = self.children.get_mut(&key) {
+                let removed = child.remove(rest, session_id, sub_id);
+                if child.is_empty() {
+                    self.children.remove(&key);
+                }
+                removed
+            } else {
+                false
+            }
+        }
+    }
+
+    /// Remove all entries belonging to a session (full tree walk).
+    fn remove_session(&mut self, session_id: &str) {
+        self.subscribers.retain(|e| e.session_id != session_id);
+
+        for child in self.children.values_mut() {
+            child.remove_session(session_id);
+        }
+        self.children.retain(|_, c| !c.is_empty());
+
+        if let Some(ref mut wc) = self.wildcard {
+            wc.remove_session(session_id);
+            if wc.is_empty() {
+                self.wildcard = None;
+            }
+        }
+
+        if let Some(ref mut gs) = self.globstar {
+            gs.remove_session(session_id);
+            if gs.is_empty() {
+                self.globstar = None;
+            }
+        }
+    }
+
+    /// Collect all matching subscribers for the given address segments.
+    fn find_matches(
+        &self,
+        segments: &[&str],
+        idx: usize,
+        signal_type: Option<SignalType>,
+        address: &str,
+        results: &mut HashSet<SessionId>,
+    ) {
+        // --- globstar child: `**` matches zero or more segments ---
+        if let Some(ref gs) = self.globstar {
+            for i in idx..=segments.len() {
+                if i == segments.len() {
+                    // `**` consumed all remaining segments
+                    collect_filtered(&gs.subscribers, signal_type, address, results);
+                    // Follow nested globstars (handles `/**/**` patterns)
+                    collect_zero_remaining(gs, signal_type, address, results);
+                } else {
+                    // Try the globstar node's literal children at position i
+                    if let Some(child) = gs.children.get(segments[i]) {
+                        child.find_matches(segments, i + 1, signal_type, address, results);
+                    }
+                    // Try the globstar node's wildcard child at position i
+                    if let Some(ref wc) = gs.wildcard {
+                        wc.find_matches(segments, i + 1, signal_type, address, results);
+                    }
+                    // Try nested globstar (handles `/**/a/**/b` patterns)
+                    if let Some(ref nested_gs) = gs.globstar {
+                        // Only recurse into nested globstar for positions beyond idx
+                        // to avoid re-checking the same start position
+                        nested_gs.find_matches(segments, i, signal_type, address, results);
+                    }
+                }
+            }
+        }
+
+        // --- base case: consumed all segments ---
+        if idx >= segments.len() {
+            collect_filtered(&self.subscribers, signal_type, address, results);
+            return;
+        }
+
+        let seg = segments[idx];
+
+        // --- literal match ---
+        if let Some(child) = self.children.get(seg) {
+            child.find_matches(segments, idx + 1, signal_type, address, results);
+        }
+
+        // --- single-segment wildcard (`*`) match ---
+        if let Some(ref wc) = self.wildcard {
+            wc.find_matches(segments, idx + 1, signal_type, address, results);
+        }
+    }
+}
+
+/// Collect subscribers from a node and all its nested globstar children,
+/// representing `**` matching zero remaining segments.
+fn collect_zero_remaining(
+    node: &TrieNode,
+    signal_type: Option<SignalType>,
+    address: &str,
+    results: &mut HashSet<SessionId>,
+) {
+    if let Some(ref gs) = node.globstar {
+        collect_filtered(&gs.subscribers, signal_type, address, results);
+        collect_zero_remaining(gs, signal_type, address, results);
+    }
+}
+
+/// Add matching subscribers to the result set, applying signal-type and
+/// optional glob-match verification filters.
+fn collect_filtered(
+    subscribers: &[SubscriberEntry],
+    signal_type: Option<SignalType>,
+    address: &str,
+    results: &mut HashSet<SessionId>,
+) {
+    for entry in subscribers {
+        // Verify partial wildcard entries against the full address
+        if let Some(ref pat) = entry.verify_pattern {
+            if !clasp_core::address::glob_match(pat, address) {
+                continue;
+            }
+        }
+
+        // Signal-type filter: empty types set means "match all"
+        if entry.types.is_empty()
+            || signal_type.map_or(true, |st| entry.types.contains(&st))
+        {
+            results.insert(entry.session_id.clone());
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/// Inner state protected by RwLock
+struct TrieInner {
+    root: TrieNode,
+    /// Full subscription data for `remove()` return value and `len()`
+    subscriptions: HashMap<(SessionId, u32), Subscription>,
+}
+
+/// Manages all subscriptions using a segment-level trie.
 pub struct SubscriptionManager {
-    /// All subscriptions by (session_id, subscription_id)
-    subscriptions: DashMap<(SessionId, u32), Subscription>,
-    /// Index by address prefix for faster lookup
-    by_prefix: DashMap<String, Vec<(SessionId, u32)>>,
+    inner: RwLock<TrieInner>,
 }
 
 impl SubscriptionManager {
     pub fn new() -> Self {
         Self {
-            subscriptions: DashMap::new(),
-            by_prefix: DashMap::new(),
+            inner: RwLock::new(TrieInner {
+                root: TrieNode::default(),
+                subscriptions: HashMap::new(),
+            }),
         }
     }
 
     /// Add a subscription
     pub fn add(&self, sub: Subscription) {
+        let pattern_segments: Vec<String> =
+            sub.pattern.address().segments().to_vec();
+        let segments: Vec<&str> = pattern_segments.iter().map(|s| s.as_str()).collect();
+
+        // Determine if any segment is a partial wildcard (contains `*` but
+        // isn't exactly `*` or `**`)
+        let has_partial_wildcard = pattern_segments
+            .iter()
+            .any(|s| s.contains('*') && s != "*" && s != "**");
+
+        let entry = SubscriberEntry {
+            session_id: sub.session_id.clone(),
+            sub_id: sub.id,
+            types: sub.types.clone(),
+            verify_pattern: if has_partial_wildcard {
+                Some(sub.pattern.address().as_str().to_string())
+            } else {
+                None
+            },
+        };
+
         let key = (sub.session_id.clone(), sub.id);
-
-        // Add to prefix index (use first segment as prefix)
-        let prefix = sub
-            .pattern
-            .address()
-            .segments()
-            .first()
-            .map(|s| format!("/{}", s))
-            .unwrap_or_else(|| "/".to_string());
-
-        self.by_prefix
-            .entry(prefix)
-            .or_insert_with(Vec::new)
-            .push(key.clone());
-
-        self.subscriptions.insert(key, sub);
+        let mut inner = self.inner.write();
+        inner.root.insert(&segments, entry);
+        inner.subscriptions.insert(key, sub);
     }
 
     /// Remove a subscription
     pub fn remove(&self, session_id: &SessionId, id: u32) -> Option<Subscription> {
+        let mut inner = self.inner.write();
         let key = (session_id.clone(), id);
-        if let Some((_, sub)) = self.subscriptions.remove(&key) {
-            // Clean up the by_prefix index
-            let prefix = sub
-                .pattern
-                .address()
-                .segments()
-                .first()
-                .map(|s| format!("/{}", s))
-                .unwrap_or_else(|| "/".to_string());
-
-            // Remove from prefix index and clean up empty entries
-            self.by_prefix.alter(&prefix, |_, mut vec| {
-                vec.retain(|k| k != &key);
-                vec
-            });
-
-            // Remove empty prefix entries to prevent memory accumulation
-            self.by_prefix.retain(|_, v| !v.is_empty());
-
+        if let Some(sub) = inner.subscriptions.remove(&key) {
+            let pattern_segments: Vec<String> =
+                sub.pattern.address().segments().to_vec();
+            let segments: Vec<&str> = pattern_segments.iter().map(|s| s.as_str()).collect();
+            inner.root.remove(&segments, session_id, id);
             Some(sub)
         } else {
             None
@@ -127,24 +366,9 @@ impl SubscriptionManager {
 
     /// Remove all subscriptions for a session
     pub fn remove_session(&self, session_id: &SessionId) {
-        let keys: Vec<_> = self
-            .subscriptions
-            .iter()
-            .filter(|entry| entry.key().0 == *session_id)
-            .map(|entry| entry.key().clone())
-            .collect();
-
-        for key in &keys {
-            self.subscriptions.remove(key);
-        }
-
-        // Clean up by_prefix index - remove entries referencing this session
-        for mut entry in self.by_prefix.iter_mut() {
-            entry.value_mut().retain(|k| k.0 != *session_id);
-        }
-
-        // Remove empty prefix entries
-        self.by_prefix.retain(|_, v| !v.is_empty());
+        let mut inner = self.inner.write();
+        inner.subscriptions.retain(|k, _| k.0 != *session_id);
+        inner.root.remove_session(session_id);
     }
 
     /// Find all sessions subscribed to an address
@@ -153,63 +377,31 @@ impl SubscriptionManager {
         address: &str,
         signal_type: Option<SignalType>,
     ) -> Vec<SessionId> {
-        let mut subscribers = HashSet::new();
+        // Split address into segments (strip leading '/')
+        let segments: Vec<&str> = if address.len() > 1 {
+            address[1..].split('/').collect()
+        } else {
+            // address is just "/"
+            vec![""]
+        };
 
-        // Extract prefix from address (first segment)
-        let address_prefix = address
-            .split('/')
-            .nth(1)
-            .map(|s| format!("/{}", s))
-            .unwrap_or_else(|| "/".to_string());
+        let mut results = HashSet::new();
+        let inner = self.inner.read();
+        inner
+            .root
+            .find_matches(&segments, 0, signal_type, address, &mut results);
 
-        // Collect candidate subscription keys from prefix index
-        let mut candidate_keys: Vec<(SessionId, u32)> = Vec::new();
-
-        // Check subscriptions indexed under the address's prefix
-        if let Some(keys) = self.by_prefix.get(&address_prefix) {
-            candidate_keys.extend(keys.iter().cloned());
-        }
-
-        // Also check subscriptions indexed under "/" (wildcard patterns like "/**")
-        if address_prefix != "/" {
-            if let Some(keys) = self.by_prefix.get("/") {
-                candidate_keys.extend(keys.iter().cloned());
-            }
-        }
-
-        // CRITICAL: Always check "/**" key - globstar patterns that start with /**
-        // get indexed under "/**" but match everything. Without this check,
-        // subscriptions to "/**" would never match any addresses.
-        if let Some(keys) = self.by_prefix.get("/**") {
-            candidate_keys.extend(keys.iter().cloned());
-        }
-
-        // Also check "/*" key for single-level wildcard patterns at root
-        if let Some(keys) = self.by_prefix.get("/*") {
-            candidate_keys.extend(keys.iter().cloned());
-        }
-
-        // Check only the candidate subscriptions
-        for key in candidate_keys {
-            if let Some(entry) = self.subscriptions.get(&key) {
-                let sub = entry.value();
-                if sub.matches(address, signal_type) {
-                    subscribers.insert(sub.session_id.clone());
-                }
-            }
-        }
-
-        subscribers.into_iter().collect()
+        results.into_iter().collect()
     }
 
     /// Get subscription count
     pub fn len(&self) -> usize {
-        self.subscriptions.len()
+        self.inner.read().subscriptions.len()
     }
 
     /// Check if empty
     pub fn is_empty(&self) -> bool {
-        self.subscriptions.is_empty()
+        self.inner.read().subscriptions.is_empty()
     }
 }
 
@@ -439,5 +631,270 @@ mod tests {
         // /other/** should have no subscribers
         let subscribers = manager.find_subscribers("/other/foo", None);
         assert_eq!(subscribers.len(), 0);
+    }
+
+    // --- Additional trie-specific tests ---
+
+    #[test]
+    fn test_exact_address_match() {
+        let manager = SubscriptionManager::new();
+        manager.add(
+            Subscription::new(
+                1,
+                "s1".to_string(),
+                "/chat/room/abc/messages",
+                vec![],
+                SubscribeOptions::default(),
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(
+            manager.find_subscribers("/chat/room/abc/messages", None).len(),
+            1
+        );
+        assert_eq!(
+            manager.find_subscribers("/chat/room/xyz/messages", None).len(),
+            0
+        );
+        assert_eq!(
+            manager.find_subscribers("/chat/room/abc", None).len(),
+            0
+        );
+    }
+
+    #[test]
+    fn test_single_wildcard() {
+        let manager = SubscriptionManager::new();
+        manager.add(
+            Subscription::new(
+                1,
+                "s1".to_string(),
+                "/chat/room/*/messages",
+                vec![],
+                SubscribeOptions::default(),
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(
+            manager.find_subscribers("/chat/room/abc/messages", None).len(),
+            1
+        );
+        assert_eq!(
+            manager.find_subscribers("/chat/room/xyz/messages", None).len(),
+            1
+        );
+        // * should not match multiple segments
+        assert_eq!(
+            manager.find_subscribers("/chat/room/a/b/messages", None).len(),
+            0
+        );
+    }
+
+    #[test]
+    fn test_globstar_matches_zero_segments() {
+        let manager = SubscriptionManager::new();
+        manager.add(
+            Subscription::new(
+                1,
+                "s1".to_string(),
+                "/chat/**",
+                vec![],
+                SubscribeOptions::default(),
+            )
+            .unwrap(),
+        );
+
+        // ** matches zero segments (just /chat)
+        assert_eq!(manager.find_subscribers("/chat", None).len(), 1);
+        // ** matches one segment
+        assert_eq!(manager.find_subscribers("/chat/room", None).len(), 1);
+        // ** matches many segments
+        assert_eq!(
+            manager.find_subscribers("/chat/room/abc/messages", None).len(),
+            1
+        );
+    }
+
+    #[test]
+    fn test_signal_type_filtering() {
+        let manager = SubscriptionManager::new();
+        manager.add(
+            Subscription::new(
+                1,
+                "s1".to_string(),
+                "/data/**",
+                vec![SignalType::Param],
+                SubscribeOptions::default(),
+            )
+            .unwrap(),
+        );
+        manager.add(
+            Subscription::new(
+                1,
+                "s2".to_string(),
+                "/data/**",
+                vec![SignalType::Event],
+                SubscribeOptions::default(),
+            )
+            .unwrap(),
+        );
+        manager.add(
+            Subscription::new(
+                1,
+                "s3".to_string(),
+                "/data/**",
+                vec![], // matches all types
+                SubscribeOptions::default(),
+            )
+            .unwrap(),
+        );
+
+        let param_subs = manager.find_subscribers("/data/x", Some(SignalType::Param));
+        assert!(param_subs.contains(&"s1".to_string()));
+        assert!(!param_subs.contains(&"s2".to_string()));
+        assert!(param_subs.contains(&"s3".to_string()));
+
+        let event_subs = manager.find_subscribers("/data/x", Some(SignalType::Event));
+        assert!(!event_subs.contains(&"s1".to_string()));
+        assert!(event_subs.contains(&"s2".to_string()));
+        assert!(event_subs.contains(&"s3".to_string()));
+
+        // None signal_type matches all
+        let all_subs = manager.find_subscribers("/data/x", None);
+        assert_eq!(all_subs.len(), 3);
+    }
+
+    #[test]
+    fn test_multiple_wildcards_in_pattern() {
+        let manager = SubscriptionManager::new();
+        manager.add(
+            Subscription::new(
+                1,
+                "s1".to_string(),
+                "/scene/*/layer/*/opacity",
+                vec![],
+                SubscribeOptions::default(),
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(
+            manager
+                .find_subscribers("/scene/0/layer/3/opacity", None)
+                .len(),
+            1
+        );
+        assert_eq!(
+            manager
+                .find_subscribers("/scene/main/layer/bg/opacity", None)
+                .len(),
+            1
+        );
+        assert_eq!(
+            manager
+                .find_subscribers("/scene/0/layer/3/color", None)
+                .len(),
+            0
+        );
+    }
+
+    #[test]
+    fn test_overlapping_patterns() {
+        let manager = SubscriptionManager::new();
+
+        // Exact match
+        manager.add(
+            Subscription::new(
+                1,
+                "exact".to_string(),
+                "/chat/room/abc/messages",
+                vec![],
+                SubscribeOptions::default(),
+            )
+            .unwrap(),
+        );
+
+        // Wildcard match
+        manager.add(
+            Subscription::new(
+                1,
+                "wild".to_string(),
+                "/chat/room/*/messages",
+                vec![],
+                SubscribeOptions::default(),
+            )
+            .unwrap(),
+        );
+
+        // Globstar match
+        manager.add(
+            Subscription::new(
+                1,
+                "glob".to_string(),
+                "/chat/**",
+                vec![],
+                SubscribeOptions::default(),
+            )
+            .unwrap(),
+        );
+
+        // Root globstar
+        manager.add(
+            Subscription::new(
+                1,
+                "root".to_string(),
+                "/**",
+                vec![],
+                SubscribeOptions::default(),
+            )
+            .unwrap(),
+        );
+
+        let subs = manager.find_subscribers("/chat/room/abc/messages", None);
+        assert_eq!(subs.len(), 4, "All four patterns should match");
+        assert!(subs.contains(&"exact".to_string()));
+        assert!(subs.contains(&"wild".to_string()));
+        assert!(subs.contains(&"glob".to_string()));
+        assert!(subs.contains(&"root".to_string()));
+    }
+
+    #[test]
+    fn test_trie_prunes_empty_nodes() {
+        let manager = SubscriptionManager::new();
+
+        manager.add(
+            Subscription::new(
+                1,
+                "s1".to_string(),
+                "/a/b/c",
+                vec![],
+                SubscribeOptions::default(),
+            )
+            .unwrap(),
+        );
+        manager.add(
+            Subscription::new(
+                2,
+                "s1".to_string(),
+                "/a/b/d",
+                vec![],
+                SubscribeOptions::default(),
+            )
+            .unwrap(),
+        );
+
+        manager.remove(&"s1".to_string(), 1);
+        assert_eq!(manager.len(), 1);
+
+        // /a/b/d should still work
+        assert_eq!(manager.find_subscribers("/a/b/d", None).len(), 1);
+        // /a/b/c should no longer match
+        assert_eq!(manager.find_subscribers("/a/b/c", None).len(), 0);
+
+        manager.remove(&"s1".to_string(), 2);
+        assert_eq!(manager.len(), 0);
+        assert!(manager.is_empty());
     }
 }

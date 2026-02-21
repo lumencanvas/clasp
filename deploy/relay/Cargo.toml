@@ -28,7 +28,7 @@ websocket = ["clasp-router/websocket"]
 # QUIC (high-performance, requires UDP and TLS certificates)
 quic = ["clasp-router/quic", "rustls-pemfile"]
 # Full protocol support
-full = ["websocket", "quic", "mqtt-server", "osc-server", "rendezvous", "journal", "caps", "registry", "rules", "federation"]
+full = ["websocket", "quic", "mqtt-server", "osc-server", "rendezvous", "journal", "caps", "registry", "rules", "federation", "metrics"]
 # MQTT server adapter (accept MQTT clients)
 mqtt-server = ["clasp-router/mqtt-server"]
 # OSC server adapter (accept OSC clients)
@@ -45,6 +45,8 @@ registry = ["clasp-registry"]
 rules = ["clasp-router/rules", "clasp-rules"]
 # Federation (multi-site state sync)
 federation = ["clasp-federation", "clasp-transport", "clasp-router/federation"]
+# Prometheus metrics exporter
+metrics = ["clasp-router/metrics", "dep:metrics-exporter-prometheus"]
 
 [dependencies]
 # Published crates from crates.io
@@ -66,7 +68,7 @@ clap = { version = "4", features = ["derive"] }
 
 # Logging
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Error handling
 anyhow = "1.0"
@@ -87,6 +89,9 @@ tower-http = { version = "0.6", features = ["cors"] }
 
 # Crypto (for entity token minting endpoint)
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+
+# Prometheus metrics exporter (optional)
+metrics-exporter-prometheus = { version = "0.16", optional = true }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

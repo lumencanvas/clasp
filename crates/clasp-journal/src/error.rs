@@ -23,4 +23,7 @@ pub enum JournalError {
 
     #[error("snapshot error: {0}")]
     SnapshotError(String),
+
+    #[error("integrity violation at seq {seq}: {reason}")]
+    IntegrityViolation { seq: u64, reason: String },
 }

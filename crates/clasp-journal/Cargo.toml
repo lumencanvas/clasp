@@ -9,6 +9,7 @@ description = "Event log and state persistence for CLASP routers"
 [features]
 default = []
 sqlite = ["dep:rusqlite"]
+integrity = ["dep:hmac", "dep:sha2", "dep:hex"]
 
 [dependencies]
 clasp-core = { workspace = true }
@@ -21,6 +22,11 @@ tokio = { workspace = true }
 
 # Optional SQLite backend
 rusqlite = { version = "0.32", features = ["bundled"], optional = true }
+
+# Optional HMAC integrity verification
+hmac = { version = "0.12", optional = true }
+sha2 = { version = "0.10", optional = true }
+hex = { version = "0.4", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }

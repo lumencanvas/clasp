@@ -26,11 +26,12 @@
 //! }
 //! ```
 
-use bytes::Bytes;
 use clasp_core::{
-    codec, AckMessage, Action, CpskValidator, ErrorMessage, Frame, Message, PublishMessage,
-    SecurityMode, SetMessage, SignalType, SnapshotMessage, TokenValidator, ValidationResult,
+    codec, CpskValidator, ErrorMessage, Message,
+    SecurityMode, SignalType, TokenValidator,
 };
+#[cfg(feature = "rules")]
+use clasp_core::{PublishMessage, SetMessage};
 
 #[cfg(feature = "journal")]
 use clasp_journal::Journal;
@@ -41,7 +42,7 @@ use dashmap::DashMap;
 use parking_lot::RwLock;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, warn, Instrument};
 
 #[cfg(feature = "websocket")]
 use clasp_transport::WebSocketServer;
@@ -51,11 +52,12 @@ use clasp_transport::{QuicConfig, QuicTransport};
 
 use crate::{
     error::{Result, RouterError},
-    gesture::{GestureRegistry, GestureResult},
-    p2p::{analyze_address, P2PAddressType, P2PCapabilities},
+    gesture::GestureRegistry,
+    handlers,
+    p2p::P2PCapabilities,
     session::{Session, SessionId},
     state::{RouterState, RouterStateConfig},
-    subscription::{Subscription, SubscriptionManager},
+    subscription::SubscriptionManager,
 };
 use std::time::Duration;
 
@@ -462,6 +464,8 @@ impl Router {
                     }
 
                     info!("New connection from {}", addr);
+                    #[cfg(feature = "metrics")]
+                    metrics::gauge!("clasp_sessions_active").increment(1.0);
                     self.handle_connection(Arc::new(sender), receiver, addr);
                 }
                 Err(e) => {
@@ -505,7 +509,7 @@ impl Router {
                     if let Ok(bytes) = codec::encode(&msg) {
                         for sub_session_id in subscribers {
                             if let Some(sub_session) = sessions.get(&sub_session_id) {
-                                try_send_with_drop_tracking_sync(
+                                crate::handlers::try_send_with_drop_tracking_sync(
                                     sub_session.value(),
                                     bytes.clone(),
                                     &sub_session_id,
@@ -569,6 +573,10 @@ impl Router {
     fn start_state_cleanup_task(&self) {
         let state = Arc::clone(&self.state);
         let running = Arc::clone(&self.running);
+        #[cfg(feature = "metrics")]
+        let sessions = Arc::clone(&self.sessions);
+        #[cfg(feature = "metrics")]
+        let subscriptions = Arc::clone(&self.subscriptions);
 
         tokio::spawn(async move {
             // Clean up every 60 seconds
@@ -589,6 +597,14 @@ impl Router {
                         "State cleanup: removed {} stale params, {} stale signals",
                         params_removed, signals_removed
                     );
+                }
+
+                // Update absolute gauge values periodically
+                #[cfg(feature = "metrics")]
+                {
+                    metrics::gauge!("clasp_state_params_active").set(state.len() as f64);
+                    metrics::gauge!("clasp_sessions_active").set(sessions.len() as f64);
+                    metrics::gauge!("clasp_subscriptions_active").set(subscriptions.len() as f64);
                 }
             }
 
@@ -949,6 +965,8 @@ impl Router {
         #[cfg(feature = "rules")]
         let rules_engine = self.rules_engine.clone();
 
+        let conn_span = tracing::info_span!("connection", session_id = tracing::field::Empty, remote = %addr);
+
         tokio::spawn(async move {
             let mut session: Option<Arc<Session>> = None;
             let mut handshake_complete = false;
@@ -1009,35 +1027,33 @@ impl Router {
 
             // Process the Hello message
             if let Ok((msg, frame)) = codec::decode(&hello_data) {
-                if let Some(response) = handle_message(
-                    &msg,
-                    &frame,
-                    &session,
-                    &sender,
-                    &sessions,
-                    &subscriptions,
-                    &state,
-                    &config,
+                let ctx = handlers::HandlerContext {
+                    session: &session,
+                    sender: &sender,
+                    sessions: &sessions,
+                    subscriptions: &subscriptions,
+                    state: &state,
+                    config: &config,
                     security_mode,
-                    &token_validator,
-                    &p2p_capabilities,
-                    &gesture_registry,
-                    &write_validator,
-                    &snapshot_filter,
+                    token_validator: &token_validator,
+                    p2p_capabilities: &p2p_capabilities,
+                    gesture_registry: &gesture_registry,
+                    write_validator: &write_validator,
+                    snapshot_filter: &snapshot_filter,
                     #[cfg(feature = "rules")]
-                    &rules_engine,
-                )
-                .await
-                {
+                    rules_engine: &rules_engine,
+                };
+                if let Some(response) = handlers::handle_message(&msg, &frame, &ctx).await {
                     match response {
-                        MessageResult::NewSession(s) => {
+                        handlers::MessageResult::NewSession(s) => {
+                            tracing::Span::current().record("session_id", &tracing::field::display(&s.id));
                             session = Some(s);
                             handshake_complete = true;
                         }
-                        MessageResult::Send(bytes) => {
+                        handlers::MessageResult::Send(bytes) => {
                             let _ = sender.send(bytes).await;
                         }
-                        MessageResult::Disconnect => {
+                        handlers::MessageResult::Disconnect => {
                             info!(
                                 "Disconnecting client {} due to auth failure during handshake",
                                 addr
@@ -1089,48 +1105,44 @@ impl Router {
                         // Decode message
                         match codec::decode(&data) {
                             Ok((msg, frame)) => {
-                                // Handle message
-                                if let Some(response) = handle_message(
-                                    &msg,
-                                    &frame,
-                                    &session,
-                                    &sender,
-                                    &sessions,
-                                    &subscriptions,
-                                    &state,
-                                    &config,
+                                let ctx = handlers::HandlerContext {
+                                    session: &session,
+                                    sender: &sender,
+                                    sessions: &sessions,
+                                    subscriptions: &subscriptions,
+                                    state: &state,
+                                    config: &config,
                                     security_mode,
-                                    &token_validator,
-                                    &p2p_capabilities,
-                                    &gesture_registry,
-                                    &write_validator,
-                                    &snapshot_filter,
+                                    token_validator: &token_validator,
+                                    p2p_capabilities: &p2p_capabilities,
+                                    gesture_registry: &gesture_registry,
+                                    write_validator: &write_validator,
+                                    snapshot_filter: &snapshot_filter,
                                     #[cfg(feature = "rules")]
-                                    &rules_engine,
-                                )
-                                .await
-                                {
+                                    rules_engine: &rules_engine,
+                                };
+                                if let Some(response) = handlers::handle_message(&msg, &frame, &ctx).await {
                                     match response {
-                                        MessageResult::NewSession(s) => {
+                                        handlers::MessageResult::NewSession(s) => {
                                             session = Some(s);
                                         }
-                                        MessageResult::Send(bytes) => {
+                                        handlers::MessageResult::Send(bytes) => {
                                             if let Err(e) = sender.send(bytes).await {
                                                 error!("Send error: {}", e);
                                                 break;
                                             }
                                         }
-                                        MessageResult::Broadcast(bytes, exclude) => {
-                                            broadcast_to_subscribers(&bytes, &sessions, &exclude);
+                                        handlers::MessageResult::Broadcast(bytes, exclude) => {
+                                            handlers::broadcast_to_subscribers(&bytes, &sessions, &exclude);
                                         }
-                                        MessageResult::Disconnect => {
+                                        handlers::MessageResult::Disconnect => {
                                             info!(
                                                 "Disconnecting client {} due to auth failure",
                                                 addr
                                             );
                                             break;
                                         }
-                                        MessageResult::None => {}
+                                        handlers::MessageResult::None => {}
                                     }
                                 }
                             }
@@ -1160,8 +1172,10 @@ impl Router {
                 sessions.remove(&s.id);
                 subscriptions.remove_session(&s.id);
                 p2p_capabilities.unregister(&s.id);
+                #[cfg(feature = "metrics")]
+                metrics::gauge!("clasp_sessions_active").decrement(1.0);
             }
-        });
+        }.instrument(conn_span));
     }
 
     /// Stop the router
@@ -1188,1315 +1202,6 @@ impl Router {
 impl Default for Router {
     fn default() -> Self {
         Self::new(RouterConfig::default())
-    }
-}
-
-/// Result of handling a message
-enum MessageResult {
-    NewSession(Arc<Session>),
-    Send(Bytes),
-    Broadcast(Bytes, SessionId),
-    Disconnect,
-    None,
-}
-
-/// Maximum params per snapshot chunk to stay under frame size limit.
-/// Frame max payload is 65535 bytes. With ~44 bytes per param average,
-/// we target 800 params per chunk (~35KB) to leave headroom.
-const MAX_SNAPSHOT_CHUNK_SIZE: usize = 800;
-
-/// Send a snapshot, chunking if too large for a single frame.
-async fn send_chunked_snapshot(sender: &Arc<dyn TransportSender>, snapshot: SnapshotMessage) {
-    let param_count = snapshot.params.len();
-
-    if param_count <= MAX_SNAPSHOT_CHUNK_SIZE {
-        // Small enough to send in one frame
-        let msg = Message::Snapshot(snapshot);
-        if let Ok(bytes) = codec::encode(&msg) {
-            let _ = sender.send(bytes).await;
-        } else {
-            warn!("Failed to encode snapshot ({} params)", param_count);
-        }
-        return;
-    }
-
-    // Chunk large snapshots
-    let chunks = snapshot.params.chunks(MAX_SNAPSHOT_CHUNK_SIZE);
-    let chunk_count = (param_count + MAX_SNAPSHOT_CHUNK_SIZE - 1) / MAX_SNAPSHOT_CHUNK_SIZE;
-
-    debug!(
-        "Chunking snapshot of {} params into {} chunks",
-        param_count, chunk_count
-    );
-
-    for (i, chunk) in chunks.enumerate() {
-        let chunk_snapshot = SnapshotMessage {
-            params: chunk.to_vec(),
-        };
-        let msg = Message::Snapshot(chunk_snapshot);
-        match codec::encode(&msg) {
-            Ok(bytes) => {
-                if let Err(e) = sender.send(bytes).await {
-                    warn!(
-                        "Failed to send snapshot chunk {}/{}: {}",
-                        i + 1,
-                        chunk_count,
-                        e
-                    );
-                    break;
-                }
-            }
-            Err(e) => {
-                warn!(
-                    "Failed to encode snapshot chunk {}/{}: {}",
-                    i + 1,
-                    chunk_count,
-                    e
-                );
-            }
-        }
-    }
-}
-
-/// Handle an incoming message
-async fn handle_message(
-    msg: &Message,
-    _frame: &Frame,
-    session: &Option<Arc<Session>>,
-    sender: &Arc<dyn TransportSender>,
-    sessions: &Arc<DashMap<SessionId, Arc<Session>>>,
-    subscriptions: &Arc<SubscriptionManager>,
-    state: &Arc<RouterState>,
-    config: &RouterConfig,
-    security_mode: SecurityMode,
-    token_validator: &Option<Arc<dyn TokenValidator>>,
-    p2p_capabilities: &Arc<P2PCapabilities>,
-    gesture_registry: &Option<Arc<GestureRegistry>>,
-    write_validator: &Option<Arc<dyn WriteValidator>>,
-    snapshot_filter: &Option<Arc<dyn SnapshotFilter>>,
-    #[cfg(feature = "rules")] rules_engine: &Option<Arc<parking_lot::Mutex<RulesEngine>>>,
-) -> Option<MessageResult> {
-    match msg {
-        Message::Hello(hello) => {
-            // In authenticated mode, validate the token
-            let (authenticated, subject, scopes) = match security_mode {
-                SecurityMode::Open => {
-                    // Open mode: no authentication required
-                    (false, None, Vec::new())
-                }
-                SecurityMode::Authenticated => {
-                    // Authenticated mode: require valid token
-                    let token = match &hello.token {
-                        Some(t) => t,
-                        None => {
-                            warn!("Connection rejected: no token provided in authenticated mode");
-                            let error = Message::Error(ErrorMessage {
-                                code: 300, // Unauthorized
-                                message: "Authentication required".to_string(),
-                                address: None,
-                                correlation_id: None,
-                            });
-                            let bytes = codec::encode(&error).ok()?;
-                            let _ = sender.send(bytes).await;
-                            return Some(MessageResult::Disconnect);
-                        }
-                    };
-
-                    // Validate token
-                    let validator = match token_validator {
-                        Some(v) => v,
-                        None => {
-                            error!("Authenticated mode but no token validator configured");
-                            let error = Message::Error(ErrorMessage {
-                                code: 500, // Internal error
-                                message: "Server misconfiguration".to_string(),
-                                address: None,
-                                correlation_id: None,
-                            });
-                            let bytes = codec::encode(&error).ok()?;
-                            let _ = sender.send(bytes).await;
-                            return Some(MessageResult::Disconnect);
-                        }
-                    };
-
-                    match validator.validate(token) {
-                        ValidationResult::Valid(info) => {
-                            info!(
-                                "Token validated for subject: {:?}, scopes: {}",
-                                info.subject,
-                                info.scopes.len()
-                            );
-                            (true, info.subject, info.scopes)
-                        }
-                        ValidationResult::Expired => {
-                            warn!("Connection rejected: token expired");
-                            let error = Message::Error(ErrorMessage {
-                                code: 302, // TokenExpired
-                                message: "Token has expired".to_string(),
-                                address: None,
-                                correlation_id: None,
-                            });
-                            let bytes = codec::encode(&error).ok()?;
-                            let _ = sender.send(bytes).await;
-                            return Some(MessageResult::Disconnect);
-                        }
-                        ValidationResult::Invalid(reason) => {
-                            warn!("Connection rejected: invalid token - {}", reason);
-                            let error = Message::Error(ErrorMessage {
-                                code: 300, // Unauthorized
-                                message: format!("Invalid token: {}", reason),
-                                address: None,
-                                correlation_id: None,
-                            });
-                            let bytes = codec::encode(&error).ok()?;
-                            let _ = sender.send(bytes).await;
-                            return Some(MessageResult::Disconnect);
-                        }
-                        ValidationResult::NotMyToken => {
-                            warn!("Connection rejected: unrecognized token format");
-                            let error = Message::Error(ErrorMessage {
-                                code: 300, // Unauthorized
-                                message: "Unrecognized token format".to_string(),
-                                address: None,
-                                correlation_id: None,
-                            });
-                            let bytes = codec::encode(&error).ok()?;
-                            let _ = sender.send(bytes).await;
-                            return Some(MessageResult::Disconnect);
-                        }
-                    }
-                }
-            };
-
-            // Create new session
-            let mut new_session =
-                Session::new(sender.clone(), hello.name.clone(), hello.features.clone());
-
-            // Set authentication state
-            if authenticated {
-                new_session.set_authenticated(
-                    hello.token.clone().unwrap_or_default(),
-                    subject,
-                    scopes,
-                );
-            }
-
-            let new_session = Arc::new(new_session);
-            let session_id = new_session.id.clone();
-            sessions.insert(session_id.clone(), new_session.clone());
-
-            info!(
-                "Session created: {} ({}) authenticated={}",
-                hello.name, session_id, new_session.authenticated
-            );
-
-            #[cfg(feature = "federation")]
-            if new_session.is_federation_peer() {
-                info!(
-                    "Federation peer detected: {} ({})",
-                    hello.name, session_id
-                );
-            }
-
-            // Send welcome
-            let welcome = new_session.welcome_message(&config.name, &config.features);
-            let response = codec::encode(&welcome).ok()?;
-
-            // Send welcome first
-            let _ = sender.send(response).await;
-
-            // Send initial snapshot (chunked if too large), with optional filtering
-            let mut full_snapshot = state.full_snapshot();
-            if let Some(ref filter) = snapshot_filter {
-                full_snapshot.params =
-                    filter.filter_snapshot(full_snapshot.params, &new_session, state);
-            }
-            send_chunked_snapshot(sender, full_snapshot).await;
-
-            Some(MessageResult::NewSession(new_session))
-        }
-
-        Message::Subscribe(sub) => {
-            let session = session.as_ref()?;
-
-            // Check subscription limit
-            let current_subs = session.subscriptions().len();
-            let max_subs = 1000; // Default limit
-            if current_subs >= max_subs {
-                warn!(
-                    "Session {} subscription limit reached ({}/{})",
-                    session.id, current_subs, max_subs
-                );
-                let error = Message::Error(ErrorMessage {
-                    code: 429, // Too Many Requests
-                    message: format!("Subscription limit reached (max {})", max_subs),
-                    address: Some(sub.pattern.clone()),
-                    correlation_id: None,
-                });
-                let bytes = codec::encode(&error).ok()?;
-                return Some(MessageResult::Send(bytes));
-            }
-
-            // Check scope for read access (in authenticated mode).
-            // Use strict read scope check to prevent write-only scopes
-            // (e.g. write:/chat/user/*/dms/*) from granting subscription
-            // access to other users' private data.
-            if security_mode == SecurityMode::Authenticated
-                && !session.has_strict_read_scope(&sub.pattern)
-            {
-                warn!(
-                    "Session {} denied SUBSCRIBE to {} - insufficient scope",
-                    session.id, sub.pattern
-                );
-                let error = Message::Error(ErrorMessage {
-                    code: 301, // Forbidden
-                    message: "Insufficient scope for subscription".to_string(),
-                    address: Some(sub.pattern.clone()),
-                    correlation_id: None,
-                });
-                let bytes = codec::encode(&error).ok()?;
-                return Some(MessageResult::Send(bytes));
-            }
-
-            // Create subscription
-            match Subscription::new(
-                sub.id,
-                session.id.clone(),
-                &sub.pattern,
-                sub.types.clone(),
-                sub.options.clone().unwrap_or_default(),
-            ) {
-                Ok(subscription) => {
-                    subscriptions.add(subscription);
-                    session.add_subscription(sub.id);
-
-                    debug!("Session {} subscribed to {}", session.id, sub.pattern);
-
-                    // Send matching current values (chunked if large), with optional filtering
-                    let mut snapshot = state.snapshot(&sub.pattern);
-                    if let Some(ref filter) = snapshot_filter {
-                        snapshot.params = filter.filter_snapshot(snapshot.params, session, state);
-                    }
-                    if !snapshot.params.is_empty() {
-                        send_chunked_snapshot(sender, snapshot).await;
-                    }
-                }
-                Err(e) => {
-                    warn!("Invalid subscription pattern: {}", e);
-                    let error = Message::Error(ErrorMessage {
-                        code: 202,
-                        message: e.to_string(),
-                        address: Some(sub.pattern.clone()),
-                        correlation_id: None,
-                    });
-                    let bytes = codec::encode(&error).ok()?;
-                    return Some(MessageResult::Send(bytes));
-                }
-            }
-
-            Some(MessageResult::None)
-        }
-
-        Message::Unsubscribe(unsub) => {
-            let session = session.as_ref()?;
-            subscriptions.remove(&session.id, unsub.id);
-            session.remove_subscription(unsub.id);
-            Some(MessageResult::None)
-        }
-
-        Message::Set(set) => {
-            let session = session.as_ref()?;
-
-            // Check scope for write access (in authenticated mode)
-            if security_mode == SecurityMode::Authenticated
-                && !session.has_scope(Action::Write, &set.address)
-            {
-                warn!(
-                    "Session {} denied SET to {} - insufficient scope",
-                    session.id, set.address
-                );
-                let error = Message::Error(ErrorMessage {
-                    code: 301, // Forbidden
-                    message: "Insufficient scope for write operation".to_string(),
-                    address: Some(set.address.clone()),
-                    correlation_id: None,
-                });
-                let bytes = codec::encode(&error).ok()?;
-                return Some(MessageResult::Send(bytes));
-            }
-
-            // Application-specific write validation
-            if let Some(ref validator) = write_validator {
-                if let Err(reason) =
-                    validator.validate_write(&set.address, &set.value, session, state)
-                {
-                    warn!(
-                        "Session {} denied SET to {} by write validator: {}",
-                        session.id, set.address, reason
-                    );
-                    let error = Message::Error(ErrorMessage {
-                        code: 403,
-                        message: reason,
-                        address: Some(set.address.clone()),
-                        correlation_id: None,
-                    });
-                    let bytes = codec::encode(&error).ok()?;
-                    return Some(MessageResult::Send(bytes));
-                }
-            }
-
-            // Apply to state
-            match state.apply_set(set, &session.id) {
-                Ok(revision) => {
-                    // Broadcast to subscribers
-                    let subscribers =
-                        subscriptions.find_subscribers(&set.address, Some(SignalType::Param));
-
-                    // Create updated SET message with revision
-                    let mut updated_set = set.clone();
-                    updated_set.revision = Some(revision);
-                    let broadcast_msg = Message::Set(updated_set);
-
-                    if let Ok(bytes) = codec::encode(&broadcast_msg) {
-                        // Send to all subscribers (including sender for confirmation)
-                        // Use try_send for non-blocking broadcast with backpressure
-                        for sub_session_id in subscribers {
-                            if let Some(sub_session) = sessions.get(&sub_session_id) {
-                                try_send_with_drop_tracking_sync(
-                                    sub_session.value(),
-                                    bytes.clone(),
-                                    &sub_session_id,
-                                );
-                            }
-                        }
-                    }
-
-                    // Evaluate rules engine after SET
-                    #[cfg(feature = "rules")]
-                    if let Some(ref engine) = rules_engine {
-                        let actions = engine.lock().evaluate(
-                            &set.address,
-                            &set.value,
-                            SignalType::Param,
-                            Some(session.id.as_str()),
-                            |addr| state.get(addr),
-                        );
-                        if !actions.is_empty() {
-                            execute_rule_actions(actions, state, sessions, subscriptions);
-                        }
-                    }
-
-                    // Send ACK to sender
-                    let ack = Message::Ack(AckMessage {
-                        address: Some(set.address.clone()),
-                        revision: Some(revision),
-                        locked: None,
-                        holder: None,
-                        correlation_id: None,
-                    });
-                    let ack_bytes = codec::encode(&ack).ok()?;
-                    return Some(MessageResult::Send(ack_bytes));
-                }
-                Err(e) => {
-                    let error = Message::Error(ErrorMessage {
-                        code: 400,
-                        message: format!("{:?}", e),
-                        address: Some(set.address.clone()),
-                        correlation_id: None,
-                    });
-                    let bytes = codec::encode(&error).ok()?;
-                    return Some(MessageResult::Send(bytes));
-                }
-            }
-        }
-
-        Message::Get(get) => {
-            let session = session.as_ref()?;
-
-            // Check scope for read access (in authenticated mode)
-            if security_mode == SecurityMode::Authenticated
-                && !session.has_scope(Action::Read, &get.address)
-            {
-                warn!(
-                    "Session {} denied GET to {} - insufficient scope",
-                    session.id, get.address
-                );
-                let error = Message::Error(ErrorMessage {
-                    code: 301, // Forbidden
-                    message: "Insufficient scope for read operation".to_string(),
-                    address: Some(get.address.clone()),
-                    correlation_id: None,
-                });
-                let bytes = codec::encode(&error).ok()?;
-                return Some(MessageResult::Send(bytes));
-            }
-
-            if let Some(param_state) = state.get_state(&get.address) {
-                let mut params = vec![clasp_core::ParamValue {
-                    address: get.address.clone(),
-                    value: param_state.value,
-                    revision: param_state.revision,
-                    writer: Some(param_state.writer),
-                    timestamp: Some(param_state.timestamp),
-                }];
-
-                // Apply snapshot filter to GET responses (strip sensitive fields)
-                if let Some(ref filter) = snapshot_filter {
-                    params = filter.filter_snapshot(params, session, state);
-                }
-
-                if params.is_empty() {
-                    return Some(MessageResult::None);
-                }
-
-                let snapshot = Message::Snapshot(clasp_core::SnapshotMessage { params });
-                let bytes = codec::encode(&snapshot).ok()?;
-                return Some(MessageResult::Send(bytes));
-            }
-
-            Some(MessageResult::None)
-        }
-
-        Message::Publish(pub_msg) => {
-            let session = session.as_ref()?;
-
-            // Check scope for write access (in authenticated mode)
-            if security_mode == SecurityMode::Authenticated
-                && !session.has_scope(Action::Write, &pub_msg.address)
-            {
-                warn!(
-                    "Session {} denied PUBLISH to {} - insufficient scope",
-                    session.id, pub_msg.address
-                );
-                let error = Message::Error(ErrorMessage {
-                    code: 301, // Forbidden
-                    message: "Insufficient scope for publish operation".to_string(),
-                    address: Some(pub_msg.address.clone()),
-                    correlation_id: None,
-                });
-                let bytes = codec::encode(&error).ok()?;
-                return Some(MessageResult::Send(bytes));
-            }
-
-            // Application-specific write validation for PUBLISH
-            if let Some(ref validator) = write_validator {
-                let pub_value = pub_msg
-                    .value
-                    .as_ref()
-                    .cloned()
-                    .unwrap_or(clasp_core::Value::Null);
-                if let Err(reason) =
-                    validator.validate_write(&pub_msg.address, &pub_value, session, state)
-                {
-                    warn!(
-                        "Session {} denied PUBLISH to {} by write validator: {}",
-                        session.id, pub_msg.address, reason
-                    );
-                    let error = Message::Error(ErrorMessage {
-                        code: 403,
-                        message: reason,
-                        address: Some(pub_msg.address.clone()),
-                        correlation_id: None,
-                    });
-                    let bytes = codec::encode(&error).ok()?;
-                    return Some(MessageResult::Send(bytes));
-                }
-            }
-
-            // Check for P2P signaling addresses
-            match analyze_address(&pub_msg.address) {
-                P2PAddressType::Signal { target_session } => {
-                    // Route P2P signal directly to target session
-                    debug!("P2P signal from {} to {}", session.id, target_session);
-
-                    if let Ok(bytes) = codec::encode(msg) {
-                        if let Some(target) = sessions.get(&target_session) {
-                            let _ = target.send(bytes).await;
-                        } else {
-                            // Target session not found
-                            warn!("P2P signal target session not found: {}", target_session);
-                            let error = Message::Error(ErrorMessage {
-                                code: 404,
-                                message: format!("Target session not found: {}", target_session),
-                                address: Some(pub_msg.address.clone()),
-                                correlation_id: None,
-                            });
-                            let bytes = codec::encode(&error).ok()?;
-                            return Some(MessageResult::Send(bytes));
-                        }
-                    }
-
-                    return Some(MessageResult::None);
-                }
-                P2PAddressType::Announce => {
-                    // P2P capability announcement - register and broadcast
-                    debug!("P2P announce from session {}", session.id);
-
-                    // Register the session as P2P capable
-                    p2p_capabilities.register(&session.id);
-
-                    // Broadcast to subscribers of the announce address
-                    // Use try_send for non-blocking broadcast
-                    let subscribers = subscriptions.find_subscribers(&pub_msg.address, None);
-                    if let Ok(bytes) = codec::encode(msg) {
-                        for sub_session_id in subscribers {
-                            if sub_session_id != session.id {
-                                if let Some(sub_session) = sessions.get(&sub_session_id) {
-                                    try_send_with_drop_tracking_sync(
-                                        sub_session.value(),
-                                        bytes.clone(),
-                                        &sub_session_id,
-                                    );
-                                }
-                            }
-                        }
-                    }
-
-                    return Some(MessageResult::None);
-                }
-                P2PAddressType::NotP2P => {
-                    // Normal PUBLISH - fall through to standard handling
-                }
-            }
-
-            // Standard PUBLISH handling for non-P2P addresses
-            let signal_type = pub_msg.signal;
-
-            // Check for gesture coalescing
-            if let Some(registry) = gesture_registry {
-                if signal_type == Some(SignalType::Gesture) {
-                    match registry.process(pub_msg) {
-                        GestureResult::Forward(messages) => {
-                            // Forward all messages (may include flushed move + end)
-                            // Use try_send for non-blocking broadcast
-                            for forward_msg in messages {
-                                let msg_to_send = Message::Publish(forward_msg.clone());
-                                let subscribers = subscriptions
-                                    .find_subscribers(&forward_msg.address, signal_type);
-                                if let Ok(bytes) = codec::encode(&msg_to_send) {
-                                    for sub_session_id in subscribers {
-                                        if sub_session_id != session.id {
-                                            if let Some(sub_session) = sessions.get(&sub_session_id)
-                                            {
-                                                try_send_with_drop_tracking_sync(
-                                                    sub_session.value(),
-                                                    bytes.clone(),
-                                                    &sub_session_id,
-                                                );
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            return Some(MessageResult::None);
-                        }
-                        GestureResult::Buffered => {
-                            // Move was buffered, nothing to forward yet
-                            return Some(MessageResult::None);
-                        }
-                        GestureResult::PassThrough => {
-                            // Not a gesture, fall through to standard handling
-                        }
-                    }
-                }
-            }
-
-            // Find subscribers
-            let subscribers = subscriptions.find_subscribers(&pub_msg.address, signal_type);
-
-            // Broadcast using try_send for non-blocking delivery
-            if let Ok(bytes) = codec::encode(msg) {
-                for sub_session_id in subscribers {
-                    if sub_session_id != session.id {
-                        if let Some(sub_session) = sessions.get(&sub_session_id) {
-                            try_send_with_drop_tracking_sync(
-                                sub_session.value(),
-                                bytes.clone(),
-                                &sub_session_id,
-                            );
-                        }
-                    }
-                }
-            }
-
-            // Record in journal (fire-and-forget)
-            #[cfg(feature = "journal")]
-            state.journal_publish(
-                &pub_msg.address,
-                signal_type.unwrap_or(SignalType::Event),
-                pub_msg.value.as_ref(),
-                &session.id,
-            );
-
-            // Evaluate rules engine after PUBLISH
-            #[cfg(feature = "rules")]
-            if let Some(ref engine) = rules_engine {
-                let pub_value = pub_msg
-                    .value
-                    .as_ref()
-                    .cloned()
-                    .unwrap_or(clasp_core::Value::Null);
-                let actions = engine.lock().evaluate(
-                    &pub_msg.address,
-                    &pub_value,
-                    signal_type.unwrap_or(SignalType::Event),
-                    Some(session.id.as_str()),
-                    |addr| state.get(addr),
-                );
-                if !actions.is_empty() {
-                    execute_rule_actions(actions, state, sessions, subscriptions);
-                }
-            }
-
-            Some(MessageResult::None)
-        }
-
-        Message::Ping => {
-            let pong = Message::Pong;
-            let bytes = codec::encode(&pong).ok()?;
-            Some(MessageResult::Send(bytes))
-        }
-
-        Message::Query(query) => {
-            // Query the signal registry for matching signals
-            let signals = state.query_signals(&query.pattern);
-            let result = Message::Result(clasp_core::ResultMessage { signals });
-            let bytes = codec::encode(&result).ok()?;
-            Some(MessageResult::Send(bytes))
-        }
-
-        #[cfg(feature = "journal")]
-        Message::Replay(replay) => {
-            let session = session.as_ref()?;
-
-            // Check scope for read access (in authenticated mode)
-            if security_mode == SecurityMode::Authenticated
-                && !session.has_strict_read_scope(&replay.pattern)
-            {
-                warn!(
-                    "Session {} denied REPLAY to {} - insufficient scope",
-                    session.id, replay.pattern
-                );
-                let error = Message::Error(ErrorMessage {
-                    code: 301,
-                    message: "Insufficient scope for replay".to_string(),
-                    address: Some(replay.pattern.clone()),
-                    correlation_id: None,
-                });
-                let bytes = codec::encode(&error).ok()?;
-                return Some(MessageResult::Send(bytes));
-            }
-
-            // Query the journal
-            if let Some(journal) = state.journal() {
-                match journal
-                    .query(
-                        &replay.pattern,
-                        replay.from,
-                        replay.to,
-                        replay.limit,
-                        &replay.types,
-                    )
-                    .await
-                {
-                    Ok(entries) => {
-                        // Send each journal entry as SET or PUBLISH messages
-                        for entry in entries {
-                            let msg = if entry.msg_type == 0x21 {
-                                // SET
-                                Message::Set(SetMessage {
-                                    address: entry.address,
-                                    value: entry.value,
-                                    revision: entry.revision,
-                                    lock: false,
-                                    unlock: false,
-                                })
-                            } else {
-                                // PUBLISH
-                                Message::Publish(PublishMessage {
-                                    address: entry.address,
-                                    signal: Some(entry.signal_type),
-                                    value: Some(entry.value),
-                                    payload: None,
-                                    samples: None,
-                                    rate: None,
-                                    id: None,
-                                    phase: None,
-                                    timestamp: None,
-                                    timeline: None,
-                                })
-                            };
-                            if let Ok(bytes) = codec::encode(&msg) {
-                                let _ = sender.send(bytes).await;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        let error = Message::Error(ErrorMessage {
-                            code: 500,
-                            message: format!("Journal query failed: {}", e),
-                            address: Some(replay.pattern.clone()),
-                            correlation_id: None,
-                        });
-                        let bytes = codec::encode(&error).ok()?;
-                        return Some(MessageResult::Send(bytes));
-                    }
-                }
-            } else {
-                let error = Message::Error(ErrorMessage {
-                    code: 501,
-                    message: "Journal not configured on this router".to_string(),
-                    address: Some(replay.pattern.clone()),
-                    correlation_id: None,
-                });
-                let bytes = codec::encode(&error).ok()?;
-                return Some(MessageResult::Send(bytes));
-            }
-
-            Some(MessageResult::None)
-        }
-
-        Message::Announce(announce) => {
-            // Register announced signals in the signal registry
-            state.register_signals(announce.signals.clone());
-            debug!(
-                "Registered {} signals in namespace {}",
-                announce.signals.len(),
-                announce.namespace
-            );
-            // Send ACK to confirm registration
-            let ack = Message::Ack(AckMessage {
-                address: Some(announce.namespace.clone()),
-                revision: None,
-                locked: None,
-                holder: None,
-                correlation_id: None,
-            });
-            let bytes = codec::encode(&ack).ok()?;
-            Some(MessageResult::Send(bytes))
-        }
-
-        Message::Sync(sync_msg) => {
-            // Clock synchronization - respond with server timestamps
-            // Client sends t1 (client send time)
-            // Server records t2 (server receive time) and t3 (server send time)
-            // Client records t4 (client receive time)
-            // RTT = (t4 - t1) - (t3 - t2)
-            // Offset = ((t2 - t1) + (t3 - t4)) / 2
-            let now = clasp_core::time::now();
-            let response = Message::Sync(clasp_core::SyncMessage {
-                t1: sync_msg.t1,
-                t2: Some(now), // Server receive time
-                t3: Some(now), // Server send time (same for instant response)
-            });
-            let bytes = codec::encode(&response).ok()?;
-            Some(MessageResult::Send(bytes))
-        }
-
-        Message::Bundle(bundle) => {
-            let session = session.as_ref()?;
-
-            // PHASE 1: Validate ALL messages first (atomic validation)
-            // If any validation fails, reject the entire bundle
-            let mut validated_sets: Vec<&SetMessage> = Vec::new();
-            let mut validated_pubs: Vec<&PublishMessage> = Vec::new();
-
-            for inner_msg in &bundle.messages {
-                match inner_msg {
-                    Message::Set(set) => {
-                        // Check scope for write access (in authenticated mode)
-                        if security_mode == SecurityMode::Authenticated
-                            && !session.has_scope(Action::Write, &set.address)
-                        {
-                            warn!(
-                                "Session {} denied bundled SET to {} - rejecting entire bundle",
-                                session.id, set.address
-                            );
-                            // Return error for the entire bundle
-                            let err = Message::Error(ErrorMessage {
-                                code: 403,
-                                message: format!(
-                                    "Bundle rejected: insufficient scope for SET to {}",
-                                    set.address
-                                ),
-                                address: Some(set.address.clone()),
-                                correlation_id: None,
-                            });
-                            let err_bytes = codec::encode(&err).ok()?;
-                            return Some(MessageResult::Send(err_bytes));
-                        }
-
-                        // Application-specific write validation for bundled SET
-                        if let Some(ref validator) = write_validator {
-                            if let Err(reason) =
-                                validator.validate_write(&set.address, &set.value, session, state)
-                            {
-                                warn!(
-                                    "Session {} denied bundled SET to {} by write validator - rejecting entire bundle: {}",
-                                    session.id, set.address, reason
-                                );
-                                let err = Message::Error(ErrorMessage {
-                                    code: 403,
-                                    message: format!("Bundle rejected: {}", reason),
-                                    address: Some(set.address.clone()),
-                                    correlation_id: None,
-                                });
-                                let err_bytes = codec::encode(&err).ok()?;
-                                return Some(MessageResult::Send(err_bytes));
-                            }
-                        }
-
-                        // Lock checks happen during apply_set - the state store
-                        // validates locks when actually applying the change
-                        validated_sets.push(set);
-                    }
-                    Message::Publish(pub_msg) => {
-                        // Check scope for write access (in authenticated mode)
-                        if security_mode == SecurityMode::Authenticated
-                            && !session.has_scope(Action::Write, &pub_msg.address)
-                        {
-                            warn!(
-                                "Session {} denied bundled PUBLISH to {} - rejecting entire bundle",
-                                session.id, pub_msg.address
-                            );
-                            let err = Message::Error(ErrorMessage {
-                                code: 403,
-                                message: format!(
-                                    "Bundle rejected: insufficient scope for PUBLISH to {}",
-                                    pub_msg.address
-                                ),
-                                address: Some(pub_msg.address.clone()),
-                                correlation_id: None,
-                            });
-                            let err_bytes = codec::encode(&err).ok()?;
-                            return Some(MessageResult::Send(err_bytes));
-                        }
-
-                        // Application-specific write validation for bundled PUBLISH
-                        if let Some(ref validator) = write_validator {
-                            let pub_value = pub_msg
-                                .value
-                                .as_ref()
-                                .cloned()
-                                .unwrap_or(clasp_core::Value::Null);
-                            if let Err(reason) = validator.validate_write(
-                                &pub_msg.address,
-                                &pub_value,
-                                session,
-                                state,
-                            ) {
-                                warn!(
-                                    "Session {} denied bundled PUBLISH to {} by write validator - rejecting entire bundle: {}",
-                                    session.id, pub_msg.address, reason
-                                );
-                                let err = Message::Error(ErrorMessage {
-                                    code: 403,
-                                    message: format!("Bundle rejected: {}", reason),
-                                    address: Some(pub_msg.address.clone()),
-                                    correlation_id: None,
-                                });
-                                let err_bytes = codec::encode(&err).ok()?;
-                                return Some(MessageResult::Send(err_bytes));
-                            }
-                        }
-
-                        validated_pubs.push(pub_msg);
-                    }
-                    _ => {
-                        // Other message types in bundles are currently not processed
-                        debug!("Ignoring {:?} message type in bundle", inner_msg);
-                    }
-                }
-            }
-
-            // PHASE 2: Apply all validated changes atomically
-            // Now that all validations passed, apply changes
-            let mut applied_revisions: Vec<(String, u64)> = Vec::new();
-
-            for set in &validated_sets {
-                match state.apply_set(set, &session.id) {
-                    Ok(revision) => {
-                        applied_revisions.push((set.address.clone(), revision));
-
-                        // Broadcast to subscribers
-                        let subscribers =
-                            subscriptions.find_subscribers(&set.address, Some(SignalType::Param));
-
-                        // Create updated SET message with revision
-                        let mut updated_set: SetMessage = (*set).clone();
-                        updated_set.revision = Some(revision);
-                        let broadcast_msg = Message::Set(updated_set);
-
-                        if let Ok(bytes) = codec::encode(&broadcast_msg) {
-                            for sub_session_id in subscribers {
-                                if let Some(sub_session) = sessions.get(&sub_session_id) {
-                                    try_send_with_drop_tracking_sync(
-                                        sub_session.value(),
-                                        bytes.clone(),
-                                        &sub_session_id,
-                                    );
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        // This shouldn't happen after validation, but handle gracefully
-                        error!("Bundle SET apply failed after validation: {}", e);
-                    }
-                }
-            }
-
-            // Process PUBLISH messages
-            for pub_msg in &validated_pubs {
-                let subscribers = subscriptions.find_subscribers(&pub_msg.address, pub_msg.signal);
-
-                let inner_msg = Message::Publish((*pub_msg).clone());
-                if let Ok(bytes) = codec::encode(&inner_msg) {
-                    for sub_session_id in subscribers {
-                        if sub_session_id != session.id {
-                            if let Some(sub_session) = sessions.get(&sub_session_id) {
-                                try_send_with_drop_tracking_sync(
-                                    sub_session.value(),
-                                    bytes.clone(),
-                                    &sub_session_id,
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Send a single ACK for the entire bundle with count of applied operations
-            let ack = Message::Ack(AckMessage {
-                address: None,
-                revision: applied_revisions.last().map(|(_, r)| *r),
-                locked: None,
-                holder: None,
-                correlation_id: None,
-            });
-            let ack_bytes = codec::encode(&ack).ok()?;
-            Some(MessageResult::Send(ack_bytes))
-        }
-
-        #[cfg(feature = "federation")]
-        Message::FederationSync(fed_msg) => {
-            let session = session.as_ref()?;
-
-            // Resource limits for federation operations
-            const MAX_FEDERATION_PATTERNS: usize = 1000;
-            const MAX_REVISION_ENTRIES: usize = 10_000;
-
-            // Only accept FederationSync from sessions that advertised "federation" feature
-            if !session.is_federation_peer() {
-                warn!(
-                    "Session {} sent FederationSync but is not a federation peer",
-                    session.id
-                );
-                let error = Message::Error(ErrorMessage {
-                    code: 403,
-                    message: "FederationSync requires federation feature".to_string(),
-                    address: None,
-                    correlation_id: None,
-                });
-                let bytes = codec::encode(&error).ok()?;
-                return Some(MessageResult::Send(bytes));
-            }
-
-            match fed_msg.op {
-                clasp_core::FederationOp::DeclareNamespaces => {
-                    // Enforce resource limit on pattern count
-                    if fed_msg.patterns.len() > MAX_FEDERATION_PATTERNS {
-                        warn!(
-                            "Federation peer {} declared {} namespaces (limit {})",
-                            session.id, fed_msg.patterns.len(), MAX_FEDERATION_PATTERNS
-                        );
-                        let error = Message::Error(ErrorMessage {
-                            code: 400,
-                            message: format!(
-                                "too many namespace patterns: {} (max {})",
-                                fed_msg.patterns.len(), MAX_FEDERATION_PATTERNS
-                            ),
-                            address: None,
-                            correlation_id: None,
-                        });
-                        let bytes = codec::encode(&error).ok()?;
-                        return Some(MessageResult::Send(bytes));
-                    }
-
-                    let router_id = fed_msg
-                        .origin
-                        .clone()
-                        .unwrap_or_else(|| session.name.clone());
-
-                    // In authenticated mode, verify scopes for each declared namespace
-                    if security_mode == SecurityMode::Authenticated {
-                        for pattern in &fed_msg.patterns {
-                            if !session.has_strict_read_scope(pattern) {
-                                warn!(
-                                    "Federation peer {} lacks read scope for namespace {}",
-                                    router_id, pattern
-                                );
-                                let error = Message::Error(ErrorMessage {
-                                    code: 403,
-                                    message: format!(
-                                        "insufficient scope for namespace: {}", pattern
-                                    ),
-                                    address: None,
-                                    correlation_id: None,
-                                });
-                                let bytes = codec::encode(&error).ok()?;
-                                return Some(MessageResult::Send(bytes));
-                            }
-                        }
-                    }
-
-                    info!(
-                        "Federation peer {} declares namespaces: {:?}",
-                        router_id, fed_msg.patterns
-                    );
-
-                    // Clean up previous federation subscriptions if re-declaring
-                    let old_namespaces = session.federation_namespaces();
-                    if !old_namespaces.is_empty() {
-                        for i in 0..old_namespaces.len() {
-                            let old_sub_id = 50000 + i as u32;
-                            subscriptions.remove(&session.id, old_sub_id);
-                            session.remove_subscription(old_sub_id);
-                        }
-                        debug!(
-                            "Federation: cleaned up {} old subscriptions for peer {}",
-                            old_namespaces.len(), router_id
-                        );
-                    }
-
-                    // Store peer info on the session
-                    session.set_federation_router_id(router_id.clone());
-                    session.set_federation_namespaces(fed_msg.patterns.clone());
-
-                    // Subscribe the peer session to their declared patterns
-                    // so they receive matching SETs/PUBLISHes automatically
-                    for (i, pattern) in fed_msg.patterns.iter().enumerate() {
-                        let sub_id = 50000 + i as u32; // High IDs to avoid collision with client subs
-                        match crate::subscription::Subscription::new(
-                            sub_id,
-                            session.id.clone(),
-                            pattern,
-                            vec![],
-                            Default::default(),
-                        ) {
-                            Ok(subscription) => {
-                                subscriptions.add(subscription);
-                                session.add_subscription(sub_id);
-                                debug!(
-                                    "Federation: auto-subscribed peer {} to {}",
-                                    router_id, pattern
-                                );
-                            }
-                            Err(e) => {
-                                warn!(
-                                    "Federation: failed to create subscription for {}: {:?}",
-                                    pattern, e
-                                );
-                            }
-                        }
-                    }
-
-                    // Send ACK
-                    let ack = Message::Ack(AckMessage {
-                        address: None,
-                        revision: None,
-                        locked: None,
-                        holder: None,
-                        correlation_id: None,
-                    });
-                    let bytes = codec::encode(&ack).ok()?;
-                    Some(MessageResult::Send(bytes))
-                }
-
-                clasp_core::FederationOp::RequestSync => {
-                    // Enforce resource limit on pattern count
-                    if fed_msg.patterns.len() > MAX_FEDERATION_PATTERNS {
-                        warn!(
-                            "Federation RequestSync with {} patterns (limit {})",
-                            fed_msg.patterns.len(), MAX_FEDERATION_PATTERNS
-                        );
-                        let error = Message::Error(ErrorMessage {
-                            code: 400,
-                            message: format!(
-                                "too many sync patterns: {} (max {})",
-                                fed_msg.patterns.len(), MAX_FEDERATION_PATTERNS
-                            ),
-                            address: None,
-                            correlation_id: None,
-                        });
-                        let bytes = codec::encode(&error).ok()?;
-                        return Some(MessageResult::Send(bytes));
-                    }
-
-                    // Validate each requested pattern against declared namespaces
-                    let declared = session.federation_namespaces();
-                    for pattern in &fed_msg.patterns {
-                        let covered = declared.iter().any(|ns| {
-                            federation_pattern_covered_by(pattern, ns)
-                        });
-                        if !covered {
-                            warn!(
-                                "Federation RequestSync pattern {} not covered by declared namespaces {:?}",
-                                pattern, declared
-                            );
-                            let error = Message::Error(ErrorMessage {
-                                code: 403,
-                                message: format!(
-                                    "pattern '{}' not covered by declared namespaces", pattern
-                                ),
-                                address: None,
-                                correlation_id: None,
-                            });
-                            let bytes = codec::encode(&error).ok()?;
-                            return Some(MessageResult::Send(bytes));
-                        }
-
-                        // Enforce scope checks in authenticated mode
-                        if security_mode == SecurityMode::Authenticated
-                            && !session.has_strict_read_scope(pattern)
-                        {
-                            warn!(
-                                "Federation RequestSync: session lacks read scope for {}",
-                                pattern
-                            );
-                            let error = Message::Error(ErrorMessage {
-                                code: 403,
-                                message: format!(
-                                    "insufficient scope for pattern: {}", pattern
-                                ),
-                                address: None,
-                                correlation_id: None,
-                            });
-                            let bytes = codec::encode(&error).ok()?;
-                            return Some(MessageResult::Send(bytes));
-                        }
-                    }
-
-                    // Peer requests state sync for patterns -- send a filtered snapshot
-                    for pattern in &fed_msg.patterns {
-                        let mut snapshot = state.snapshot(pattern);
-
-                        // If since_revision is set, filter to only newer entries
-                        if let Some(since) = fed_msg.since_revision {
-                            snapshot.params.retain(|p| p.revision > since);
-                        }
-
-                        // Apply snapshot filter if configured
-                        if let Some(ref filter) = snapshot_filter {
-                            snapshot.params =
-                                filter.filter_snapshot(snapshot.params, session, state);
-                        }
-
-                        // Send snapshot to the peer
-                        send_chunked_snapshot(sender, snapshot).await;
-                    }
-
-                    // Send SyncComplete
-                    let complete = Message::FederationSync(clasp_core::FederationSyncMessage {
-                        op: clasp_core::FederationOp::SyncComplete,
-                        patterns: fed_msg.patterns.clone(),
-                        revisions: std::collections::HashMap::new(),
-                        since_revision: None,
-                        origin: Some(config.name.clone()),
-                    });
-                    let bytes = codec::encode(&complete).ok()?;
-                    Some(MessageResult::Send(bytes))
-                }
-
-                clasp_core::FederationOp::RevisionVector => {
-                    // Enforce resource limit on revision entry count
-                    if fed_msg.revisions.len() > MAX_REVISION_ENTRIES {
-                        warn!(
-                            "Federation RevisionVector with {} entries (limit {})",
-                            fed_msg.revisions.len(), MAX_REVISION_ENTRIES
-                        );
-                        let error = Message::Error(ErrorMessage {
-                            code: 400,
-                            message: format!(
-                                "too many revision entries: {} (max {})",
-                                fed_msg.revisions.len(), MAX_REVISION_ENTRIES
-                            ),
-                            address: None,
-                            correlation_id: None,
-                        });
-                        let bytes = codec::encode(&error).ok()?;
-                        return Some(MessageResult::Send(bytes));
-                    }
-
-                    debug!(
-                        "Federation: received revision vector with {} entries from peer {}",
-                        fed_msg.revisions.len(),
-                        session.federation_router_id().unwrap_or_default()
-                    );
-
-                    // Validate each address against declared namespaces
-                    let declared = session.federation_namespaces();
-
-                    // Compare with local state, send delta for entries where local > peer
-                    let mut delta_params = Vec::new();
-                    for (addr, peer_rev) in &fed_msg.revisions {
-                        // Check address is covered by declared namespaces
-                        let covered = declared.iter().any(|ns| {
-                            clasp_core::address::glob_match(ns, addr)
-                        });
-                        if !covered {
-                            debug!(
-                                "Federation: skipping revision for {} (not in declared namespaces)",
-                                addr
-                            );
-                            continue;
-                        }
-
-                        // Enforce scope checks in authenticated mode
-                        if security_mode == SecurityMode::Authenticated
-                            && !session.has_scope(Action::Read, addr)
-                        {
-                            debug!(
-                                "Federation: skipping revision for {} (insufficient scope)",
-                                addr
-                            );
-                            continue;
-                        }
-
-                        if let Some(local_ps) = state.get_state(addr) {
-                            if local_ps.revision > *peer_rev {
-                                delta_params.push(clasp_core::ParamValue {
-                                    address: addr.clone(),
-                                    value: local_ps.value,
-                                    revision: local_ps.revision,
-                                    writer: Some(local_ps.writer),
-                                    timestamp: Some(local_ps.timestamp),
-                                });
-                            }
-                        }
-                    }
-
-                    if !delta_params.is_empty() {
-                        let snapshot = SnapshotMessage {
-                            params: delta_params,
-                        };
-                        send_chunked_snapshot(sender, snapshot).await;
-                    }
-
-                    Some(MessageResult::None)
-                }
-
-                clasp_core::FederationOp::SyncComplete => {
-                    info!(
-                        "Federation: sync complete from peer {}",
-                        session.federation_router_id().unwrap_or_default()
-                    );
-                    Some(MessageResult::None)
-                }
-            }
-        }
-
-        _ => Some(MessageResult::None),
     }
 }
 
@@ -2529,7 +1234,7 @@ pub fn execute_rule_actions(
                         if let Ok(bytes) = codec::encode(&set_msg) {
                             for sub_session_id in subscribers {
                                 if let Some(sub_session) = sessions.get(&sub_session_id) {
-                                    try_send_with_drop_tracking_sync(
+                                    crate::handlers::try_send_with_drop_tracking_sync(
                                         sub_session.value(),
                                         bytes.clone(),
                                         &sub_session_id,
@@ -2565,7 +1270,7 @@ pub fn execute_rule_actions(
                 if let Ok(bytes) = codec::encode(&pub_msg) {
                     for sub_session_id in subscribers {
                         if let Some(sub_session) = sessions.get(&sub_session_id) {
-                            try_send_with_drop_tracking_sync(
+                            crate::handlers::try_send_with_drop_tracking_sync(
                                 sub_session.value(),
                                 bytes.clone(),
                                 &sub_session_id,
@@ -2592,7 +1297,7 @@ pub fn execute_rule_actions(
                             if let Ok(bytes) = codec::encode(&set_msg) {
                                 for sub_session_id in subscribers {
                                     if let Some(sub_session) = sessions.get(&sub_session_id) {
-                                        try_send_with_drop_tracking_sync(
+                                        crate::handlers::try_send_with_drop_tracking_sync(
                                             sub_session.value(),
                                             bytes.clone(),
                                             &sub_session_id,
@@ -2615,47 +1320,6 @@ pub fn execute_rule_actions(
     }
 }
 
-/// Try to send a message to a session with drop tracking.
-/// Records the drop and sends notification when threshold is exceeded.
-fn try_send_with_drop_tracking_sync(session: &Arc<Session>, data: Bytes, session_id: &SessionId) {
-    if let Err(e) = session.try_send(data) {
-        warn!(
-            "Failed to send to {}: {} (buffer full, dropping)",
-            session_id, e
-        );
-
-        // Record the drop and check if we should notify
-        if session.record_drop() {
-            // Send drop notification asynchronously
-            let session = Arc::clone(session);
-            let session_id = session_id.clone();
-            let drops = session.drops_in_window();
-            tokio::spawn(async move {
-                let error = Message::Error(ErrorMessage {
-                    code: 503, // Service Unavailable
-                    message: format!(
-                        "Buffer overflow: messages being dropped ({} drops in last 10 seconds)",
-                        drops
-                    ),
-                    address: None,
-                    correlation_id: None,
-                });
-                if let Ok(error_bytes) = codec::encode(&error) {
-                    // Use send() not try_send() for the notification to ensure it gets through
-                    if let Err(e) = session.send(error_bytes).await {
-                        warn!("Failed to send drop notification to {}: {}", session_id, e);
-                    } else {
-                        info!(
-                            "Sent buffer overflow notification to session {} ({} drops)",
-                            session_id, drops
-                        );
-                    }
-                }
-            });
-        }
-    }
-}
-
 /// Check if a federation `request` pattern is covered by a `declared` namespace pattern.
 ///
 /// A request is covered if every address it could match is also matched by the declared
@@ -2664,7 +1328,7 @@ fn try_send_with_drop_tracking_sync(session: &Arc<Session>, data: Bytes, session
 /// - Concrete within glob: `/sensors/temp/1` covered by `/sensors/**`
 /// - Sub-pattern within glob: `/sensors/temp/**` covered by `/sensors/**`
 #[cfg(feature = "federation")]
-fn federation_pattern_covered_by(request: &str, declared: &str) -> bool {
+pub(crate) fn federation_pattern_covered_by(request: &str, declared: &str) -> bool {
     // Exact match
     if request == declared {
         return true;
@@ -2737,19 +1401,6 @@ fn federation_pattern_covered_by(request: &str, declared: &str) -> bool {
     }
 
     di >= decl_parts.len() && ri >= req_parts.len()
-}
-
-/// Broadcast to all sessions except one (non-blocking)
-fn broadcast_to_subscribers(
-    data: &Bytes,
-    sessions: &Arc<DashMap<SessionId, Arc<Session>>>,
-    exclude: &SessionId,
-) {
-    for entry in sessions.iter() {
-        if entry.key() != exclude {
-            try_send_with_drop_tracking_sync(entry.value(), data.clone(), entry.key());
-        }
-    }
 }
 
 #[cfg(all(test, feature = "federation"))]

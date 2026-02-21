@@ -23,4 +23,4 @@ pub use journal::Journal;
 pub use memory::MemoryJournal;
 
 #[cfg(feature = "sqlite")]
-pub use sqlite::SqliteJournal;
+pub use sqlite::{BatchingSqliteJournal, SqliteJournal};

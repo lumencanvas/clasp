@@ -264,6 +264,7 @@ pub trait TokenValidator: Send + Sync + std::any::Any {
 /// Tokens have the format: `cpsk_<base62-random-32-chars>`
 pub struct CpskValidator {
     tokens: RwLock<HashMap<String, TokenInfo>>,
+    default_ttl: Option<Duration>,
 }
 
 impl CpskValidator {
@@ -274,11 +275,27 @@ impl CpskValidator {
     pub fn new() -> Self {
         Self {
             tokens: RwLock::new(HashMap::new()),
+            default_ttl: None,
         }
     }
 
-    /// Register a token with the given scopes
-    pub fn register(&self, token: String, info: TokenInfo) {
+    /// Create a new CPSK validator with a default token TTL.
+    /// Tokens registered without an explicit expiry will expire after this duration.
+    pub fn with_default_ttl(ttl: Duration) -> Self {
+        Self {
+            tokens: RwLock::new(HashMap::new()),
+            default_ttl: Some(ttl),
+        }
+    }
+
+    /// Register a token with the given scopes.
+    /// If the token has no expiry and a default TTL is configured, the TTL is applied.
+    pub fn register(&self, token: String, mut info: TokenInfo) {
+        if info.expires_at.is_none() {
+            if let Some(ttl) = self.default_ttl {
+                info.expires_at = Some(SystemTime::now() + ttl);
+            }
+        }
         self.tokens.write().unwrap().insert(token, info);
     }
 
@@ -717,6 +734,46 @@ mod tests {
             SecurityMode::from_str("auth").unwrap(),
             SecurityMode::Authenticated
         );
+    }
+
+    #[test]
+    fn test_cpsk_default_ttl() {
+        let validator = CpskValidator::with_default_ttl(Duration::from_secs(3600));
+        let token = CpskValidator::generate_token();
+        let scopes = vec![Scope::parse("read:/**").unwrap()];
+
+        // Register without explicit expiry — default TTL should be applied
+        let info = TokenInfo::new(token.clone(), scopes);
+        assert!(info.expires_at.is_none());
+        validator.register(token.clone(), info);
+
+        // Token should have an expiry now
+        let tokens = validator.tokens.read().unwrap();
+        let stored = tokens.get(&token).unwrap();
+        assert!(stored.expires_at.is_some());
+        assert!(!stored.is_expired());
+    }
+
+    #[test]
+    fn test_cpsk_default_ttl_no_override() {
+        let validator = CpskValidator::with_default_ttl(Duration::from_secs(3600));
+        let token = CpskValidator::generate_token();
+        let scopes = vec![Scope::parse("read:/**").unwrap()];
+
+        // Register with explicit expiry — default TTL should NOT override
+        let explicit_expiry = SystemTime::now() + Duration::from_secs(7200);
+        let info = TokenInfo::new(token.clone(), scopes).with_expires_at(explicit_expiry);
+        validator.register(token.clone(), info);
+
+        let tokens = validator.tokens.read().unwrap();
+        let stored = tokens.get(&token).unwrap();
+        // Should keep the explicit 7200s expiry, not the 3600s default
+        let stored_expiry = stored.expires_at.unwrap();
+        let diff = stored_expiry
+            .duration_since(SystemTime::now())
+            .unwrap()
+            .as_secs();
+        assert!(diff > 3600, "explicit expiry should be preserved");
     }
 
     #[test]

@@ -294,6 +294,10 @@ pub fn pattern_is_subset(child: &str, parent: &str) -> bool {
         }
 
         if pp == "*" {
+            // ** is wider than *, not a subset (prevents scope widening)
+            if cp == "**" {
+                return false;
+            }
             // Parent * matches one child segment
             pi += 1;
             ci += 1;
@@ -487,6 +491,9 @@ mod tests {
         assert!(!pattern_is_subset("/audio/**", "/lights/**"));
         assert!(!pattern_is_subset("/**", "/lights/**"));
         assert!(pattern_is_subset("/lights/1", "/lights/*"));
+        // ** is wider than *, not a subset
+        assert!(!pattern_is_subset("/lights/**", "/lights/*"));
+        assert!(!pattern_is_subset("/**", "/*"));
     }
 
     // --- Negative tests ---

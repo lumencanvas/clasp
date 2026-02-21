@@ -91,6 +91,7 @@
 
 pub mod error;
 pub mod gesture;
+pub mod handlers;
 pub mod p2p;
 pub mod router;
 pub mod session;
