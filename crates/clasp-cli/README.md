@@ -86,6 +86,60 @@ clasp info
 clasp server --config clasp.toml
 ```
 
+## Key Management
+
+Generate and inspect Ed25519 keypairs used for capability tokens and entity identity:
+
+```bash
+# Generate a new keypair (hex-encoded, saved with 0600 permissions)
+clasp key generate --out root.key
+
+# Show the public key
+clasp key show root.key
+
+# Show in did:key format
+clasp key show root.key --format did
+```
+
+## Capability Token Commands
+
+Create, delegate, inspect, and verify Ed25519 capability tokens (requires `caps` feature):
+
+```bash
+# Create a root token with admin access, valid for 30 days
+clasp token cap create --key root.key --scopes "admin:/**" --expires 30d
+
+# Delegate with narrower scopes
+clasp token cap delegate <parent-token> --key child.key --scopes "write:/lights/**"
+
+# Inspect a token (decode without validation)
+clasp token cap inspect <token>
+
+# Verify a token against a trust anchor
+clasp token cap verify <token> --trust-anchor root.key
+```
+
+**Scope format:** `action:pattern` where action is `admin`, `write`, `read`, or a custom string, and pattern is a CLASP address with optional wildcards.
+
+**Delegation rules:** Child tokens can only narrow scopes (never widen), and cannot outlive their parent token.
+
+## Entity Token Commands
+
+Generate entity keypairs and mint entity tokens (requires `registry` feature):
+
+```bash
+# Generate an entity keypair with metadata
+clasp token entity keygen --out sensor.key --name "Sensor A" --type device
+
+# Mint an entity token from a keypair
+clasp token entity mint --key sensor.key
+
+# Inspect an entity token
+clasp token entity inspect <token>
+```
+
+**Entity ID format:** `clasp:<base58>` derived from the Ed25519 public key.
+
 ## Options
 
 | Flag | Description |

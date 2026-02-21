@@ -8,6 +8,7 @@ mod tokens;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use colored::Colorize;
+use ed25519_dalek::SigningKey;
 use std::path::PathBuf;
 use tokens::{create_token, default_token_file, format_timestamp, TokenStore};
 use tokio::sync::mpsc;
@@ -146,6 +147,12 @@ enum Commands {
     /// Show version and system info
     Info,
 
+    /// Manage Ed25519 keypairs for capability and entity tokens
+    Key {
+        #[command(subcommand)]
+        action: KeyAction,
+    },
+
     /// Manage authentication tokens
     Token {
         /// Token file path (default: ~/.config/clasp/tokens.json)
@@ -157,10 +164,31 @@ enum Commands {
     },
 }
 
+/// Key management actions
+#[derive(Subcommand)]
+enum KeyAction {
+    /// Generate a new Ed25519 keypair
+    Generate {
+        /// Output file path (hex-encoded signing key)
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+    },
+
+    /// Show the public key for a signing key file
+    Show {
+        /// Path to signing key file
+        path: PathBuf,
+
+        /// Output format: hex (default) or did
+        #[arg(long, default_value = "hex")]
+        format: String,
+    },
+}
+
 /// Token management actions
 #[derive(Subcommand)]
 enum TokenAction {
-    /// Create a new token
+    /// Create a new CPSK token
     Create {
         /// Scopes (comma-separated, e.g., "read:/**,write:/lights/**")
         #[arg(short, long)]
@@ -175,20 +203,20 @@ enum TokenAction {
         subject: Option<String>,
     },
 
-    /// List all tokens
+    /// List all CPSK tokens
     List {
         /// Show expired tokens
         #[arg(long)]
         show_expired: bool,
     },
 
-    /// Show details of a specific token
+    /// Show details of a specific CPSK token
     Show {
         /// Token string or prefix
         token: String,
     },
 
-    /// Revoke a token
+    /// Revoke a CPSK token
     Revoke {
         /// Token string or prefix
         token: String,
@@ -196,6 +224,120 @@ enum TokenAction {
 
     /// Remove all expired tokens
     Prune,
+
+    /// Capability token operations (delegatable Ed25519 tokens)
+    #[cfg(feature = "caps")]
+    Cap {
+        #[command(subcommand)]
+        action: CapAction,
+    },
+
+    /// Entity token operations (device/user/service identity tokens)
+    #[cfg(feature = "registry")]
+    Entity {
+        #[command(subcommand)]
+        action: EntityAction,
+    },
+}
+
+/// Capability token actions
+#[cfg(feature = "caps")]
+#[derive(Subcommand)]
+enum CapAction {
+    /// Create a new root capability token
+    Create {
+        /// Path to signing key file
+        #[arg(short, long)]
+        key: PathBuf,
+
+        /// Scopes (comma-separated, e.g., "admin:/**")
+        #[arg(short, long)]
+        scopes: String,
+
+        /// Expiration (e.g., "30d", "24h")
+        #[arg(short, long, default_value = "30d")]
+        expires: String,
+
+        /// Audience public key (hex, optional -- omit for bearer token)
+        #[arg(long)]
+        audience: Option<String>,
+    },
+
+    /// Delegate (attenuate) a capability token to create a child
+    Delegate {
+        /// Parent token string (cap_...)
+        parent: String,
+
+        /// Path to child signing key file
+        #[arg(short, long)]
+        key: PathBuf,
+
+        /// Child scopes (must be subset of parent)
+        #[arg(short, long)]
+        scopes: String,
+
+        /// Expiration (e.g., "7d") -- clamped to parent's expiry
+        #[arg(short, long, default_value = "7d")]
+        expires: String,
+
+        /// Audience public key (hex, optional)
+        #[arg(long)]
+        audience: Option<String>,
+    },
+
+    /// Inspect a capability token (decode without verification)
+    Inspect {
+        /// Token string (cap_...)
+        token: String,
+    },
+
+    /// Verify a capability token against a trust anchor
+    Verify {
+        /// Token string (cap_...)
+        token: String,
+
+        /// Trust anchor public key file (or hex string)
+        #[arg(long)]
+        trust_anchor: String,
+
+        /// Maximum chain depth (default: 5)
+        #[arg(long, default_value = "5")]
+        max_depth: usize,
+    },
+}
+
+/// Entity token actions
+#[cfg(feature = "registry")]
+#[derive(Subcommand)]
+enum EntityAction {
+    /// Generate a new entity keypair (does NOT register in the registry --
+    /// use the registry API to register the public key after generation)
+    Keygen {
+        /// Output key file path
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+
+        /// Entity name (informational, printed to stderr)
+        #[arg(short, long)]
+        name: Option<String>,
+
+        /// Entity type (device, user, service, router)
+        #[arg(short = 't', long, default_value = "device")]
+        entity_type: String,
+    },
+
+    /// Mint an entity token from a keypair
+    Mint {
+        /// Path to signing key file
+        #[arg(short, long)]
+        key: PathBuf,
+    },
+
+    /// Inspect an entity token (decode without full verification)
+    Inspect {
+        /// Token string (ent_...)
+        token: String,
+    },
 }
 
 #[tokio::main]
@@ -305,6 +447,10 @@ async fn main() -> Result<()> {
 
         Commands::Info => {
             print_info();
+        }
+
+        Commands::Key { action } => {
+            handle_key_command(action)?;
         }
 
         Commands::Token { file, action } => {
@@ -447,6 +593,16 @@ async fn main() -> Result<()> {
                     store.save(&token_path)?;
 
                     println!("{} Removed {} expired token(s)", "OK".green().bold(), count);
+                }
+
+                #[cfg(feature = "caps")]
+                TokenAction::Cap { action } => {
+                    handle_cap_command(action)?;
+                }
+
+                #[cfg(feature = "registry")]
+                TokenAction::Entity { action } => {
+                    handle_entity_command(action)?;
                 }
             }
         }
@@ -711,6 +867,330 @@ async fn subscribe_pattern(
     warn!("Server connection not yet implemented - press Ctrl+C to exit");
 
     shutdown_rx.recv().await;
+
+    Ok(())
+}
+
+// =========================================================================
+// Key management
+// =========================================================================
+
+fn load_signing_key(path: &std::path::Path) -> Result<SigningKey> {
+    let hex_str = std::fs::read_to_string(path)
+        .with_context(|| format!("Failed to read key file: {}", path.display()))?;
+    let hex_str = hex_str.trim();
+    anyhow::ensure!(hex_str.len() == 64, "Key file must contain 64 hex characters (32-byte Ed25519 signing key)");
+    let bytes = hex_decode(hex_str)?;
+    let key_bytes: [u8; 32] = bytes
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("Invalid key length"))?;
+    Ok(SigningKey::from_bytes(&key_bytes))
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+fn hex_decode(s: &str) -> Result<Vec<u8>> {
+    anyhow::ensure!(s.len() % 2 == 0, "Odd-length hex string");
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).context("Invalid hex character"))
+        .collect()
+}
+
+/// Write a file with restrictive permissions (0o600 on Unix) atomically,
+/// avoiding the TOCTOU window of write() + set_permissions().
+fn write_secret_file(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)?;
+        file.write_all(data)?;
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(path, data)?;
+    }
+    Ok(())
+}
+
+fn handle_key_command(action: KeyAction) -> Result<()> {
+    match action {
+        KeyAction::Generate { out } => {
+            let signing_key = SigningKey::generate(&mut rand::rngs::OsRng);
+            let hex_key = hex_encode(&signing_key.to_bytes());
+            let pub_hex = hex_encode(signing_key.verifying_key().as_bytes());
+
+            if let Some(ref path) = out {
+                write_secret_file(path, hex_key.as_bytes())
+                    .with_context(|| format!("Failed to write key file: {}", path.display()))?;
+
+                eprintln!("{} Key saved to: {}", "OK".green().bold(), path.display());
+                eprintln!("{}: {}", "Public key".cyan(), pub_hex);
+            } else {
+                // Print signing key to stdout (for piping)
+                println!("{}", hex_key);
+                eprintln!("{}: {}", "Public key".cyan(), pub_hex);
+            }
+        }
+
+        KeyAction::Show { path, format } => {
+            let signing_key = load_signing_key(&path)?;
+            let pub_bytes = signing_key.verifying_key().to_bytes();
+
+            match format.as_str() {
+                "did" => {
+                    // did:key multicodec prefix for Ed25519: 0xed01
+                    let mut multicodec = vec![0xed, 0x01];
+                    multicodec.extend_from_slice(&pub_bytes);
+                    let encoded = bs58::encode(&multicodec).into_string();
+                    println!("did:key:z{}", encoded);
+                }
+                _ => {
+                    println!("{}", hex_encode(&pub_bytes));
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+// =========================================================================
+// Capability token commands
+// =========================================================================
+
+#[cfg(feature = "caps")]
+fn parse_expiry_to_timestamp(expires: &str) -> Result<u64> {
+    let duration = clasp_core::security::parse_duration(expires)
+        .context("Failed to parse expiration")?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    Ok(now + duration.as_secs())
+}
+
+#[cfg(feature = "caps")]
+fn handle_cap_command(action: CapAction) -> Result<()> {
+    use clasp_caps::CapabilityToken;
+
+    match action {
+        CapAction::Create { key, scopes, expires, audience } => {
+            let signing_key = load_signing_key(&key)?;
+            let scope_list: Vec<String> = scopes.split(',').map(|s| s.trim().to_string()).collect();
+            let expires_at = parse_expiry_to_timestamp(&expires)?;
+
+            let audience_bytes = if let Some(ref aud) = audience {
+                Some(hex_decode(aud)?)
+            } else {
+                None
+            };
+
+            let token = CapabilityToken::create_root(
+                &signing_key,
+                scope_list,
+                expires_at,
+                audience_bytes,
+            )?;
+
+            let encoded = token.encode()?;
+            println!("{}", encoded);
+            eprintln!("{} Root capability token created", "OK".green().bold());
+            eprintln!("  {}: {}", "Issuer".cyan(), hex_encode(&token.issuer));
+            eprintln!("  {}: {}", "Scopes".cyan(), token.scopes.join(", "));
+            eprintln!("  {}: {}", "Expires".cyan(), format_timestamp(token.expires_at));
+        }
+
+        CapAction::Delegate { parent, key, scopes, expires, audience } => {
+            let parent_token = CapabilityToken::decode(&parent)
+                .context("Failed to decode parent token")?;
+
+            let child_key = load_signing_key(&key)?;
+            let scope_list: Vec<String> = scopes.split(',').map(|s| s.trim().to_string()).collect();
+            let expires_at = parse_expiry_to_timestamp(&expires)?;
+
+            let audience_bytes = if let Some(ref aud) = audience {
+                Some(hex_decode(aud)?)
+            } else {
+                None
+            };
+
+            let child = parent_token.delegate(
+                &child_key,
+                scope_list,
+                expires_at,
+                audience_bytes,
+            )?;
+
+            let encoded = child.encode()?;
+            println!("{}", encoded);
+            eprintln!("{} Delegated capability token created", "OK".green().bold());
+            eprintln!("  {}: {}", "Issuer".cyan(), hex_encode(&child.issuer));
+            eprintln!("  {}: {}", "Chain depth".cyan(), child.chain_depth());
+            eprintln!("  {}: {}", "Scopes".cyan(), child.scopes.join(", "));
+            eprintln!("  {}: {}", "Expires".cyan(), format_timestamp(child.expires_at));
+        }
+
+        CapAction::Inspect { token } => {
+            let cap = CapabilityToken::decode(&token)
+                .context("Failed to decode token")?;
+
+            println!("{}: v{}", "Version".cyan(), cap.version);
+            println!("{}: {}", "Issuer".cyan(), hex_encode(&cap.issuer));
+            if let Some(ref aud) = cap.audience {
+                println!("{}: {}", "Audience".cyan(), hex_encode(aud));
+            }
+            println!("{}: {}", "Scopes".cyan(), cap.scopes.join(", "));
+            println!("{}: {} ({})", "Expires".cyan(), cap.expires_at, format_timestamp(cap.expires_at));
+            println!("{}: {}", "Nonce".cyan(), cap.nonce);
+            println!("{}: {}", "Chain depth".cyan(), cap.chain_depth());
+
+            if !cap.proofs.is_empty() {
+                println!("\n{}:", "Delegation chain".cyan());
+                for (i, proof) in cap.proofs.iter().enumerate() {
+                    println!("  [{}] issuer: {}", i, hex_encode(&proof.issuer));
+                    println!("       scopes: {}", proof.scopes.join(", "));
+                }
+            }
+
+            // Verify signature
+            match cap.verify_signature() {
+                Ok(()) => println!("\n{} Signature valid", "OK".green().bold()),
+                Err(e) => println!("\n{} Signature invalid: {}", "FAIL".red().bold(), e),
+            }
+
+            if cap.is_expired() {
+                println!("{}", "WARNING: Token is expired".yellow());
+            }
+        }
+
+        CapAction::Verify { token, trust_anchor, max_depth } => {
+            use clasp_caps::CapabilityValidator;
+            use clasp_core::security::TokenValidator;
+
+            // Load trust anchor (file or hex string)
+            let anchor_bytes = if std::path::Path::new(&trust_anchor).exists() {
+                let signing_key = load_signing_key(std::path::Path::new(&trust_anchor))?;
+                signing_key.verifying_key().to_bytes().to_vec()
+            } else {
+                hex_decode(&trust_anchor)?
+            };
+
+            let validator = CapabilityValidator::new(vec![anchor_bytes], max_depth);
+
+            match validator.validate(&token) {
+                clasp_core::security::ValidationResult::Valid(info) => {
+                    println!("{} Token is valid", "OK".green().bold());
+                    println!("  {}: {:?}", "Scopes".cyan(),
+                        info.scopes.iter().map(|s| s.as_str().to_string()).collect::<Vec<_>>());
+                    if let Some(ref subject) = info.subject {
+                        println!("  {}: {}", "Subject".cyan(), subject);
+                    }
+                    if let Some(depth) = info.metadata.get("chain_depth") {
+                        println!("  {}: {}", "Chain depth".cyan(), depth);
+                    }
+                }
+                clasp_core::security::ValidationResult::Expired => {
+                    println!("{} Token is expired", "FAIL".red().bold());
+                    std::process::exit(1);
+                }
+                clasp_core::security::ValidationResult::Invalid(reason) => {
+                    println!("{} Token is invalid: {}", "FAIL".red().bold(), reason);
+                    std::process::exit(1);
+                }
+                clasp_core::security::ValidationResult::NotMyToken => {
+                    println!("{} Not a capability token (missing cap_ prefix)", "FAIL".red().bold());
+                    std::process::exit(1);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+// =========================================================================
+// Entity token commands
+// =========================================================================
+
+#[cfg(feature = "registry")]
+fn handle_entity_command(action: EntityAction) -> Result<()> {
+    use clasp_registry::EntityKeypair;
+
+    match action {
+        EntityAction::Keygen { out, name, entity_type } => {
+            let keypair = EntityKeypair::generate()
+                .map_err(|e| anyhow::anyhow!("Failed to generate keypair: {}", e))?;
+
+            let hex_key = hex_encode(&keypair.signing_key.to_bytes());
+            let pub_hex = hex_encode(keypair.public_key_bytes());
+            let entity_id = keypair.entity_id.as_str().to_string();
+
+            if let Some(ref path) = out {
+                write_secret_file(path, hex_key.as_bytes())
+                    .with_context(|| format!("Failed to write key file: {}", path.display()))?;
+
+                eprintln!("{} Entity keypair saved to: {}", "OK".green().bold(), path.display());
+            } else {
+                println!("{}", hex_key);
+            }
+
+            eprintln!("  {}: {}", "Entity ID".cyan(), entity_id);
+            eprintln!("  {}: {}", "Public key".cyan(), pub_hex);
+            eprintln!("  {}: {}", "Type".cyan(), entity_type);
+            if let Some(ref n) = name {
+                eprintln!("  {}: {}", "Name".cyan(), n);
+            }
+        }
+
+        EntityAction::Mint { key } => {
+            let signing_key = load_signing_key(&key)?;
+            let keypair = EntityKeypair::from_signing_key(signing_key)
+                .map_err(|e| anyhow::anyhow!("Failed to create entity keypair: {}", e))?;
+
+            let token = clasp_registry::generate_token(&keypair)
+                .map_err(|e| anyhow::anyhow!("Failed to generate token: {}", e))?;
+
+            println!("{}", token);
+            eprintln!("{} Entity token minted", "OK".green().bold());
+            eprintln!("  {}: {}", "Entity ID".cyan(), keypair.entity_id);
+        }
+
+        EntityAction::Inspect { token } => {
+            let payload = clasp_registry::parse_token(&token)
+                .map_err(|e| anyhow::anyhow!("Failed to parse token: {}", e))?;
+
+            println!("{}: {}", "Entity ID".cyan(), payload.entity_id);
+            println!("{}: {}", "Timestamp".cyan(), payload.timestamp);
+            println!("{}: {} bytes", "Signature".cyan(), payload.signature.len());
+
+            // Show human-readable time
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            if payload.timestamp <= now {
+                let age = now - payload.timestamp;
+                if age < 60 {
+                    println!("{}: {} seconds ago", "Created".cyan(), age);
+                } else if age < 3600 {
+                    println!("{}: {} minutes ago", "Created".cyan(), age / 60);
+                } else if age < 86400 {
+                    println!("{}: {} hours ago", "Created".cyan(), age / 3600);
+                } else {
+                    println!("{}: {} days ago", "Created".cyan(), age / 86400);
+                }
+            }
+        }
+    }
 
     Ok(())
 }

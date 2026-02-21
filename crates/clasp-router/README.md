@@ -32,6 +32,9 @@ clasp-router = { version = "3.1", features = ["mqtt-server", "osc-server"] }
 | `tcp` | Raw TCP transport |
 | `mqtt-server` | Accept MQTT clients directly |
 | `osc-server` | Accept OSC clients via UDP |
+| `journal` | State persistence and replay via `clasp-journal` |
+| `rules` | Server-side automation via `clasp-rules` |
+| `federation` | Accept inbound federation peers |
 | `full` | All features enabled |
 
 ## Basic Usage
@@ -203,25 +206,72 @@ When a client exceeds the rate limit, excess messages are dropped and a warning 
 
 When a client's receive buffer fills and messages are dropped, the router sends an ERROR 503 notification after 100 drops within 10 seconds. This helps slow clients detect they're missing messages. Notifications are rate-limited to 1 per 10 seconds per session.
 
+## Journal Integration
+
+Enable state persistence with the `journal` feature. The router records all SET and PUBLISH operations to an append-only journal for crash recovery and replay:
+
+```rust
+use clasp_journal::SqliteJournal;
+use std::sync::Arc;
+
+let journal = Arc::new(SqliteJournal::new("state.db")?);
+let router = Router::new(config).with_journal(journal);
+```
+
+On restart, state can be replayed from the journal. Clients can request replay of missed messages using the Replay handler.
+
+## Rules Engine
+
+Enable server-side automation with the `rules` feature. Rules are evaluated after state changes:
+
+```rust
+use clasp_rules::{Rule, Trigger, RuleAction, RulesEngine};
+```
+
+The router evaluates matching rules on each SET/PUBLISH, executing actions like setting values, publishing events, or copying values with transforms. See [`clasp-rules`](../clasp-rules/) for rule definition syntax.
+
+## Federation
+
+Enable router-to-router state sharing with the `federation` feature. The router accepts inbound federation peers that advertise `"federation"` in their HELLO features.
+
+Federation operations handled by the router:
+
+| Operation | Description |
+|-----------|-------------|
+| `DeclareNamespaces` | Peer declares owned namespace patterns, router auto-subscribes |
+| `RequestSync` | Peer requests state snapshot for a pattern range |
+| `RevisionVector` | Peer exchanges revision vectors for delta sync |
+| `SyncComplete` | Marks sync as complete |
+
+**Security:** In authenticated mode, federation peers must have scopes covering their declared namespaces. `RequestSync` and `RevisionVector` are validated against declared namespaces (peers cannot request data outside their declared scope). Resource limits prevent exhaustion: max 1,000 patterns per peer, max 10,000 entries per revision vector.
+
+Non-federation sessions that attempt `FederationSync` receive a 403 error.
+
 ## Architecture
 
 ```
-                    ┌─────────────────────────────────────────┐
-                    │              CLASP Router               │
-                    │  ┌─────────────────────────────────────┐│
-                    │  │            Shared State             ││
-                    │  │  sessions | subscriptions | state   ││
-                    │  └─────────────────────────────────────┘│
-                    │        ▲           ▲           ▲        │
-                    │        │           │           │        │
-                    │  ┌─────┴───┐ ┌─────┴───┐ ┌─────┴───┐   │
-                    │  │WebSocket│ │  MQTT   │ │   OSC   │   │
-                    │  │ :7330   │ │  :1883  │ │  :8000  │   │
-                    │  └─────────┘ └─────────┘ └─────────┘   │
-                    └─────────────────────────────────────────┘
+                    ┌─────────────────────────────────────────────────┐
+                    │                  CLASP Router                   │
+                    │  ┌─────────────────────────────────────────┐    │
+                    │  │              Shared State                │    │
+                    │  │   sessions | subscriptions | state       │    │
+                    │  └──────┬──────────────┬──────────────┬────┘    │
+                    │         │              │              │         │
+                    │  ┌──────▼──────┐ ┌─────▼─────┐ ┌─────▼─────┐  │
+                    │  │   Journal   │ │   Rules   │ │ Federation│  │
+                    │  │ (optional)  │ │ (optional)│ │ (optional)│  │
+                    │  └─────────────┘ └───────────┘ └─────┬─────┘  │
+                    │                                      │         │
+                    │        ▲           ▲           ▲      │         │
+                    │        │           │           │      ▼         │
+                    │  ┌─────┴───┐ ┌─────┴───┐ ┌─────┴───┐ ┌──────┐  │
+                    │  │WebSocket│ │  MQTT   │ │   OSC   │ │ Peer │  │
+                    │  │ :7330   │ │  :1883  │ │  :8000  │ │Router│  │
+                    │  └─────────┘ └─────────┘ └─────────┘ └──────┘  │
+                    └─────────────────────────────────────────────────┘
 ```
 
-All protocol adapters share the same router state, enabling cross-protocol communication.
+All protocol adapters and federation peers share the same router state, enabling cross-protocol and cross-site communication.
 
 ## Performance
 

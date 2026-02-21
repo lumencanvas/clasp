@@ -321,6 +321,7 @@ fn encode_hello(buf: &mut BytesMut, msg: &HelloMessage) -> Result<()> {
             "stream" => features |= 0x20,
             "gesture" => features |= 0x10,
             "timeline" => features |= 0x08,
+            "federation" => features |= 0x04,
             _ => {}
         }
     }
@@ -1002,6 +1003,9 @@ fn decode_hello(buf: &mut &[u8]) -> Result<Message> {
     }
     if feature_flags & 0x08 != 0 {
         features.push("timeline".to_string());
+    }
+    if feature_flags & 0x04 != 0 {
+        features.push("federation".to_string());
     }
 
     let name = decode_string(buf)?;

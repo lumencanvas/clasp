@@ -489,6 +489,73 @@ mod tests {
         assert!(pattern_is_subset("/lights/1", "/lights/*"));
     }
 
+    // --- Negative tests ---
+
+    #[test]
+    fn test_decode_malformed_base64() {
+        let result = CapabilityToken::decode("cap_!!!invalid-base64!!!");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decode_missing_prefix() {
+        let result = CapabilityToken::decode("not_a_cap_token");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decode_truncated_payload() {
+        use base64::Engine;
+        // Valid base64 but truncated msgpack payload
+        let truncated = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&[0x92, 0x01]);
+        let result = CapabilityToken::decode(&format!("cap_{}", truncated));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decode_corrupted_msgpack() {
+        use base64::Engine;
+        // Valid base64 but not valid msgpack for CapabilityToken
+        let garbage = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b"this is not msgpack");
+        let result = CapabilityToken::decode(&format!("cap_{}", garbage));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_signature_tampering() {
+        let key = test_key();
+        let mut token = CapabilityToken::create_root(
+            &key,
+            vec!["admin:/**".to_string()],
+            future_timestamp(),
+            None,
+        )
+        .unwrap();
+
+        // Flip a bit in the signature
+        token.signature[0] ^= 0xFF;
+        assert!(token.verify_signature().is_err());
+    }
+
+    #[test]
+    fn test_empty_scopes_delegation() {
+        let root_key = test_key();
+        let child_key = SigningKey::from_bytes(&[2u8; 32]);
+
+        let root = CapabilityToken::create_root(
+            &root_key,
+            vec!["admin:/**".to_string()],
+            future_timestamp(),
+            None,
+        )
+        .unwrap();
+
+        // Delegate with empty scopes — should succeed (empty is a subset of anything)
+        let child = root.delegate(&child_key, vec![], future_timestamp(), None).unwrap();
+        assert!(child.scopes.is_empty());
+        assert!(child.verify_signature().is_ok());
+    }
+
     #[test]
     fn test_multi_hop_delegation() {
         let key_a = SigningKey::from_bytes(&[1u8; 32]);

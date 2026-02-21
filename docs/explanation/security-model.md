@@ -1,6 +1,6 @@
 # Security Model
 
-CLASP provides security through encryption, authentication, and fine-grained access control.
+CLASP provides security through encryption, authentication, and fine-grained access control using Ed25519-based tokens.
 
 ## Security Modes
 
@@ -10,7 +10,7 @@ CLASP supports three security modes:
 |------|----------|----------|
 | **Open** | Development, trusted LAN | No encryption, no auth |
 | **Encrypted** | Production | TLS encryption |
-| **Authenticated** | Multi-user | Encryption + capability tokens |
+| **Authenticated** | Multi-user | Encryption + token-based auth with scopes |
 
 ## Transport Encryption
 
@@ -46,139 +46,159 @@ Raw UDP is unencrypted. For secure UDP:
 - Or use QUIC instead
 - Or encrypt at application level
 
-## Capability Tokens
+## Token Types
 
-Capability tokens provide fine-grained access control using JWT:
+CLASP supports three token types, each with a distinct prefix and validation path. All three coexist in the `ValidatorChain`, which dispatches by prefix:
 
-```javascript
-{
-  "iss": "clasp:myapp",           // Issuer
-  "sub": "user:alice",            // Subject (user identity)
-  "iat": 1704067200,              // Issued at
-  "exp": 1704153600,              // Expires
-  "sf": {                         // CLASP capabilities
-    "read": ["/public/**", "/user/alice/**"],
-    "write": ["/user/alice/**"],
-    "constraints": {
-      "/user/alice/volume": {
-        "range": [0, 100]
-      }
-    }
-  }
-}
+| Token Type | Prefix | Signing | Use Case |
+|-----------|--------|---------|----------|
+| **CPSK** | `cpsk_` | Pre-shared key (HMAC) | Register/login flow, simple deployments |
+| **Capability** | `cap_` | Ed25519 | Delegatable access, offline issuance |
+| **Entity** | `ent_` | Ed25519 | Device/service identity, registry-backed |
+
+### CPSK Tokens
+
+Pre-shared key tokens for the register/login flow:
+
+```bash
+# Register a user and get a CPSK token
+POST /auth/register { "username": "alice", "password": "..." }
+# Returns: cpsk_abc123...
+
+# Use in HELLO to authenticate
 ```
 
-### Token Fields
+CPSK tokens carry scopes assigned at registration time. The router stores them in-memory or persists them.
 
-| Field | Description |
-|-------|-------------|
-| `iss` | Token issuer (your app/service) |
-| `sub` | User identity |
-| `iat` | Issue timestamp |
-| `exp` | Expiration timestamp |
-| `sf.read` | Address patterns client can read |
-| `sf.write` | Address patterns client can write |
-| `sf.constraints` | Value constraints per address |
+### Capability Tokens
 
-### Using Tokens
+Ed25519-signed delegatable tokens (UCAN-style). Created offline with the CLI:
 
-**Client side:**
-```javascript
-const client = await new ClaspBuilder('wss://router:7330')
-  .withToken('eyJhbGciOiJIUzI1NiIs...')
-  .connect();
+```bash
+# Create a root token
+clasp token cap create --key root.key --scopes "admin:/**" --expires 30d
+
+# Delegate with narrower scopes
+clasp token cap delegate <token> --key child.key --scopes "write:/lights/**"
 ```
 
-**Router validates:**
-1. Token signature (using shared secret or public key)
-2. Expiration
-3. Read/write permissions for each operation
-4. Value constraints
+Key properties:
+- **Delegation chains** -- tokens can be delegated with attenuated scopes
+- **Scope attenuation** -- child scopes must be a subset of parent scopes
+- **Expiration clamping** -- child tokens cannot outlive their parent
+- **Trust anchors** -- the router validates that the root issuer is trusted
+- **Chain depth limits** -- configurable maximum delegation depth
 
-### Constraints
+See [Capability Delegation](capability-delegation.md) for detailed delegation rules.
 
-Tokens can limit values:
+### Entity Tokens
 
-```javascript
-"constraints": {
-  "/lights/*/brightness": {
-    "range": [0, 1],        // Allowed value range
-    "maxRate": 60           // Max updates per second
-  },
-  "/system/**": {
-    "readonly": true        // Can read but not write
-  }
-}
+Ed25519-signed identity tokens backed by the entity registry:
+
+```bash
+# Generate entity keypair
+clasp token entity keygen --out sensor.key --name "Sensor A" --type device
+
+# Mint a token
+clasp token entity mint --key sensor.key
 ```
 
-## Zero-Config Pairing
+Key properties:
+- **Registry-backed** -- entity must exist and be Active in the store
+- **Status lifecycle** -- Active, Suspended, Revoked
+- **Namespace scopes** -- entities scoped to namespace patterns
+- **Token age** -- optional max age check for freshness
 
-For local setups without PKI:
+### ValidatorChain
 
-1. **Router displays code:**
-   ```
-   Pairing code: 847291
-   ```
+The router composes all three validators into a chain:
 
-2. **Client enters code:**
-   ```javascript
-   const client = await new ClaspBuilder('ws://192.168.1.42:7330')
-     .withPairingCode('847291')
-     .connect();
-   ```
-
-3. **Session established with encryption**
-
-This uses the pairing code to derive a shared secret for the session.
-
-## Address-Based Access Control
-
-Without tokens, access can be controlled by address patterns:
-
-```yaml
-# Router config
-security:
-  default: deny
-  rules:
-    - pattern: "/public/**"
-      access: read-write
-    - pattern: "/admin/**"
-      access: deny
-    - pattern: "/**"
-      access: read-only
 ```
+Token arrives -> ValidatorChain
+  -> CpskValidator: cpsk_ prefix? -> validate
+  -> CapabilityValidator: cap_ prefix? -> validate
+  -> EntityValidator: ent_ prefix? -> validate
+  -> No match: reject
+```
+
+Each validator returns `NotMyToken` for unrecognized prefixes, allowing the chain to try the next validator. See [Token Validation Flow](token-validation-flow.md) for the full dispatch diagram.
+
+## Scope Format
+
+All token types produce scopes in `action:pattern` format:
+
+```
+admin:/**           -- full access to everything
+write:/lights/**    -- set/publish under /lights/
+read:/sensors/*     -- subscribe to direct children of /sensors/
+```
+
+### Actions
+
+| Action | Permits |
+|--------|---------|
+| `admin` | All operations (read, write, subscribe, admin) |
+| `write` | SET and PUBLISH operations |
+| `read` | SUBSCRIBE and GET operations |
+
+### Patterns
+
+CLASP address patterns with wildcards:
+
+| Pattern | Matches |
+|---------|---------|
+| `/lights/room1` | Exact match |
+| `/lights/*` | Single segment wildcard |
+| `/lights/**` | Multi-segment wildcard (any depth) |
 
 ## Session Management
 
-Each connection has a session:
+Each connection has a session with associated scopes:
 
-```javascript
-{
-  sessionId: "abc123",
-  clientName: "My App",
-  connectedAt: 1704067200,
-  capabilities: { ... },
-  subscriptions: ["/lights/**", "/audio/**"]
+```
+Session {
+    session_id: "abc123",
+    client_name: "My App",
+    scopes: ["write:/lights/**", "read:/sensors/**"],
+    connected_at: 1704067200,
+    subscriptions: ["/lights/**", "/sensors/**"],
+    federation_peer: false,
 }
 ```
 
 Sessions enable:
 - Identifying who wrote what
-- Revoking access
+- Revoking access (close session)
 - Rate limiting per client
+- Scope enforcement on every operation
 
 ## Rate Limiting
 
-Routers can limit request rates:
+Routers limit request rates per client:
 
-```yaml
-security:
-  rateLimit:
-    default: 1000/minute
-    perAddress:
-      "/stream/**": 10000/minute    # Higher for streams
-      "/admin/**": 10/minute        # Lower for admin
+```rust
+let config = RouterConfig {
+    rate_limiting_enabled: true,
+    max_messages_per_second: 500,
+    ..Default::default()
+};
 ```
+
+When a client exceeds the rate limit, excess messages are dropped and a warning is logged. Buffer overflow notifications (ERROR 503) are sent after 100 drops within 10 seconds, rate-limited to 1 per 10 seconds per session.
+
+## Federation Security
+
+Federation peers have additional security constraints:
+
+| Mechanism | Purpose |
+|-----------|---------|
+| **Namespace restriction** | Peers can only access data within their declared namespaces |
+| **Scope enforcement** | In authenticated mode, peers need scopes covering their namespaces |
+| **Resource limits** | Max 1,000 patterns per peer, max 10,000 revision entries |
+| **Origin tracking** | Loop prevention via origin field on forwarded messages |
+| **Feature detection** | Non-federation sessions get 403 for FederationSync |
+
+See [Federation Message Sequence](federation-message-sequence.md) for enforcement details.
 
 ## Threat Model
 
@@ -195,17 +215,37 @@ security:
 ### Unauthorized Access
 
 **Threat:** Unauthorized clients connect.
-**Mitigation:** Capability tokens with read/write restrictions.
+**Mitigation:** Token-based auth (CPSK, Capability, or Entity tokens) with scope enforcement.
+
+### Token Forgery
+
+**Threat:** Attacker creates fake capability or entity tokens.
+**Mitigation:** Ed25519 signature verification. Capability tokens require a trusted root issuer (trust anchor). Entity tokens require the entity to exist in the registry.
+
+### Scope Escalation
+
+**Threat:** Client attempts operations outside their scopes.
+**Mitigation:** Per-operation scope checks. Capability delegation enforces attenuation (child scopes must be subset of parent).
 
 ### Replay Attacks
 
-**Threat:** Attacker replays captured messages.
-**Mitigation:** Timestamps and sequence numbers in protocol.
+**Threat:** Attacker replays captured tokens.
+**Mitigation:** Token expiration, capability token nonces (UUID v4), entity token age checks.
+
+### Federation Namespace Hijacking
+
+**Threat:** Federation peer claims namespaces it doesn't own.
+**Mitigation:** Scope checks in authenticated mode. Namespace restriction on RequestSync and RevisionVector.
+
+### Resource Exhaustion
+
+**Threat:** Federation peer floods with patterns or revision entries.
+**Mitigation:** `MAX_FEDERATION_PATTERNS = 1,000` and `MAX_REVISION_ENTRIES = 10,000` limits.
 
 ### Parameter Manipulation
 
 **Threat:** Client sets values outside allowed range.
-**Mitigation:** Value constraints in capability tokens.
+**Mitigation:** Scope-based write restrictions.
 
 ### DoS (Rate Flooding)
 
@@ -217,68 +257,70 @@ security:
 ### Development
 
 - `ws://` is fine for localhost
-- No tokens needed
-- Disable in production!
+- No tokens needed (Open mode)
+- Disable in production
 
 ### Production (Trusted Network)
 
 - Use `wss://` always
-- Verify certificates
+- Verify TLS certificates
 - Rate limit clients
+- Use CPSK tokens for simple auth
 
 ### Production (Untrusted Network)
 
 - Use `wss://` with valid certificates
-- Require capability tokens
-- Implement value constraints
-- Log security events
+- Use capability tokens for delegatable access
+- Use entity tokens for device identity
 - Short token expiration (< 24h)
+- Configure trust anchors for capability validation
+- Log security events
 
-### Multi-Tenant
+### Multi-Tenant / Multi-Site
 
 - Namespace isolation per tenant
-- Separate tokens per tenant
+- Federation with namespace restriction
+- Separate trust anchors per site
+- Entity registry with per-namespace scopes
 - Audit logging
-- Token refresh mechanism
 
-## Implementation Notes
+## Key Management
 
-### Token Signing
+### CLI Key Generation
 
-Tokens can be signed with:
-- **HMAC (HS256):** Shared secret between router and token issuer
-- **RSA (RS256):** Asymmetric keys, router only needs public key
-- **ECDSA (ES256):** Smaller signatures than RSA
+```bash
+# Generate Ed25519 keypair (hex-encoded, 0600 permissions)
+clasp key generate --out root.key
 
-### Key Management
+# Show public key
+clasp key show root.key
 
-For HMAC:
-```yaml
-security:
-  tokenSecret: "${TOKEN_SECRET}"  # From environment
+# Show in did:key format
+clasp key show root.key --format did
 ```
 
-For RSA/ECDSA:
-```yaml
-security:
-  tokenPublicKey: /path/to/public.pem
+### Trust Anchor Configuration
+
+Trust anchors are Ed25519 public keys that the router trusts as root issuers for capability tokens:
+
+```bash
+clasp-relay --trust-anchor ./root.key --cap-max-depth 5
 ```
 
-### Token Refresh
+### Admin Bootstrap
 
-Clients should refresh tokens before expiration:
+The relay supports automatic admin token bootstrap:
 
-```javascript
-client.onTokenExpiring((expiresIn) => {
-  if (expiresIn < 60000) {  // < 1 minute
-    const newToken = await fetchNewToken();
-    client.refreshToken(newToken);
-  }
-});
+```bash
+# If file exists: reads token. If not: generates and writes with 0600 permissions.
+clasp-relay --admin-token ./admin.token
 ```
+
+The admin token is registered with `admin:/**` scope, solving the chicken-and-egg problem of needing an admin token to use the registry API.
 
 ## See Also
 
-- [Enable TLS](../how-to/security/enable-tls.md) — How to set up encryption
-- [Capability Tokens](../how-to/security/capability-tokens.md) — Token configuration
-- [Pairing](../how-to/security/pairing.md) — Zero-config setup
+- [Token Validation Flow](token-validation-flow.md) -- ValidatorChain dispatch details
+- [Capability Delegation](capability-delegation.md) -- Delegation chains and scope attenuation
+- [Federation Message Sequence](federation-message-sequence.md) -- Federation security enforcement
+- [Distributed Architecture](distributed-architecture.md) -- System architecture overview

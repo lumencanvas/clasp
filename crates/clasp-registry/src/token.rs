@@ -176,4 +176,42 @@ mod tests {
         parse_token(&token1).unwrap();
         parse_token(&token2).unwrap();
     }
+
+    // --- Negative tests ---
+
+    #[test]
+    fn test_parse_bad_base64() {
+        assert!(parse_token("ent_!!!not-valid-base64!!!").is_err());
+    }
+
+    #[test]
+    fn test_parse_truncated_payload() {
+        use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+        use base64::Engine;
+        let truncated = URL_SAFE_NO_PAD.encode(&[0x92, 0x01]);
+        assert!(parse_token(&format!("ent_{}", truncated)).is_err());
+    }
+
+    #[test]
+    fn test_verify_wrong_key_length() {
+        let keypair = EntityKeypair::generate().unwrap();
+        let token = generate_token(&keypair).unwrap();
+        let payload = parse_token(&token).unwrap();
+
+        // Too short
+        assert!(verify_token_signature(&payload, &[0u8; 16]).is_err());
+        // Too long
+        assert!(verify_token_signature(&payload, &[0u8; 64]).is_err());
+    }
+
+    #[test]
+    fn test_verify_truncated_signature() {
+        let keypair = EntityKeypair::generate().unwrap();
+        let token = generate_token(&keypair).unwrap();
+        let mut payload = parse_token(&token).unwrap();
+
+        // Truncate signature to 32 bytes (should be 64)
+        payload.signature.truncate(32);
+        assert!(verify_token_signature(&payload, keypair.public_key_bytes()).is_err());
+    }
 }

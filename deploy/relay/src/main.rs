@@ -31,7 +31,7 @@ mod federation;
 mod registry;
 mod validator;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use clasp_core::security::{CpskValidator, TokenValidator, ValidatorChain, ValidationResult};
 use clasp_core::types::SnapshotMessage;
@@ -43,6 +43,35 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
 use tracing_subscriber::EnvFilter;
+
+/// Write a file containing sensitive data with restrictive permissions.
+///
+/// On Unix, the file is created with mode 0o600 from the start (via OpenOptions),
+/// avoiding the TOCTOU window where `write()` + `set_permissions()` could briefly
+/// expose the file with default permissions.
+fn write_secret_file(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)?;
+        file.write_all(data)?;
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(path, data)?;
+        tracing::warn!(
+            "Non-Unix platform: file {} may not have restrictive permissions",
+            path.display()
+        );
+    }
+    Ok(())
+}
 
 /// Wrapper to share a CpskValidator between the router and auth module.
 /// Both hold Arc<CpskValidator> pointing to the same instance.
@@ -200,6 +229,14 @@ struct Cli {
     #[arg(long)]
     rules: Option<PathBuf>,
 
+    // -- Admin Bootstrap --
+
+    /// Admin token file path. If the file exists, reads the token from it.
+    /// If not, generates a new admin token and writes it to the file.
+    /// The token is registered with admin:/** scope (no expiry).
+    #[arg(long = "admin-token")]
+    admin_token: Option<PathBuf>,
+
     // -- Federation --
 
     /// Hub WebSocket URL for federation leaf mode (e.g. ws://hub:7330)
@@ -280,13 +317,18 @@ async fn main() -> Result<()> {
         security_mode,
         max_sessions: cli.max_sessions,
         session_timeout: cli.session_timeout,
-        features: vec![
-            "param".to_string(),
-            "event".to_string(),
-            "stream".to_string(),
-            "timeline".to_string(),
-            "gesture".to_string(),
-        ],
+        features: {
+            let mut f = vec![
+                "param".to_string(),
+                "event".to_string(),
+                "stream".to_string(),
+                "timeline".to_string(),
+                "gesture".to_string(),
+            ];
+            #[cfg(feature = "federation")]
+            f.push("federation".to_string());
+            f
+        },
         max_subscriptions_per_session: 100,
         gesture_coalescing: true,
         gesture_coalesce_interval_ms: 16,
@@ -338,9 +380,9 @@ async fn main() -> Result<()> {
     #[cfg(feature = "rules")]
     if let Some(ref rules_path) = cli.rules {
         let json = std::fs::read_to_string(rules_path)
-            .unwrap_or_else(|e| panic!("Failed to read rules file {}: {}", rules_path.display(), e));
+            .with_context(|| format!("Failed to read rules file {}", rules_path.display()))?;
         let rules: Vec<clasp_rules::Rule> = serde_json::from_str(&json)
-            .unwrap_or_else(|e| panic!("Failed to parse rules JSON: {}", e));
+            .with_context(|| format!("Failed to parse rules JSON from {}", rules_path.display()))?;
         let mut engine = clasp_rules::RulesEngine::new();
         for rule in &rules {
             if let clasp_rules::Trigger::OnInterval { seconds } = &rule.trigger {
@@ -348,7 +390,7 @@ async fn main() -> Result<()> {
             }
             engine
                 .add_rule(rule.clone())
-                .unwrap_or_else(|e| panic!("Failed to add rule '{}': {}", rule.id, e));
+                .with_context(|| format!("Failed to add rule '{}'", rule.id))?;
         }
         tracing::info!("Rules engine: {} rule(s) from {}", rules.len(), rules_path.display());
         router = router.with_rules(engine);
@@ -407,17 +449,79 @@ async fn main() -> Result<()> {
 
     if let Some(auth_port) = cli.auth_port {
         let cpsk_validator = Arc::new(CpskValidator::new());
+
+        // Bootstrap admin token if --admin-token is set
+        if let Some(ref admin_token_path) = cli.admin_token {
+            let token = if admin_token_path.exists() {
+                // Read existing token
+                let t = std::fs::read_to_string(admin_token_path)
+                    .with_context(|| format!("Failed to read admin token file {}", admin_token_path.display()))?
+                    .trim()
+                    .to_string();
+                tracing::info!("Admin token loaded from {}", admin_token_path.display());
+                t
+            } else {
+                // Generate new token and write to file
+                let t = CpskValidator::generate_token();
+                if let Some(parent) = admin_token_path.parent() {
+                    std::fs::create_dir_all(parent)
+                        .with_context(|| format!("Failed to create directory for admin token: {}", parent.display()))?;
+                }
+                // Write with restrictive permissions atomically to avoid TOCTOU
+                write_secret_file(admin_token_path, t.as_bytes())
+                    .with_context(|| format!("Failed to write admin token to {}", admin_token_path.display()))?;
+                tracing::info!("Admin token generated and saved to {}", admin_token_path.display());
+                t
+            };
+
+            // Register admin token with admin:/** scope, no expiry
+            use clasp_core::security::{Scope, TokenInfo};
+            let scopes = vec![Scope::new(clasp_core::security::Action::Admin, "/**")
+                .expect("valid admin scope")];
+            let info = TokenInfo::new(token.clone(), scopes).with_subject("admin-bootstrap".to_string());
+            cpsk_validator.register(token, info);
+            tracing::info!("Admin bootstrap token registered with admin:/** scope");
+        }
+
         let mut chain = ValidatorChain::new();
         chain.add(SharedValidator(Arc::clone(&cpsk_validator)));
 
         // Add capability token validator if trust anchors provided
         #[cfg(feature = "caps")]
         if !cli.trust_anchor.is_empty() {
-            let anchors: Vec<Vec<u8>> = cli
-                .trust_anchor
-                .iter()
-                .map(|p| std::fs::read(p).expect("Failed to read trust anchor file"))
-                .collect();
+            let anchors: Vec<Vec<u8>> = {
+                let mut result = Vec::new();
+                for p in &cli.trust_anchor {
+                    // Trust anchor files contain hex-encoded signing keys (same format
+                    // as `clasp key generate --out`). Read, hex-decode, derive public key.
+                    let contents = std::fs::read_to_string(p)
+                        .with_context(|| format!("Failed to read trust anchor file {}", p.display()))?;
+                    let hex_str = contents.trim();
+                    if hex_str.len() == 64 {
+                        // 64 hex chars = 32-byte signing key -> derive public key
+                        let key_bytes: Vec<u8> = (0..hex_str.len())
+                            .step_by(2)
+                            .map(|i| u8::from_str_radix(&hex_str[i..i + 2], 16)
+                                .map_err(|_| anyhow::anyhow!("Invalid hex in trust anchor file {}", p.display())))
+                            .collect::<anyhow::Result<Vec<u8>>>()?;
+                        let key_array: [u8; 32] = key_bytes.try_into()
+                            .map_err(|_| anyhow::anyhow!("Invalid key length in trust anchor file {}", p.display()))?;
+                        let signing_key = ed25519_dalek::SigningKey::from_bytes(&key_array);
+                        result.push(signing_key.verifying_key().to_bytes().to_vec());
+                    } else if hex_str.len() == 32 {
+                        // Raw 32-byte binary public key file
+                        let bytes = std::fs::read(p)
+                            .with_context(|| format!("Failed to read trust anchor file {}", p.display()))?;
+                        result.push(bytes);
+                    } else {
+                        anyhow::bail!(
+                            "Trust anchor file {} has unexpected size: expected 64 hex chars (signing key) or 32 raw bytes (public key), got {} chars",
+                            p.display(), hex_str.len()
+                        );
+                    }
+                }
+                result
+            };
             chain.add(clasp_caps::CapabilityValidator::new(anchors, cli.cap_max_depth));
             tracing::info!(
                 "Capability tokens: {} trust anchor(s), max depth {}",
@@ -454,12 +558,44 @@ async fn main() -> Result<()> {
         // Mount entity registry REST routes if configured
         #[cfg(feature = "registry")]
         if let Some(ref store) = entity_store {
-            let reg_state = Arc::new(registry::RegistryState::new(
-                Arc::clone(store),
-                Arc::clone(&cpsk_validator),
-            ));
+            // Collect trust anchor public keys as hex strings for /api/trust-anchors
+            #[cfg(feature = "caps")]
+            let trust_anchor_hexes: Vec<String> = cli
+                .trust_anchor
+                .iter()
+                .filter_map(|p| {
+                    let contents = std::fs::read_to_string(p).ok()?;
+                    let hex_str = contents.trim();
+                    if hex_str.len() == 64 {
+                        // Hex-encoded signing key -> derive public key hex
+                        let key_bytes: Vec<u8> = (0..hex_str.len())
+                            .step_by(2)
+                            .map(|i| u8::from_str_radix(&hex_str[i..i + 2], 16).ok())
+                            .collect::<Option<Vec<u8>>>()?;
+                        let key_array: [u8; 32] = key_bytes.try_into().ok()?;
+                        let signing_key = ed25519_dalek::SigningKey::from_bytes(&key_array);
+                        let pub_bytes = signing_key.verifying_key().to_bytes();
+                        Some(pub_bytes.iter().map(|b| format!("{:02x}", b)).collect::<String>())
+                    } else {
+                        // Raw binary -> hex-encode directly
+                        let bytes = std::fs::read(p).ok()?;
+                        Some(bytes.iter().map(|b| format!("{:02x}", b)).collect::<String>())
+                    }
+                })
+                .collect();
+            #[cfg(not(feature = "caps"))]
+            let trust_anchor_hexes: Vec<String> = Vec::new();
+
+            let reg_state = Arc::new(
+                registry::RegistryState::new(
+                    Arc::clone(store),
+                    Arc::clone(&cpsk_validator),
+                )
+                .with_trust_anchors(trust_anchor_hexes, cli.cap_max_depth)
+            );
             auth_app = auth_app.merge(registry::registry_router(reg_state));
             tracing::info!("Entity REST API mounted at /api/entities (admin auth required)");
+            tracing::info!("Trust anchors API mounted at /api/trust-anchors (public)");
         }
 
         let auth_addr: SocketAddr = format!("{}:{}", cli.host, auth_port).parse()?;

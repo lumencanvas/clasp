@@ -31,6 +31,8 @@ mqtts = ["mqtt-server", "tokio-rustls", "rustls-pemfile"]
 osc-server = ["rosc", "serde_json"]
 # Rules engine for server-side automation
 rules = ["clasp-rules"]
+# Federation hub: accept inbound federation peers
+federation = []
 
 [dependencies]
 clasp-core = { workspace = true }

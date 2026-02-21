@@ -36,7 +36,24 @@ Why CLASP works over any transport and how to choose the right one.
 How bridges translate between CLASP and legacy protocols.
 
 ### [Security Model](security-model.md)
-Encryption, capability tokens, and security best practices.
+Encryption, token types (CPSK, Capability, Entity), and security best practices.
+
+## Distributed Infrastructure
+
+### [Distributed Architecture](distributed-architecture.md)
+How the distributed infrastructure crates extend the core router: authentication, persistence, automation, and federation.
+
+### [Token Validation Flow](token-validation-flow.md)
+ValidatorChain dispatch: how CPSK, Capability, and Entity tokens are validated.
+
+### [Capability Delegation](capability-delegation.md)
+Ed25519 delegation chains with scope attenuation, expiration clamping, and chain depth limits.
+
+### [Federation State Machine](federation-state-machine.md)
+PeerState transitions: Connecting, Handshaking, Syncing, Active, Disconnected, Failed.
+
+### [Federation Message Sequence](federation-message-sequence.md)
+Hub/Leaf handshake, namespace declaration, state sync, steady-state forwarding, and loop prevention.
 
 ## Reading Order
 
@@ -47,3 +64,9 @@ For a complete understanding, read in this order:
 3. **[Signals Not Messages](signals-not-messages.md)** — Core protocol concepts
 4. **[State Management](state-management.md)** — How state works
 5. **[Bridge Architecture](bridge-architecture.md)** — Protocol integration
+6. **[Security Model](security-model.md)** — Authentication and access control
+7. **[Distributed Architecture](distributed-architecture.md)** — Distributed infrastructure overview
+8. **[Token Validation Flow](token-validation-flow.md)** — Token dispatch
+9. **[Capability Delegation](capability-delegation.md)** — Delegation chains
+10. **[Federation State Machine](federation-state-machine.md)** — Federation lifecycle
+11. **[Federation Message Sequence](federation-message-sequence.md)** — Federation protocol

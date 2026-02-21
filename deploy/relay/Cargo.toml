@@ -44,7 +44,7 @@ registry = ["clasp-registry"]
 # Rules engine (server-side automation)
 rules = ["clasp-router/rules", "clasp-rules"]
 # Federation (multi-site state sync)
-federation = ["clasp-federation", "clasp-transport"]
+federation = ["clasp-federation", "clasp-transport", "clasp-router/federation"]
 
 [dependencies]
 # Published crates from crates.io
@@ -84,6 +84,9 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tower-http = { version = "0.6", features = ["cors"] }
+
+# Crypto (for entity token minting endpoint)
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

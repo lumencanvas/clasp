@@ -18,6 +18,8 @@ path = "src/main.rs"
 clasp-core = { workspace = true }
 clasp-bridge = { workspace = true, features = ["osc", "midi", "artnet", "mqtt", "websocket", "http"] }
 clasp-transport = { workspace = true, features = ["websocket", "udp", "quic"] }
+clasp-caps = { workspace = true, optional = true }
+clasp-registry = { workspace = true, optional = true }
 
 # Certificate generation for QUIC dev mode
 rcgen = "0.12"
@@ -42,6 +44,16 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # Error handling
 anyhow = { workspace = true }
 
+# Crypto (for key generation and cap/entity token commands)
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+bs58 = { workspace = true }
+
 # Utils
 ctrlc = "3.4"
 dirs = "5.0"
+
+[features]
+default = ["caps", "registry"]
+caps = ["dep:clasp-caps"]
+registry = ["dep:clasp-registry"]

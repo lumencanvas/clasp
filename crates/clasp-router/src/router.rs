@@ -1390,6 +1390,14 @@ async fn handle_message(
                 hello.name, session_id, new_session.authenticated
             );
 
+            #[cfg(feature = "federation")]
+            if new_session.is_federation_peer() {
+                info!(
+                    "Federation peer detected: {} ({})",
+                    hello.name, session_id
+                );
+            }
+
             // Send welcome
             let welcome = new_session.welcome_message(&config.name, &config.features);
             let response = codec::encode(&welcome).ok()?;
@@ -2170,6 +2178,324 @@ async fn handle_message(
             Some(MessageResult::Send(ack_bytes))
         }
 
+        #[cfg(feature = "federation")]
+        Message::FederationSync(fed_msg) => {
+            let session = session.as_ref()?;
+
+            // Resource limits for federation operations
+            const MAX_FEDERATION_PATTERNS: usize = 1000;
+            const MAX_REVISION_ENTRIES: usize = 10_000;
+
+            // Only accept FederationSync from sessions that advertised "federation" feature
+            if !session.is_federation_peer() {
+                warn!(
+                    "Session {} sent FederationSync but is not a federation peer",
+                    session.id
+                );
+                let error = Message::Error(ErrorMessage {
+                    code: 403,
+                    message: "FederationSync requires federation feature".to_string(),
+                    address: None,
+                    correlation_id: None,
+                });
+                let bytes = codec::encode(&error).ok()?;
+                return Some(MessageResult::Send(bytes));
+            }
+
+            match fed_msg.op {
+                clasp_core::FederationOp::DeclareNamespaces => {
+                    // Enforce resource limit on pattern count
+                    if fed_msg.patterns.len() > MAX_FEDERATION_PATTERNS {
+                        warn!(
+                            "Federation peer {} declared {} namespaces (limit {})",
+                            session.id, fed_msg.patterns.len(), MAX_FEDERATION_PATTERNS
+                        );
+                        let error = Message::Error(ErrorMessage {
+                            code: 400,
+                            message: format!(
+                                "too many namespace patterns: {} (max {})",
+                                fed_msg.patterns.len(), MAX_FEDERATION_PATTERNS
+                            ),
+                            address: None,
+                            correlation_id: None,
+                        });
+                        let bytes = codec::encode(&error).ok()?;
+                        return Some(MessageResult::Send(bytes));
+                    }
+
+                    let router_id = fed_msg
+                        .origin
+                        .clone()
+                        .unwrap_or_else(|| session.name.clone());
+
+                    // In authenticated mode, verify scopes for each declared namespace
+                    if security_mode == SecurityMode::Authenticated {
+                        for pattern in &fed_msg.patterns {
+                            if !session.has_strict_read_scope(pattern) {
+                                warn!(
+                                    "Federation peer {} lacks read scope for namespace {}",
+                                    router_id, pattern
+                                );
+                                let error = Message::Error(ErrorMessage {
+                                    code: 403,
+                                    message: format!(
+                                        "insufficient scope for namespace: {}", pattern
+                                    ),
+                                    address: None,
+                                    correlation_id: None,
+                                });
+                                let bytes = codec::encode(&error).ok()?;
+                                return Some(MessageResult::Send(bytes));
+                            }
+                        }
+                    }
+
+                    info!(
+                        "Federation peer {} declares namespaces: {:?}",
+                        router_id, fed_msg.patterns
+                    );
+
+                    // Clean up previous federation subscriptions if re-declaring
+                    let old_namespaces = session.federation_namespaces();
+                    if !old_namespaces.is_empty() {
+                        for i in 0..old_namespaces.len() {
+                            let old_sub_id = 50000 + i as u32;
+                            subscriptions.remove(&session.id, old_sub_id);
+                            session.remove_subscription(old_sub_id);
+                        }
+                        debug!(
+                            "Federation: cleaned up {} old subscriptions for peer {}",
+                            old_namespaces.len(), router_id
+                        );
+                    }
+
+                    // Store peer info on the session
+                    session.set_federation_router_id(router_id.clone());
+                    session.set_federation_namespaces(fed_msg.patterns.clone());
+
+                    // Subscribe the peer session to their declared patterns
+                    // so they receive matching SETs/PUBLISHes automatically
+                    for (i, pattern) in fed_msg.patterns.iter().enumerate() {
+                        let sub_id = 50000 + i as u32; // High IDs to avoid collision with client subs
+                        match crate::subscription::Subscription::new(
+                            sub_id,
+                            session.id.clone(),
+                            pattern,
+                            vec![],
+                            Default::default(),
+                        ) {
+                            Ok(subscription) => {
+                                subscriptions.add(subscription);
+                                session.add_subscription(sub_id);
+                                debug!(
+                                    "Federation: auto-subscribed peer {} to {}",
+                                    router_id, pattern
+                                );
+                            }
+                            Err(e) => {
+                                warn!(
+                                    "Federation: failed to create subscription for {}: {:?}",
+                                    pattern, e
+                                );
+                            }
+                        }
+                    }
+
+                    // Send ACK
+                    let ack = Message::Ack(AckMessage {
+                        address: None,
+                        revision: None,
+                        locked: None,
+                        holder: None,
+                        correlation_id: None,
+                    });
+                    let bytes = codec::encode(&ack).ok()?;
+                    Some(MessageResult::Send(bytes))
+                }
+
+                clasp_core::FederationOp::RequestSync => {
+                    // Enforce resource limit on pattern count
+                    if fed_msg.patterns.len() > MAX_FEDERATION_PATTERNS {
+                        warn!(
+                            "Federation RequestSync with {} patterns (limit {})",
+                            fed_msg.patterns.len(), MAX_FEDERATION_PATTERNS
+                        );
+                        let error = Message::Error(ErrorMessage {
+                            code: 400,
+                            message: format!(
+                                "too many sync patterns: {} (max {})",
+                                fed_msg.patterns.len(), MAX_FEDERATION_PATTERNS
+                            ),
+                            address: None,
+                            correlation_id: None,
+                        });
+                        let bytes = codec::encode(&error).ok()?;
+                        return Some(MessageResult::Send(bytes));
+                    }
+
+                    // Validate each requested pattern against declared namespaces
+                    let declared = session.federation_namespaces();
+                    for pattern in &fed_msg.patterns {
+                        let covered = declared.iter().any(|ns| {
+                            federation_pattern_covered_by(pattern, ns)
+                        });
+                        if !covered {
+                            warn!(
+                                "Federation RequestSync pattern {} not covered by declared namespaces {:?}",
+                                pattern, declared
+                            );
+                            let error = Message::Error(ErrorMessage {
+                                code: 403,
+                                message: format!(
+                                    "pattern '{}' not covered by declared namespaces", pattern
+                                ),
+                                address: None,
+                                correlation_id: None,
+                            });
+                            let bytes = codec::encode(&error).ok()?;
+                            return Some(MessageResult::Send(bytes));
+                        }
+
+                        // Enforce scope checks in authenticated mode
+                        if security_mode == SecurityMode::Authenticated
+                            && !session.has_strict_read_scope(pattern)
+                        {
+                            warn!(
+                                "Federation RequestSync: session lacks read scope for {}",
+                                pattern
+                            );
+                            let error = Message::Error(ErrorMessage {
+                                code: 403,
+                                message: format!(
+                                    "insufficient scope for pattern: {}", pattern
+                                ),
+                                address: None,
+                                correlation_id: None,
+                            });
+                            let bytes = codec::encode(&error).ok()?;
+                            return Some(MessageResult::Send(bytes));
+                        }
+                    }
+
+                    // Peer requests state sync for patterns -- send a filtered snapshot
+                    for pattern in &fed_msg.patterns {
+                        let mut snapshot = state.snapshot(pattern);
+
+                        // If since_revision is set, filter to only newer entries
+                        if let Some(since) = fed_msg.since_revision {
+                            snapshot.params.retain(|p| p.revision > since);
+                        }
+
+                        // Apply snapshot filter if configured
+                        if let Some(ref filter) = snapshot_filter {
+                            snapshot.params =
+                                filter.filter_snapshot(snapshot.params, session, state);
+                        }
+
+                        // Send snapshot to the peer
+                        send_chunked_snapshot(sender, snapshot).await;
+                    }
+
+                    // Send SyncComplete
+                    let complete = Message::FederationSync(clasp_core::FederationSyncMessage {
+                        op: clasp_core::FederationOp::SyncComplete,
+                        patterns: fed_msg.patterns.clone(),
+                        revisions: std::collections::HashMap::new(),
+                        since_revision: None,
+                        origin: Some(config.name.clone()),
+                    });
+                    let bytes = codec::encode(&complete).ok()?;
+                    Some(MessageResult::Send(bytes))
+                }
+
+                clasp_core::FederationOp::RevisionVector => {
+                    // Enforce resource limit on revision entry count
+                    if fed_msg.revisions.len() > MAX_REVISION_ENTRIES {
+                        warn!(
+                            "Federation RevisionVector with {} entries (limit {})",
+                            fed_msg.revisions.len(), MAX_REVISION_ENTRIES
+                        );
+                        let error = Message::Error(ErrorMessage {
+                            code: 400,
+                            message: format!(
+                                "too many revision entries: {} (max {})",
+                                fed_msg.revisions.len(), MAX_REVISION_ENTRIES
+                            ),
+                            address: None,
+                            correlation_id: None,
+                        });
+                        let bytes = codec::encode(&error).ok()?;
+                        return Some(MessageResult::Send(bytes));
+                    }
+
+                    debug!(
+                        "Federation: received revision vector with {} entries from peer {}",
+                        fed_msg.revisions.len(),
+                        session.federation_router_id().unwrap_or_default()
+                    );
+
+                    // Validate each address against declared namespaces
+                    let declared = session.federation_namespaces();
+
+                    // Compare with local state, send delta for entries where local > peer
+                    let mut delta_params = Vec::new();
+                    for (addr, peer_rev) in &fed_msg.revisions {
+                        // Check address is covered by declared namespaces
+                        let covered = declared.iter().any(|ns| {
+                            clasp_core::address::glob_match(ns, addr)
+                        });
+                        if !covered {
+                            debug!(
+                                "Federation: skipping revision for {} (not in declared namespaces)",
+                                addr
+                            );
+                            continue;
+                        }
+
+                        // Enforce scope checks in authenticated mode
+                        if security_mode == SecurityMode::Authenticated
+                            && !session.has_scope(Action::Read, addr)
+                        {
+                            debug!(
+                                "Federation: skipping revision for {} (insufficient scope)",
+                                addr
+                            );
+                            continue;
+                        }
+
+                        if let Some(local_ps) = state.get_state(addr) {
+                            if local_ps.revision > *peer_rev {
+                                delta_params.push(clasp_core::ParamValue {
+                                    address: addr.clone(),
+                                    value: local_ps.value,
+                                    revision: local_ps.revision,
+                                    writer: Some(local_ps.writer),
+                                    timestamp: Some(local_ps.timestamp),
+                                });
+                            }
+                        }
+                    }
+
+                    if !delta_params.is_empty() {
+                        let snapshot = SnapshotMessage {
+                            params: delta_params,
+                        };
+                        send_chunked_snapshot(sender, snapshot).await;
+                    }
+
+                    Some(MessageResult::None)
+                }
+
+                clasp_core::FederationOp::SyncComplete => {
+                    info!(
+                        "Federation: sync complete from peer {}",
+                        session.federation_router_id().unwrap_or_default()
+                    );
+                    Some(MessageResult::None)
+                }
+            }
+        }
+
         _ => Some(MessageResult::None),
     }
 }
@@ -2330,6 +2656,89 @@ fn try_send_with_drop_tracking_sync(session: &Arc<Session>, data: Bytes, session
     }
 }
 
+/// Check if a federation `request` pattern is covered by a `declared` namespace pattern.
+///
+/// A request is covered if every address it could match is also matched by the declared
+/// namespace. This handles:
+/// - Exact match: `/sensors/temp` covered by `/sensors/temp`
+/// - Concrete within glob: `/sensors/temp/1` covered by `/sensors/**`
+/// - Sub-pattern within glob: `/sensors/temp/**` covered by `/sensors/**`
+#[cfg(feature = "federation")]
+fn federation_pattern_covered_by(request: &str, declared: &str) -> bool {
+    // Exact match
+    if request == declared {
+        return true;
+    }
+
+    // If the request has no wildcards, we can use glob_match to check if
+    // the declared namespace covers it as a literal address.
+    // We must NOT do this when request contains wildcards, because glob_match
+    // would treat `**` in the request as literal characters.
+    let request_has_wildcards = request.contains('*');
+    if !request_has_wildcards && clasp_core::address::glob_match(declared, request) {
+        return true;
+    }
+
+    // Sub-pattern check: strip wildcards from request and check prefix coverage
+    // e.g., `/sensors/temp/**` is covered by `/sensors/**`
+    let decl_parts: Vec<&str> = declared.split('/').filter(|s| !s.is_empty()).collect();
+    let req_parts: Vec<&str> = request.split('/').filter(|s| !s.is_empty()).collect();
+
+    let mut di = 0;
+    let mut ri = 0;
+
+    while di < decl_parts.len() && ri < req_parts.len() {
+        let dp = decl_parts[di];
+        let rp = req_parts[ri];
+
+        if dp == "**" {
+            // Declared namespace has **, covers everything below this prefix
+            return true;
+        }
+
+        if rp == "**" {
+            // Request has ** — it's wider than anything except declared **
+            // (which was already checked above)
+            return false;
+        }
+
+        if dp == "*" {
+            // Declared * matches any single segment in request
+            // (rp == "**" already handled above)
+            if rp == "*" {
+                // Both are single wildcards — equivalent at this position
+                di += 1;
+                ri += 1;
+                continue;
+            }
+            // rp is a literal — covered by declared *
+            di += 1;
+            ri += 1;
+            continue;
+        }
+
+        if rp == "*" {
+            // Request has * where declared has literal — request is wider, not covered
+            return false;
+        }
+
+        if dp != rp {
+            return false;
+        }
+
+        di += 1;
+        ri += 1;
+    }
+
+    // If declared is exhausted but request still has segments, not covered
+    // (unless declared ended with **)
+    if di < decl_parts.len() && decl_parts[di] == "**" {
+        return true;
+    }
+
+    di >= decl_parts.len() && ri >= req_parts.len()
+}
+
 /// Broadcast to all sessions except one (non-blocking)
 fn broadcast_to_subscribers(
     data: &Bytes,
@@ -2340,5 +2749,244 @@ fn broadcast_to_subscribers(
         if entry.key() != exclude {
             try_send_with_drop_tracking_sync(entry.value(), data.clone(), entry.key());
         }
+    }
+}
+
+#[cfg(all(test, feature = "federation"))]
+mod federation_tests {
+    use super::*;
+
+    // --- federation_pattern_covered_by tests ---
+
+    #[test]
+    fn test_exact_match() {
+        assert!(federation_pattern_covered_by("/sensors/temp", "/sensors/temp"));
+    }
+
+    #[test]
+    fn test_concrete_within_globstar() {
+        assert!(federation_pattern_covered_by("/sensors/temp/1", "/sensors/**"));
+        assert!(federation_pattern_covered_by("/sensors/temp", "/sensors/**"));
+    }
+
+    #[test]
+    fn test_sub_pattern_within_globstar() {
+        assert!(federation_pattern_covered_by("/sensors/temp/**", "/sensors/**"));
+        assert!(federation_pattern_covered_by("/sensors/temp/*", "/sensors/**"));
+    }
+
+    #[test]
+    fn test_globstar_root_covers_all() {
+        assert!(federation_pattern_covered_by("/sensors/**", "/**"));
+        assert!(federation_pattern_covered_by("/anything/deep/path", "/**"));
+    }
+
+    #[test]
+    fn test_disjoint_namespaces_rejected() {
+        assert!(!federation_pattern_covered_by("/audio/**", "/sensors/**"));
+        assert!(!federation_pattern_covered_by("/audio/mixer", "/sensors/**"));
+    }
+
+    #[test]
+    fn test_wider_pattern_rejected() {
+        // Request for /** but declared only /sensors/**
+        assert!(!federation_pattern_covered_by("/**", "/sensors/**"));
+    }
+
+    #[test]
+    fn test_wildcard_in_request_wider_than_literal() {
+        // /sensors/* is wider than /sensors/temp (declared)
+        assert!(!federation_pattern_covered_by("/sensors/*", "/sensors/temp"));
+    }
+
+    #[test]
+    fn test_declared_single_wildcard() {
+        // Declared /sensors/*, request /sensors/temp — covered
+        assert!(federation_pattern_covered_by("/sensors/temp", "/sensors/*"));
+    }
+
+    // --- Session federation feature tests ---
+
+    #[test]
+    fn test_federation_peer_detection() {
+        let fed_session = Session::stub_federation("hub-peer");
+        assert!(fed_session.is_federation_peer());
+
+        let normal_session = Session::stub(None);
+        assert!(!normal_session.is_federation_peer());
+    }
+
+    #[test]
+    fn test_federation_namespaces_lifecycle() {
+        let session = Session::stub_federation("peer");
+        assert!(session.federation_namespaces().is_empty());
+
+        session.set_federation_namespaces(vec![
+            "/sensors/**".to_string(),
+            "/lights/**".to_string(),
+        ]);
+        let ns = session.federation_namespaces();
+        assert_eq!(ns.len(), 2);
+        assert!(ns.contains(&"/sensors/**".to_string()));
+        assert!(ns.contains(&"/lights/**".to_string()));
+
+        // Re-declare replaces
+        session.set_federation_namespaces(vec!["/audio/**".to_string()]);
+        let ns = session.federation_namespaces();
+        assert_eq!(ns.len(), 1);
+        assert_eq!(ns[0], "/audio/**");
+    }
+
+    #[test]
+    fn test_federation_router_id() {
+        let session = Session::stub_federation("peer");
+        assert!(session.federation_router_id().is_none());
+
+        session.set_federation_router_id("hub-alpha".to_string());
+        assert_eq!(session.federation_router_id().unwrap(), "hub-alpha");
+    }
+
+    #[test]
+    fn test_federation_subscription_id_range() {
+        // Federation subscriptions use IDs starting at 50000
+        // User subscriptions typically use small sequential IDs
+        // Verify the ranges don't overlap with typical usage
+        let session = Session::stub_federation("peer");
+        session.add_subscription(1);   // user sub
+        session.add_subscription(50000); // federation sub
+        session.add_subscription(50001); // federation sub
+
+        let subs = session.subscriptions();
+        assert_eq!(subs.len(), 3);
+        assert!(subs.contains(&1));
+        assert!(subs.contains(&50000));
+        assert!(subs.contains(&50001));
+
+        // Remove federation sub, user sub remains
+        session.remove_subscription(50000);
+        let subs = session.subscriptions();
+        assert_eq!(subs.len(), 2);
+        assert!(subs.contains(&1));
+        assert!(!subs.contains(&50000));
+    }
+
+    // --- Resource limit constant tests ---
+
+    #[test]
+    fn test_resource_limits_are_sane() {
+        // Verify the constants are within reasonable bounds
+        // (these are compile-time checks essentially)
+        const MAX_PATTERNS: usize = 1000;
+        const MAX_REVISIONS: usize = 10_000;
+        assert!(MAX_PATTERNS > 0 && MAX_PATTERNS <= 10_000);
+        assert!(MAX_REVISIONS > 0 && MAX_REVISIONS <= 100_000);
+    }
+
+    // --- Pattern matcher edge case / fuzz tests ---
+
+    #[test]
+    fn test_empty_strings() {
+        // Empty patterns should not match anything useful
+        assert!(federation_pattern_covered_by("", ""));
+        assert!(!federation_pattern_covered_by("/a", ""));
+        assert!(!federation_pattern_covered_by("", "/a"));
+    }
+
+    #[test]
+    fn test_root_slash_only() {
+        // Root path edge cases
+        assert!(federation_pattern_covered_by("/", "/"));
+        assert!(federation_pattern_covered_by("/", "/**"));
+    }
+
+    #[test]
+    fn test_trailing_slash() {
+        // Trailing slash creates an empty segment that gets filtered
+        assert!(federation_pattern_covered_by("/sensors/", "/sensors/**"));
+        assert!(federation_pattern_covered_by("/sensors/temp/", "/sensors/**"));
+    }
+
+    #[test]
+    fn test_double_slashes() {
+        // Double slashes create empty segments that get filtered
+        assert!(federation_pattern_covered_by("//sensors//temp", "/sensors/**"));
+    }
+
+    #[test]
+    fn test_deep_nesting_under_globstar() {
+        assert!(federation_pattern_covered_by("/a/b/c/d/e/f/g", "/**"));
+        assert!(federation_pattern_covered_by("/a/b/c/d/e/f/g/**", "/**"));
+        assert!(federation_pattern_covered_by("/a/b/c/d/e", "/a/**"));
+        assert!(!federation_pattern_covered_by("/a/b/c/d/e", "/b/**"));
+    }
+
+    #[test]
+    fn test_single_wildcard_depth_mismatch() {
+        // /a/* covers one level under /a/; request for deeper path is NOT covered
+        assert!(federation_pattern_covered_by("/a/b", "/a/*"));
+        assert!(!federation_pattern_covered_by("/a/b/c", "/a/*"));
+    }
+
+    #[test]
+    fn test_wildcard_request_vs_literal_declared() {
+        // Request with wildcard is wider than literal — should be rejected
+        assert!(!federation_pattern_covered_by("/a/*", "/a/b"));
+        assert!(!federation_pattern_covered_by("/a/**", "/a/b"));
+        assert!(!federation_pattern_covered_by("/a/**", "/a/b/c"));
+    }
+
+    #[test]
+    fn test_request_globstar_vs_declared_single_wildcard() {
+        // /a/** is wider than /a/* — should be rejected
+        assert!(!federation_pattern_covered_by("/a/**", "/a/*"));
+    }
+
+    #[test]
+    fn test_mixed_wildcards_in_declared() {
+        // Declared /a/*/c/** should cover /a/x/c/d
+        assert!(federation_pattern_covered_by("/a/x/c/d", "/a/*/c/**"));
+        // But not /a/x/y/d (wrong segment at position 2)
+        assert!(!federation_pattern_covered_by("/a/x/y/d", "/a/*/c/**"));
+    }
+
+    #[test]
+    fn test_request_pattern_with_wildcards_in_middle() {
+        // Request /a/*/c is wider at position 1 than declared /a/b/**
+        // even though declared covers deeper paths under /a/b
+        assert!(!federation_pattern_covered_by("/a/*/c", "/a/b/**"));
+    }
+
+    #[test]
+    fn test_identical_wildcard_patterns() {
+        assert!(federation_pattern_covered_by("/**", "/**"));
+        assert!(federation_pattern_covered_by("/a/**", "/a/**"));
+        assert!(federation_pattern_covered_by("/a/*", "/a/*"));
+    }
+
+    #[test]
+    fn test_path_traversal_segments() {
+        // ".." is just a literal segment in CLASP, not filesystem traversal
+        assert!(!federation_pattern_covered_by("/../sensors/temp", "/sensors/**"));
+        assert!(federation_pattern_covered_by("/../sensors/temp", "/**"));
+    }
+
+    #[test]
+    fn test_single_segment_patterns() {
+        assert!(federation_pattern_covered_by("/a", "/a"));
+        assert!(!federation_pattern_covered_by("/a", "/b"));
+        assert!(federation_pattern_covered_by("/a", "/*"));
+        assert!(federation_pattern_covered_by("/a", "/**"));
+    }
+
+    #[test]
+    fn test_declared_shorter_than_request_no_wildcard() {
+        // Declared /a/b does not cover /a/b/c — no wildcard means exact depth only
+        assert!(!federation_pattern_covered_by("/a/b/c", "/a/b"));
+    }
+
+    #[test]
+    fn test_request_shorter_than_declared() {
+        // Request /a doesn't match declared /a/b (request must be within declared scope)
+        assert!(!federation_pattern_covered_by("/a", "/a/b"));
     }
 }

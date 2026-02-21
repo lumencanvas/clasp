@@ -273,4 +273,96 @@ mod tests {
             other => panic!("expected Valid, got {:?}", other),
         }
     }
+
+    // --- Negative tests ---
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_entity_validator_malformed_token() {
+        let store = Arc::new(MemoryEntityStore::new());
+        let validator = EntityValidator::new(store);
+
+        // Bad base64 after prefix
+        match validator.validate("ent_!!!invalid!!!") {
+            ValidationResult::Invalid(msg) => {
+                assert!(msg.contains("malformed"), "expected malformed error, got: {}", msg);
+            }
+            other => panic!("expected Invalid, got {:?}", other),
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_entity_validator_revoked_entity() {
+        let store = Arc::new(MemoryEntityStore::new());
+        let keypair = EntityKeypair::generate().unwrap();
+        let mut entity = keypair.to_entity(EntityType::Device, "test-device".to_string());
+        entity.status = crate::entity::EntityStatus::Revoked;
+        store.create(&entity).await.unwrap();
+
+        let validator = EntityValidator::new(store);
+        let token = generate_token(&keypair).unwrap();
+
+        match validator.validate(&token) {
+            ValidationResult::Invalid(msg) => {
+                assert!(msg.contains("revoked"), "expected revoked error, got: {}", msg);
+            }
+            other => panic!("expected Invalid, got {:?}", other),
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_entity_validator_max_token_age() {
+        let store = Arc::new(MemoryEntityStore::new());
+        let keypair = EntityKeypair::generate().unwrap();
+        let entity = keypair.to_entity(EntityType::Device, "test-device".to_string());
+        store.create(&entity).await.unwrap();
+
+        // Validator with 0 max age (rejects everything except brand-new tokens)
+        let validator = EntityValidator::new(store).with_max_token_age(1);
+
+        // Generate a token, then wait briefly so it ages past the 1-second limit
+        // Instead of waiting, we can create a token with an old timestamp manually
+        {
+            use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+            use base64::Engine;
+            use ed25519_dalek::Signer;
+
+            let old_timestamp = 1000u64; // way in the past
+            let entity_id = keypair.entity_id.as_str().to_string();
+            let mut message = entity_id.as_bytes().to_vec();
+            message.extend_from_slice(&old_timestamp.to_be_bytes());
+
+            let signature = keypair.signing_key.sign(&message);
+
+            let payload = crate::token::EntityTokenPayload {
+                entity_id,
+                timestamp: old_timestamp,
+                signature: signature.to_bytes().to_vec(),
+            };
+
+            let encoded = rmp_serde::to_vec(&payload).unwrap();
+            let token = format!("ent_{}", URL_SAFE_NO_PAD.encode(&encoded));
+
+            match validator.validate(&token) {
+                ValidationResult::Expired => {}
+                other => panic!("expected Expired, got {:?}", other),
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_entity_validator_nonexistent_entity() {
+        let store = Arc::new(MemoryEntityStore::new());
+        let validator = EntityValidator::new(store);
+
+        // Generate a token for a keypair that was never registered
+        let keypair = EntityKeypair::generate().unwrap();
+        let token = generate_token(&keypair).unwrap();
+
+        match validator.validate(&token) {
+            ValidationResult::Invalid(msg) => {
+                assert!(msg.contains("not found"), "expected not found error, got: {}", msg);
+            }
+            other => panic!("expected Invalid, got {:?}", other),
+        }
+    }
 }

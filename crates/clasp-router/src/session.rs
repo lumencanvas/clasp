@@ -54,6 +54,15 @@ pub struct Session {
     last_drop_notification: AtomicU64,
     /// Total drops since session started
     total_drops: AtomicU64,
+    /// Whether this session is a federation peer (advertised "federation" feature in HELLO)
+    #[cfg(feature = "federation")]
+    federation_peer: bool,
+    /// Federation peer's router ID (from HELLO name or DeclareNamespaces origin)
+    #[cfg(feature = "federation")]
+    federation_router_id: parking_lot::RwLock<Option<String>>,
+    /// Namespace patterns declared by this federation peer
+    #[cfg(feature = "federation")]
+    federation_namespaces: parking_lot::RwLock<Vec<String>>,
 }
 
 /// No-op transport sender for test sessions.
@@ -77,9 +86,22 @@ impl Session {
         s
     }
 
+    /// Create a federation peer session for unit tests.
+    #[doc(hidden)]
+    #[cfg(feature = "federation")]
+    pub fn stub_federation(name: &str) -> Self {
+        Self::new(
+            Arc::new(StubSender),
+            name.to_string(),
+            vec!["federation".to_string()],
+        )
+    }
+
     /// Create a new session
     pub fn new(sender: Arc<dyn TransportSender>, name: String, features: Vec<String>) -> Self {
         let now = Instant::now();
+        #[cfg(feature = "federation")]
+        let is_federation_peer = features.iter().any(|f| f == "federation");
         Self {
             id: Uuid::new_v4().to_string(),
             name,
@@ -98,6 +120,12 @@ impl Session {
             drop_window_start: AtomicU64::new(0),
             last_drop_notification: AtomicU64::new(0),
             total_drops: AtomicU64::new(0),
+            #[cfg(feature = "federation")]
+            federation_peer: is_federation_peer,
+            #[cfg(feature = "federation")]
+            federation_router_id: parking_lot::RwLock::new(None),
+            #[cfg(feature = "federation")]
+            federation_namespaces: parking_lot::RwLock::new(Vec::new()),
         }
     }
 
@@ -286,6 +314,36 @@ impl Session {
     /// Get the drops in the current window
     pub fn drops_in_window(&self) -> u32 {
         self.drops_in_window.load(Ordering::Relaxed)
+    }
+
+    /// Check if this session is a federation peer
+    #[cfg(feature = "federation")]
+    pub fn is_federation_peer(&self) -> bool {
+        self.federation_peer
+    }
+
+    /// Get the federation router ID (if set)
+    #[cfg(feature = "federation")]
+    pub fn federation_router_id(&self) -> Option<String> {
+        self.federation_router_id.read().clone()
+    }
+
+    /// Set the federation router ID
+    #[cfg(feature = "federation")]
+    pub fn set_federation_router_id(&self, id: String) {
+        *self.federation_router_id.write() = Some(id);
+    }
+
+    /// Get the federation namespace patterns
+    #[cfg(feature = "federation")]
+    pub fn federation_namespaces(&self) -> Vec<String> {
+        self.federation_namespaces.read().clone()
+    }
+
+    /// Set the federation namespace patterns
+    #[cfg(feature = "federation")]
+    pub fn set_federation_namespaces(&self, patterns: Vec<String>) {
+        *self.federation_namespaces.write() = patterns;
     }
 }
 

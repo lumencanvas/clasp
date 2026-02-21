@@ -277,6 +277,11 @@ CLASP clients in different languages can seamlessly communicate:
 - **Signal Routing**: Wildcard patterns (`*`, `**`), transforms, aggregation
 - **Low Latency**: WebSocket transport with sub-millisecond overhead
 - **State Sync**: Automatic state synchronization between clients
+- **Delegatable Auth**: Ed25519 capability tokens with UCAN-style delegation chains
+- **Entity Registry**: Persistent identity for devices, users, services, and routers
+- **Journal Persistence**: Append-only event log for crash recovery and state replay
+- **Rules Engine**: Server-side reactive automation (triggers, conditions, transforms)
+- **Federation**: Router-to-router state sharing for multi-site deployments
 - **Desktop App**: Visual protocol configuration and signal monitoring
 - **CLI Tool**: Start routers and protocol connections from the command line
 - **Embeddable**: Rust crates, WASM module, Python, JavaScript
@@ -335,6 +340,9 @@ CLASP: [SET][flags][len][addr][value][rev]             → 31 bytes
 | Wildcard subscriptions | ✅ | ❌ | ✅ |
 | Clock sync | ✅ | ✅ | ❌ |
 | Multi-protocol bridging | ✅ | ❌ | ❌ |
+| Delegatable auth (Ed25519) | ✅ | ❌ | ❌ |
+| Router-to-router federation | ✅ | ❌ | ❌ |
+| Server-side rules engine | ✅ | ❌ | ❌ |
 
 ### Timing Guarantees
 
@@ -442,6 +450,74 @@ Wildcard subscriptions (`/chat/registry/ns/gaming/**`) let clients discover all 
 
 The relay never needs to be updated for new chat features. Admin controls, friend requests, typing indicators, key rotation — all are client-side logic over generic pub/sub paths. Scaling the chat means scaling the relay, which knows nothing about chat. Any CLASP relay can serve any CLASP Chat instance out of the box.
 
+## Distributed Infrastructure
+
+CLASP includes opt-in distributed infrastructure crates for production deployments that need authentication, persistence, automation, and multi-site operation. All features are behind Cargo feature flags and add zero overhead when disabled.
+
+### Capability Tokens
+
+Delegatable Ed25519 capability tokens (UCAN-style) for fine-grained access control:
+
+```bash
+# Generate a root keypair
+clasp key generate --out root.key
+
+# Create a root token with full admin access
+clasp token cap create --key root.key --scopes "admin:/**" --expires 30d
+
+# Delegate with narrower scopes
+clasp token cap delegate <parent-token> --key child.key --scopes "write:/lights/**"
+```
+
+### Entity Registry
+
+Persistent identity for devices, users, services, and routers with Ed25519 signatures:
+
+```bash
+# Generate an entity keypair
+clasp token entity keygen --out sensor.key --name "Sensor A" --type device
+
+# Mint a token
+clasp token entity mint --key sensor.key
+```
+
+### Journal Persistence
+
+Append-only event log for crash recovery. The router records all SET/PUBLISH operations and can replay state on restart:
+
+```rust
+let journal = Arc::new(SqliteJournal::new("state.db")?);
+let router = Router::new(config).with_journal(journal);
+```
+
+### Rules Engine
+
+Server-side reactive automation with triggers, conditions, and transforms:
+
+```json
+{
+  "id": "motion-lights",
+  "trigger": { "OnChange": { "pattern": "/sensors/*/motion" } },
+  "actions": [{ "Set": { "address": "/lights/hallway", "value": 1.0 } }],
+  "cooldown": { "secs": 5, "nanos": 0 }
+}
+```
+
+### Federation
+
+Router-to-router state sharing for multi-site deployments using a hub/leaf topology:
+
+```bash
+# Hub (accepts inbound peers)
+clasp server --port 7330 --features federation
+
+# Leaf (connects to hub, owns /site-a/**)
+clasp server --port 7331 \
+    --federation-mode leaf \
+    --federation-hub ws://hub:7330 \
+    --federation-namespaces "/site-a/**"
+```
+
 ## Documentation
 
 Visit **[clasp.to](https://clasp.to)** for full documentation.
@@ -461,6 +537,11 @@ Visit **[clasp.to](https://clasp.to)** for full documentation.
 | [clasp-router](https://crates.io/crates/clasp-router) | Message routing and pattern matching |
 | [clasp-bridge](https://crates.io/crates/clasp-bridge) | Protocol bridges (OSC, MIDI, MQTT, etc.) |
 | [clasp-discovery](https://crates.io/crates/clasp-discovery) | mDNS/DNS-SD device discovery |
+| [clasp-caps](https://crates.io/crates/clasp-caps) | Delegatable Ed25519 capability tokens |
+| [clasp-registry](https://crates.io/crates/clasp-registry) | Persistent entity identity registry |
+| [clasp-journal](https://crates.io/crates/clasp-journal) | Append-only event journal for persistence |
+| [clasp-rules](https://crates.io/crates/clasp-rules) | Server-side reactive rules engine |
+| [clasp-federation](https://crates.io/crates/clasp-federation) | Router-to-router federation |
 | [clasp-cli](https://crates.io/crates/clasp-cli) | Command-line interface |
 
 ## Building from Source
@@ -482,6 +563,9 @@ cd clasp
 
 # Build all Rust crates
 cargo build --release
+
+# Build with all distributed infrastructure features
+cargo build --release --features full
 
 # Build desktop app
 cd apps/bridge
