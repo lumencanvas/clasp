@@ -25,11 +25,15 @@
 //! ```
 
 mod auth;
+#[cfg(feature = "federation")]
+mod federation;
+#[cfg(feature = "registry")]
+mod registry;
 mod validator;
 
 use anyhow::Result;
 use clap::Parser;
-use clasp_core::security::{CpskValidator, TokenValidator, ValidationResult};
+use clasp_core::security::{CpskValidator, TokenValidator, ValidatorChain, ValidationResult};
 use clasp_core::types::SnapshotMessage;
 use clasp_core::SecurityMode;
 use clasp_router::{MultiProtocolConfig, Router, RouterConfig, RouterState, RouterStateConfig};
@@ -163,6 +167,56 @@ struct Cli {
     /// If not set, CORS is permissive (development only).
     #[arg(long)]
     cors_origin: Option<String>,
+
+    // -- Journal --
+
+    /// SQLite journal path for state persistence and replay
+    #[arg(long)]
+    journal: Option<PathBuf>,
+
+    /// Use in-memory journal (ring buffer, no persistence)
+    #[arg(long)]
+    journal_memory: bool,
+
+    // -- Capability Tokens --
+
+    /// Trust anchor public key file(s) for capability tokens (32-byte Ed25519, repeatable)
+    #[arg(long = "trust-anchor")]
+    trust_anchor: Vec<PathBuf>,
+
+    /// Maximum delegation chain depth for capability tokens (default: 5)
+    #[arg(long = "cap-max-depth", default_value = "5")]
+    cap_max_depth: usize,
+
+    // -- Entity Registry --
+
+    /// SQLite database path for the entity registry
+    #[arg(long = "registry-db")]
+    registry_db: Option<PathBuf>,
+
+    // -- Rules Engine --
+
+    /// JSON file containing rule definitions
+    #[arg(long)]
+    rules: Option<PathBuf>,
+
+    // -- Federation --
+
+    /// Hub WebSocket URL for federation leaf mode (e.g. ws://hub:7330)
+    #[arg(long = "federation-hub")]
+    federation_hub: Option<String>,
+
+    /// Local router identity for federation
+    #[arg(long = "federation-id")]
+    federation_id: Option<String>,
+
+    /// Namespace pattern(s) owned by this router (repeatable)
+    #[arg(long = "federation-namespace")]
+    federation_namespace: Vec<String>,
+
+    /// Auth token to present to the federation hub
+    #[arg(long = "federation-token")]
+    federation_token: Option<String>,
 }
 
 #[tokio::main]
@@ -243,6 +297,70 @@ async fn main() -> Result<()> {
 
     let mut router = Router::new(config);
 
+    // Wire journal if configured
+    #[cfg(feature = "journal")]
+    {
+        if let Some(ref path) = cli.journal {
+            let journal = std::sync::Arc::new(
+                clasp_journal::SqliteJournal::new(
+                    path.to_str().expect("journal path must be valid UTF-8"),
+                )
+                .expect("Failed to open journal database"),
+            );
+            router = router.with_journal(journal);
+            tracing::info!("Journal: {}", path.display());
+        } else if cli.journal_memory {
+            let journal = std::sync::Arc::new(
+                clasp_journal::SqliteJournal::in_memory()
+                    .expect("Failed to create in-memory journal"),
+            );
+            router = router.with_journal(journal);
+            tracing::info!("Journal: in-memory");
+        }
+    }
+
+    // Recover state from journal if available (after journal is wired, before serving)
+    #[cfg(feature = "journal")]
+    if cli.journal.is_some() || cli.journal_memory {
+        match router.state().recover_from_journal().await {
+            Ok(count) => {
+                if count > 0 {
+                    tracing::info!("Recovered {} params from journal", count);
+                }
+            }
+            Err(e) => tracing::warn!("Journal recovery failed: {}", e),
+        }
+    }
+
+    // Wire rules engine if configured
+    #[cfg(feature = "rules")]
+    let mut interval_rules: Vec<(String, u64)> = Vec::new();
+    #[cfg(feature = "rules")]
+    if let Some(ref rules_path) = cli.rules {
+        let json = std::fs::read_to_string(rules_path)
+            .unwrap_or_else(|e| panic!("Failed to read rules file {}: {}", rules_path.display(), e));
+        let rules: Vec<clasp_rules::Rule> = serde_json::from_str(&json)
+            .unwrap_or_else(|e| panic!("Failed to parse rules JSON: {}", e));
+        let mut engine = clasp_rules::RulesEngine::new();
+        for rule in &rules {
+            if let clasp_rules::Trigger::OnInterval { seconds } = &rule.trigger {
+                interval_rules.push((rule.id.clone(), *seconds));
+            }
+            engine
+                .add_rule(rule.clone())
+                .unwrap_or_else(|e| panic!("Failed to add rule '{}': {}", rule.id, e));
+        }
+        tracing::info!("Rules engine: {} rule(s) from {}", rules.len(), rules_path.display());
+        router = router.with_rules(engine);
+
+        if !interval_rules.is_empty() {
+            tracing::info!(
+                "Rules: {} interval trigger(s) registered",
+                interval_rules.len()
+            );
+        }
+    }
+
     // Set up chat-specific write validation and snapshot filtering
     if auth_enabled {
         router.set_write_validator(validator::ChatWriteValidator);
@@ -284,15 +402,66 @@ async fn main() -> Result<()> {
     }
 
     // Create shared validator and start auth HTTP server if enabled
+    #[cfg(feature = "registry")]
+    let mut entity_store: Option<Arc<dyn clasp_registry::EntityStore>> = None;
+
     if let Some(auth_port) = cli.auth_port {
-        let validator = Arc::new(CpskValidator::new());
-        router.set_validator(SharedValidator(Arc::clone(&validator)));
+        let cpsk_validator = Arc::new(CpskValidator::new());
+        let mut chain = ValidatorChain::new();
+        chain.add(SharedValidator(Arc::clone(&cpsk_validator)));
+
+        // Add capability token validator if trust anchors provided
+        #[cfg(feature = "caps")]
+        if !cli.trust_anchor.is_empty() {
+            let anchors: Vec<Vec<u8>> = cli
+                .trust_anchor
+                .iter()
+                .map(|p| std::fs::read(p).expect("Failed to read trust anchor file"))
+                .collect();
+            chain.add(clasp_caps::CapabilityValidator::new(anchors, cli.cap_max_depth));
+            tracing::info!(
+                "Capability tokens: {} trust anchor(s), max depth {}",
+                cli.trust_anchor.len(),
+                cli.cap_max_depth
+            );
+        }
+
+        // Add entity registry validator if configured
+        #[cfg(feature = "registry")]
+        if let Some(ref db_path) = cli.registry_db {
+            let store: Arc<dyn clasp_registry::EntityStore> = Arc::new(
+                clasp_registry::SqliteEntityStore::open(
+                    db_path
+                        .to_str()
+                        .expect("registry-db path must be valid UTF-8"),
+                )
+                .expect("Failed to open entity registry database"),
+            );
+            chain.add(clasp_registry::EntityValidator::new(Arc::clone(&store)));
+            entity_store = Some(store);
+            tracing::info!("Entity registry: {}", db_path.display());
+        }
+
+        router.set_validator(chain);
 
         let auth_state = Arc::new(
-            auth::AuthState::new(&cli.auth_db, validator)
+            auth::AuthState::new(&cli.auth_db, Arc::clone(&cpsk_validator))
                 .expect("Failed to initialize auth database"),
         );
-        let auth_app = auth::auth_router(auth_state, cli.cors_origin.as_deref());
+        #[allow(unused_mut)]
+        let mut auth_app = auth::auth_router(auth_state, cli.cors_origin.as_deref());
+
+        // Mount entity registry REST routes if configured
+        #[cfg(feature = "registry")]
+        if let Some(ref store) = entity_store {
+            let reg_state = Arc::new(registry::RegistryState::new(
+                Arc::clone(store),
+                Arc::clone(&cpsk_validator),
+            ));
+            auth_app = auth_app.merge(registry::registry_router(reg_state));
+            tracing::info!("Entity REST API mounted at /api/entities (admin auth required)");
+        }
+
         let auth_addr: SocketAddr = format!("{}:{}", cli.host, auth_port).parse()?;
         tracing::info!("Auth HTTP: http://{}", auth_addr);
 
@@ -301,7 +470,9 @@ async fn main() -> Result<()> {
             if let Err(e) = axum::serve(
                 listener,
                 auth_app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
-            ).await {
+            )
+            .await
+            {
                 tracing::error!("Auth server error: {}", e);
             }
         });
@@ -480,8 +651,34 @@ async fn main() -> Result<()> {
         });
     }
 
-    // Get Arc<RouterState> for persistence tasks
-    let (_, _, state_arc) = router.shared_state();
+    // Get shared state refs for persistence, rules, and federation tasks
+    let (sessions_arc, subscriptions_arc, state_arc) = router.shared_state();
+
+    // Spawn interval rule timer tasks
+    #[cfg(feature = "rules")]
+    if !interval_rules.is_empty() {
+        if let Some(rules_engine) = router.rules_engine().cloned() {
+            for (rule_id, seconds) in interval_rules {
+                let engine = Arc::clone(&rules_engine);
+                let state = Arc::clone(&state_arc);
+                let sessions = Arc::clone(&sessions_arc);
+                let subs = Arc::clone(&subscriptions_arc);
+                tokio::spawn(async move {
+                    let mut interval = tokio::time::interval(Duration::from_secs(seconds));
+                    loop {
+                        interval.tick().await;
+                        let actions = engine.lock().evaluate_interval(
+                            &rule_id,
+                            |addr| state.get(addr),
+                        );
+                        if !actions.is_empty() {
+                            clasp_router::execute_rule_actions(actions, &state, &sessions, &subs);
+                        }
+                    }
+                });
+            }
+        }
+    }
 
     // Spawn background persistence task if --persist is set
     if let Some(ref path) = cli.persist {
@@ -495,6 +692,43 @@ async fn main() -> Result<()> {
                 interval.tick().await;
                 write_snapshot(&bg_state, &bg_path);
             }
+        });
+    }
+
+    // Start federation leaf if configured
+    #[cfg(feature = "federation")]
+    if let Some(ref hub_url) = cli.federation_hub {
+        let fed_config = clasp_federation::FederationConfig {
+            mode: clasp_federation::FederationMode::Leaf {
+                hub_endpoint: hub_url.clone(),
+            },
+            router_id: cli
+                .federation_id
+                .clone()
+                .unwrap_or_else(|| {
+                    // Generate a unique ID from CPSK token generator
+                    let token = CpskValidator::generate_token();
+                    format!("relay-{}", &token[5..21])
+                }),
+            owned_namespaces: if cli.federation_namespace.is_empty() {
+                vec!["/**".to_string()]
+            } else {
+                cli.federation_namespace.clone()
+            },
+            auth_token: cli.federation_token.clone(),
+            ..Default::default()
+        };
+        let fed_state = Arc::clone(&state_arc);
+        let fed_sessions = Arc::clone(&sessions_arc);
+        let fed_subs = Arc::clone(&subscriptions_arc);
+        tracing::info!(
+            "Federation: leaf mode, hub={}, id={}, namespaces={:?}",
+            hub_url,
+            fed_config.router_id,
+            fed_config.owned_namespaces
+        );
+        tokio::spawn(async move {
+            federation::run_federation_leaf(fed_config, fed_state, fed_sessions, fed_subs).await;
         });
     }
 

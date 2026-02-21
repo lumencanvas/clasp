@@ -10,12 +10,14 @@ pub enum MessageType {
     Hello = 0x01,
     Welcome = 0x02,
     Announce = 0x03,
+    FederationSync = 0x04,
     Subscribe = 0x10,
     Unsubscribe = 0x11,
     Publish = 0x20,
     Set = 0x21,
     Get = 0x22,
     Snapshot = 0x23,
+    Replay = 0x24,
     Bundle = 0x30,
     Sync = 0x40,
     Ping = 0x41,
@@ -32,12 +34,14 @@ impl MessageType {
             0x01 => Some(MessageType::Hello),
             0x02 => Some(MessageType::Welcome),
             0x03 => Some(MessageType::Announce),
+            0x04 => Some(MessageType::FederationSync),
             0x10 => Some(MessageType::Subscribe),
             0x11 => Some(MessageType::Unsubscribe),
             0x20 => Some(MessageType::Publish),
             0x21 => Some(MessageType::Set),
             0x22 => Some(MessageType::Get),
             0x23 => Some(MessageType::Snapshot),
+            0x24 => Some(MessageType::Replay),
             0x30 => Some(MessageType::Bundle),
             0x40 => Some(MessageType::Sync),
             0x41 => Some(MessageType::Ping),
@@ -332,6 +336,12 @@ pub enum Message {
     #[serde(rename = "SNAPSHOT")]
     Snapshot(SnapshotMessage),
 
+    #[serde(rename = "REPLAY")]
+    Replay(ReplayMessage),
+
+    #[serde(rename = "FEDERATION_SYNC")]
+    FederationSync(FederationSyncMessage),
+
     #[serde(rename = "BUNDLE")]
     Bundle(BundleMessage),
 
@@ -523,6 +533,58 @@ pub struct ParamValue {
     pub timestamp: Option<u64>,
 }
 
+/// REPLAY message - request journal replay
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplayMessage {
+    /// Pattern to replay entries for
+    pub pattern: String,
+    /// Start time (microseconds since epoch)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<u64>,
+    /// End time (microseconds since epoch)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<u64>,
+    /// Maximum number of entries to return
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    /// Filter by signal types
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub types: Vec<SignalType>,
+}
+
+/// Federation sync operation types
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum FederationOp {
+    /// Declare owned namespace patterns
+    DeclareNamespaces = 0x01,
+    /// Request state sync for a pattern
+    RequestSync = 0x02,
+    /// Report revision vector for sync negotiation
+    RevisionVector = 0x03,
+    /// Confirm sync completion
+    SyncComplete = 0x04,
+}
+
+/// FEDERATION_SYNC message - router-to-router federation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationSyncMessage {
+    /// Federation operation type
+    pub op: FederationOp,
+    /// Patterns (for DeclareNamespaces, RequestSync)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub patterns: Vec<String>,
+    /// Revision map (for RevisionVector)
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub revisions: HashMap<String, u64>,
+    /// Since revision (for RequestSync)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since_revision: Option<u64>,
+    /// Origin router ID (for loop prevention)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+}
+
 /// BUNDLE message - atomic group
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BundleMessage {
@@ -592,6 +654,8 @@ impl Message {
             Message::Set(_) => MessageType::Set,
             Message::Get(_) => MessageType::Get,
             Message::Snapshot(_) => MessageType::Snapshot,
+            Message::Replay(_) => MessageType::Replay,
+            Message::FederationSync(_) => MessageType::FederationSync,
             Message::Bundle(_) => MessageType::Bundle,
             Message::Sync(_) => MessageType::Sync,
             Message::Ping => MessageType::Ping,
@@ -609,6 +673,8 @@ impl Message {
             Message::Set(_) => QoS::Confirm,
             Message::Publish(p) => p.signal.map(|s| s.default_qos()).unwrap_or(QoS::Fire),
             Message::Bundle(_) => QoS::Commit,
+            Message::Replay(_) => QoS::Confirm,
+            Message::FederationSync(_) => QoS::Confirm,
             Message::Subscribe(_) | Message::Unsubscribe(_) => QoS::Confirm,
             _ => QoS::Fire,
         }

@@ -1,17 +1,14 @@
-# CLASP Relay Server Deployment
+# CLASP Relay Server
 
-This directory contains a **standalone** CLASP relay server that uses published crates from crates.io.
+A standalone CLASP relay server supporting multi-protocol communication, authentication, persistence, federation, and server-side automation.
 
 ## Quick Start
 
 ### Option 1: Docker (Recommended)
 
 ```bash
-# Build
 cd deploy/relay
 docker build -t clasp-relay .
-
-# Run
 docker run -p 7330:7330 clasp-relay
 
 # Test
@@ -23,46 +20,55 @@ wscat -c ws://localhost:7330 -s clasp
 ```bash
 cd deploy/relay
 cargo run --release
+
+# With all features
+cargo run --release --features full
 ```
 
 ### Option 3: DigitalOcean App Platform
 
 ```bash
-# Install doctl
-brew install doctl
-
-# Authenticate
 doctl auth init
-
-# Deploy
 doctl apps create --spec deploy/relay/digitalocean/app.yaml
 ```
 
 ## Architecture
 
 ```
-Internet → TLS (443) → DigitalOcean → clasp-relay (7330)
+Internet -> TLS (443) -> Load Balancer -> clasp-relay (7330)
+                                      -> auth HTTP  (7350)
 ```
 
 The relay runs a CLASP router that provides:
 - CLASP v3 binary protocol over WebSocket
 - State management with revisions
 - Pattern-based subscriptions (`*`, `**`)
-- No authentication (public relay)
+- Optional CPSK authentication with scoped permissions
+- Optional capability token (Ed25519 delegatable) validation
+- Optional entity registry with REST API
+- Optional journal-based persistence and REPLAY queries
+- Optional server-side rules engine
+- Optional federation (multi-site state sync)
 
-## Development vs Production
+## Features
 
-| | Production | Development |
-|---|---|---|
-| **Dockerfile** | `Dockerfile` | `Dockerfile.dev` |
-| **Crates** | crates.io | Local workspace |
-| **Build from** | `deploy/relay/` | Repository root |
+Features are opt-in via Cargo feature flags. Default features: `websocket`, `rendezvous`.
 
-### Development Build (using monorepo)
+| Feature | Flag | What it enables |
+|---------|------|-----------------|
+| Journal | `journal` | SQLite/memory state persistence, REPLAY queries |
+| Capabilities | `caps` | Delegatable Ed25519 capability tokens (`cap_` prefix) |
+| Registry | `registry` | Persistent entity identity with REST API (`ent_` tokens) |
+| Rules | `rules` | Server-side reactive automation (OnChange, OnThreshold, OnEvent, OnInterval) |
+| Federation | `federation` | Multi-site state sync via leaf-hub topology |
+| Full | `full` | All features enabled |
 
 ```bash
-# From repository root
-docker build -f deploy/relay/Dockerfile.dev -t clasp-relay-dev .
+# Build with specific features
+cargo build --release --features journal,rules
+
+# Build with everything
+cargo build --release --features full
 ```
 
 ## Configuration
@@ -72,65 +78,184 @@ docker build -f deploy/relay/Dockerfile.dev -t clasp-relay-dev .
 ```
 clasp-relay [OPTIONS]
 
-Options:
+Core:
   -p, --ws-port <PORT>         WebSocket listen port [default: 7330]
       --host <HOST>            Listen host [default: 0.0.0.0]
   -n, --name <NAME>            Server name [default: CLASP Relay]
   -v, --verbose                Enable verbose logging
-      --quic-port <PORT>       Enable QUIC on this port (requires --cert and --key)
-      --mqtt-port <PORT>       Enable MQTT server on this port
-      --mqtt-namespace <NS>    MQTT namespace prefix [default: /mqtt]
-      --osc-port <PORT>        Enable OSC server on this port
-      --osc-namespace <NS>     OSC namespace prefix [default: /osc]
-      --cert <PATH>            TLS certificate file (PEM format)
-      --key <PATH>             TLS private key file (PEM format)
       --max-sessions <N>       Maximum clients [default: 1000]
       --session-timeout <SEC>  Session timeout [default: 300]
-      --no-websocket           Disable WebSocket (use other protocols only)
-      --param-ttl <SEC>        Parameter TTL in seconds [default: 3600]
-      --signal-ttl <SEC>       Signal TTL in seconds [default: 3600]
-      --no-ttl                 Disable TTL (parameters persist indefinitely)
-  -h, --help                   Print help
-  -V, --version                Print version
+      --no-websocket           Disable WebSocket
+
+Protocols:
+      --quic-port <PORT>       Enable QUIC (requires --cert and --key)
+      --mqtt-port <PORT>       Enable MQTT server
+      --mqtt-namespace <NS>    MQTT namespace prefix [default: /mqtt]
+      --osc-port <PORT>        Enable OSC server
+      --osc-namespace <NS>     OSC namespace prefix [default: /osc]
+      --cert <PATH>            TLS certificate file (PEM)
+      --key <PATH>             TLS private key file (PEM)
+
+TTL:
+      --param-ttl <SEC>        Parameter TTL [default: 3600]
+      --signal-ttl <SEC>       Signal TTL [default: 3600]
+      --no-ttl                 Disable all TTL expiration
+
+Auth:
+      --auth-port <PORT>       Auth HTTP server port (enables authentication)
+      --auth-db <PATH>         Auth database path [default: chat-auth.db]
+      --cors-origin <ORIGIN>   Allowed CORS origin(s), comma-separated
+
+Persistence:
+      --persist <PATH>         State snapshot file path
+      --persist-interval <SEC> Snapshot interval [default: 30]
+
+Rendezvous:
+      --rendezvous-port <PORT> WAN discovery port [default: 7340]
+      --rendezvous-ttl <SEC>   Device registration TTL [default: 300]
+
+Journal (requires --features journal):
+      --journal <PATH>         SQLite journal path
+      --journal-memory         Use in-memory journal (ring buffer)
+
+Capabilities (requires --features caps):
+      --trust-anchor <PATH>    Trust anchor public key file (repeatable)
+      --cap-max-depth <N>      Max delegation chain depth [default: 5]
+
+Registry (requires --features registry):
+      --registry-db <PATH>     SQLite entity registry database
+
+Rules (requires --features rules):
+      --rules <PATH>           JSON file containing rule definitions
+
+Federation (requires --features federation):
+      --federation-hub <URL>   Hub WebSocket URL for leaf mode
+      --federation-id <ID>     Local router identity
+      --federation-namespace <PAT>  Owned namespace pattern (repeatable)
+      --federation-token <TOK> Auth token for hub connection
+```
+
+### Examples
+
+```bash
+# Default (WebSocket only, no auth)
+clasp-relay
+
+# With authentication
+clasp-relay --auth-port 7350
+
+# With auth + journal persistence
+clasp-relay --auth-port 7350 --journal ./journal.db
+
+# With rules engine
+clasp-relay --auth-port 7350 --rules ./rules.json
+
+# With entity registry
+clasp-relay --auth-port 7350 --registry-db ./registry.db
+
+# With federation (leaf connecting to hub)
+clasp-relay --federation-hub ws://hub:7330 --federation-namespace "/local/**"
+
+# Multi-protocol with QUIC
+clasp-relay --mqtt-port 1883 --osc-port 8000 --quic-port 7331 --cert cert.pem --key key.pem
+
+# Kitchen sink
+clasp-relay --auth-port 7350 --journal ./journal.db --registry-db ./registry.db \
+  --rules ./rules.json --trust-anchor ./anchor.pub
 ```
 
 ### TTL Configuration
 
-By default, parameters and signals expire after 1 hour (3600 seconds) of inactivity to prevent memory accumulation. Configure with:
+Parameters and signals expire after 1 hour (3600s) by default:
 
 ```bash
-# 5 minute TTL for testing
-clasp-relay --param-ttl 300 --signal-ttl 300
-
-# Disable TTL (not recommended for long-running relays)
-clasp-relay --no-ttl
+clasp-relay --param-ttl 300 --signal-ttl 300   # 5 minute TTL
+clasp-relay --no-ttl                             # Disable TTL
 ```
 
-### Multi-Protocol Examples
+### Multi-Protocol
 
-```bash
-# WebSocket only (default)
-clasp-relay
-
-# WebSocket + MQTT
-clasp-relay --mqtt-port 1883
-
-# WebSocket + OSC
-clasp-relay --osc-port 8000
-
-# All protocols with QUIC
-clasp-relay --mqtt-port 1883 --osc-port 8000 --quic-port 7331 --cert cert.pem --key key.pem
-```
-
-When multiple protocols are enabled, they all share the same router state. This means:
-- An MQTT client publishing to `sensors/temp` can be received by a WebSocket client subscribed to `/mqtt/sensors/**`
-- An OSC message to `/synth/volume` can be received by any client subscribed to `/osc/synth/**`
+When multiple protocols are enabled, they share the same router state:
+- MQTT client publishing to `sensors/temp` is received by WebSocket subscribers on `/mqtt/sensors/**`
+- OSC messages to `/synth/volume` reach subscribers on `/osc/synth/**`
 
 ### Environment Variables
 
 | Variable | Description |
 |----------|-------------|
 | `RUST_LOG` | Log level: error, warn, info, debug, trace |
+
+## Security
+
+### Authentication
+
+Enable with `--auth-port <PORT>`. The auth HTTP server provides:
+
+- `POST /auth/register` -- Create user account (argon2 password hash)
+- `POST /auth/login` -- Authenticate and receive a CPSK token
+- `POST /auth/guest` -- Get a guest token with limited scopes
+
+CPSK tokens use the format `cpsk_<uuid>` and carry scoped permissions (`action:pattern`):
+- `read:/**` -- Subscribe and GET on all addresses
+- `write:/lights/**` -- SET and PUBLISH on the lights namespace
+- `admin:/**` -- Full access including registry API
+
+### Capability Tokens
+
+With `--features caps` and `--trust-anchor`, the relay accepts delegatable Ed25519 tokens (`cap_` prefix). Each delegation in the chain can only narrow scopes, never widen them. Works alongside CPSK tokens via `ValidatorChain`.
+
+### Entity Registry
+
+With `--features registry` and `--registry-db`, entities (devices, users, services) get persistent Ed25519 identities. Entity tokens (`ent_` prefix) are validated against the registry database.
+
+### Registry REST API
+
+The registry REST API is mounted on the auth HTTP server port. All endpoints require an admin CPSK token via `Authorization: Bearer <token>` header.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/entities` | Create entity |
+| GET | `/api/entities` | List entities (?offset=0&limit=100) |
+| GET | `/api/entities/{id}` | Get entity by ID |
+| DELETE | `/api/entities/{id}` | Delete entity |
+| PUT | `/api/entities/{id}/status` | Update entity status |
+
+**Create entity request:**
+```json
+{
+  "entity_type": "Device",
+  "name": "My Sensor",
+  "public_key": "<64 hex chars, Ed25519 public key>",
+  "tags": ["sensor", "temperature"],
+  "namespaces": ["/sensors/**"],
+  "scopes": ["write:/sensors/**"]
+}
+```
+
+**Response:** `201 Created` with entity JSON including the generated `clasp:` prefixed ID.
+
+**Auth example:**
+```bash
+# Without token: 401 Unauthorized
+curl -X GET http://localhost:7350/api/entities
+
+# With admin token: 200 OK
+curl -X GET http://localhost:7350/api/entities \
+  -H "Authorization: Bearer cpsk_..."
+```
+
+## Development vs Production
+
+| | Production | Development |
+|---|---|---|
+| **Dockerfile** | `Dockerfile` | `Dockerfile.dev` |
+| **Crates** | crates.io | Local workspace |
+| **Build from** | `deploy/relay/` | Repository root |
+
+```bash
+# Development build (using monorepo)
+docker build -f deploy/relay/Dockerfile.dev -t clasp-relay-dev .
+```
 
 ## Connecting
 
@@ -145,18 +270,6 @@ const client = await new ClaspBuilder('wss://relay.clasp.to')
 
 client.set('/hello', 'world');
 client.on('/hello', (value) => console.log(value));
-```
-
-### Python
-
-```python
-from clasp import Clasp
-
-client = Clasp('wss://relay.clasp.to')
-client.connect()
-
-client.set('/hello', 'world')
-client.on('/hello', print)
 ```
 
 ### Rust
@@ -175,29 +288,9 @@ client.subscribe("/hello", |value, _| println!("{:?}", value)).await?;
 use clasp_embedded::{Client, Value};
 
 let mut client = Client::new();
-
-// Prepare frame
 let frame = client.prepare_set("/sensor/temp", Value::Float(25.5));
-
-// Send via your transport (WebSocket, HTTP, etc.)
 websocket.send(frame);
 ```
-
-## Cost Estimate
-
-| Provider | Tier | Monthly |
-|----------|------|---------|
-| DigitalOcean App Platform | basic-xxs | $5 |
-| DigitalOcean Droplet | $6/mo | $6 |
-| AWS Lightsail | $5 plan | $5 |
-| Fly.io | Free tier | $0 |
-
-## Security Notes
-
-⚠️ The public relay does NOT enforce authentication:
-- Anyone can connect and send/receive messages
-- Do not send sensitive data through public relay
-- For production, deploy your own relay with authentication
 
 ## Monitoring
 
@@ -208,10 +301,7 @@ The server responds to any WebSocket connection attempt as healthy.
 ### Logs
 
 ```bash
-# Docker
 docker logs clasp-relay -f
-
-# DigitalOcean
 doctl apps logs <app-id> --follow
 ```
 

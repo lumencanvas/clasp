@@ -1,0 +1,17 @@
+[package]
+name = "clasp-federation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+clasp-core = { workspace = true }
+clasp-transport = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
+bytes = { workspace = true }
+tracing = { workspace = true }

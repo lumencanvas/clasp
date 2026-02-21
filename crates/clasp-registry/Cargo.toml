@@ -1,0 +1,30 @@
+[package]
+name = "clasp-registry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Entity registry for CLASP - persistent identity for devices, users, and services"
+
+[features]
+default = []
+sqlite = ["dep:rusqlite"]
+
+[dependencies]
+clasp-core = { workspace = true }
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+rand = "0.8"
+bs58 = "0.5"
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+base64 = "0.22"
+rmp-serde = { workspace = true }
+tokio = { workspace = true }
+
+# Optional SQLite backend
+rusqlite = { version = "0.32", features = ["bundled"], optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }

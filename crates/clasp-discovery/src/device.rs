@@ -37,6 +37,9 @@ pub struct DeviceInfo {
     /// Additional metadata
     #[serde(default)]
     pub meta: HashMap<String, String>,
+    /// Optional entity ID from clasp-registry
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entity_id: Option<String>,
 }
 
 impl Device {
@@ -98,6 +101,7 @@ impl Default for DeviceInfo {
             bridge: false,
             bridge_protocol: None,
             meta: HashMap::new(),
+            entity_id: None,
         }
     }
 }

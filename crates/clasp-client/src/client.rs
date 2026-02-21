@@ -1098,7 +1098,9 @@ fn handle_message(
         | Message::Subscribe(_)
         | Message::Unsubscribe(_)
         | Message::Get(_)
-        | Message::Query(_) => {
+        | Message::Query(_)
+        | Message::Replay(_)
+        | Message::FederationSync(_) => {
             debug!("Received unexpected client-type message: {:?}", msg);
         }
 

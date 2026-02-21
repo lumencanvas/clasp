@@ -29,6 +29,8 @@ pub mod msg {
     pub const SET: u8 = 0x21;
     pub const GET: u8 = 0x22;
     pub const SNAPSHOT: u8 = 0x23;
+    pub const FEDERATION_SYNC: u8 = 0x04;
+    pub const REPLAY: u8 = 0x24;
     pub const BUNDLE: u8 = 0x30;
     pub const SYNC: u8 = 0x40;
     pub const PING: u8 = 0x41;
@@ -96,6 +98,8 @@ fn estimate_message_size(msg: &Message) -> usize {
         Message::Welcome(m) => 12 + m.name.len() + m.session.len() + 4,
         Message::Subscribe(m) => 6 + m.pattern.len() + 16,
         Message::Bundle(m) => 12 + m.messages.len() * 48,
+        Message::Replay(m) => 4 + m.pattern.len() + 20,
+        Message::FederationSync(m) => 4 + m.patterns.iter().map(|p| 2 + p.len()).sum::<usize>() + m.revisions.len() * 12 + 16,
         Message::Ping | Message::Pong => 5, // Just frame header
         _ => 64,                            // Default for less common messages
     }
@@ -187,6 +191,8 @@ fn encode_message_to_buf(buf: &mut BytesMut, msg: &Message) -> Result<()> {
         Message::Set(m) => encode_set(buf, m),
         Message::Get(m) => encode_get(buf, m),
         Message::Snapshot(m) => encode_snapshot(buf, m),
+        Message::Replay(m) => encode_replay(buf, m),
+        Message::FederationSync(m) => encode_federation_sync(buf, m),
         Message::Bundle(m) => encode_bundle(buf, m),
         Message::Sync(m) => encode_sync(buf, m),
         Message::Ping => {
@@ -543,6 +549,94 @@ fn encode_snapshot(buf: &mut BytesMut, msg: &SnapshotMessage) -> Result<()> {
     Ok(())
 }
 
+/// REPLAY (0x24) - Journal replay request
+/// Flags: [has_from:1][has_to:1][has_limit:1][rsv:5]
+fn encode_replay(buf: &mut BytesMut, msg: &ReplayMessage) -> Result<()> {
+    buf.put_u8(msg::REPLAY);
+
+    let mut flags: u8 = 0;
+    if msg.from.is_some() {
+        flags |= 0x80;
+    }
+    if msg.to.is_some() {
+        flags |= 0x40;
+    }
+    if msg.limit.is_some() {
+        flags |= 0x20;
+    }
+    buf.put_u8(flags);
+
+    encode_string(buf, &msg.pattern)?;
+
+    if let Some(from) = msg.from {
+        buf.put_u64(from);
+    }
+    if let Some(to) = msg.to {
+        buf.put_u64(to);
+    }
+    if let Some(limit) = msg.limit {
+        buf.put_u32(limit);
+    }
+
+    // Signal type filter as bitmask (same format as SUBSCRIBE)
+    let mut type_mask: u8 = 0;
+    if msg.types.is_empty() {
+        type_mask = 0xFF; // All types
+    } else {
+        for t in &msg.types {
+            match t {
+                SignalType::Param => type_mask |= 0x01,
+                SignalType::Event => type_mask |= 0x02,
+                SignalType::Stream => type_mask |= 0x04,
+                SignalType::Gesture => type_mask |= 0x08,
+                SignalType::Timeline => type_mask |= 0x10,
+            }
+        }
+    }
+    buf.put_u8(type_mask);
+
+    Ok(())
+}
+
+/// FEDERATION_SYNC (0x04) - Router-to-router federation
+/// Layout: [op:u8][pattern_count:u16][patterns...][revision_count:u16][revisions...][flags:u8][optional fields]
+fn encode_federation_sync(buf: &mut BytesMut, msg: &FederationSyncMessage) -> Result<()> {
+    buf.put_u8(msg::FEDERATION_SYNC);
+    buf.put_u8(msg.op as u8);
+
+    // Encode patterns
+    buf.put_u16(msg.patterns.len() as u16);
+    for pattern in &msg.patterns {
+        encode_string(buf, pattern)?;
+    }
+
+    // Encode revisions map
+    buf.put_u16(msg.revisions.len() as u16);
+    for (key, val) in &msg.revisions {
+        encode_string(buf, key)?;
+        buf.put_u64(*val);
+    }
+
+    // Flags: [has_since:1][has_origin:1][rsv:6]
+    let mut flags: u8 = 0;
+    if msg.since_revision.is_some() {
+        flags |= 0x80;
+    }
+    if msg.origin.is_some() {
+        flags |= 0x40;
+    }
+    buf.put_u8(flags);
+
+    if let Some(since) = msg.since_revision {
+        buf.put_u64(since);
+    }
+    if let Some(ref origin) = msg.origin {
+        encode_string(buf, origin)?;
+    }
+
+    Ok(())
+}
+
 /// BUNDLE (0x30)
 fn encode_bundle(buf: &mut BytesMut, msg: &BundleMessage) -> Result<()> {
     buf.put_u8(msg::BUNDLE);
@@ -797,6 +891,8 @@ fn decode_v3_binary(bytes: &[u8]) -> Result<Message> {
         msg::SET => decode_set(&mut buf),
         msg::GET => decode_get(&mut buf),
         msg::SNAPSHOT => decode_snapshot(&mut buf),
+        msg::REPLAY => decode_replay(&mut buf),
+        msg::FEDERATION_SYNC => decode_federation_sync(&mut buf),
         msg::BUNDLE => decode_bundle(&mut buf),
         msg::SYNC => decode_sync(&mut buf),
         msg::PING => Ok(Message::Ping),
@@ -1150,6 +1246,95 @@ fn decode_snapshot(buf: &mut &[u8]) -> Result<Message> {
     }
 
     Ok(Message::Snapshot(SnapshotMessage { params }))
+}
+
+fn decode_replay(buf: &mut &[u8]) -> Result<Message> {
+    let flags = buf.get_u8();
+    let has_from = (flags & 0x80) != 0;
+    let has_to = (flags & 0x40) != 0;
+    let has_limit = (flags & 0x20) != 0;
+
+    let pattern = decode_string(buf)?;
+
+    let from = if has_from { Some(buf.get_u64()) } else { None };
+    let to = if has_to { Some(buf.get_u64()) } else { None };
+    let limit = if has_limit { Some(buf.get_u32()) } else { None };
+
+    let type_mask = buf.get_u8();
+    let mut types = Vec::new();
+    if type_mask != 0xFF {
+        if type_mask & 0x01 != 0 {
+            types.push(SignalType::Param);
+        }
+        if type_mask & 0x02 != 0 {
+            types.push(SignalType::Event);
+        }
+        if type_mask & 0x04 != 0 {
+            types.push(SignalType::Stream);
+        }
+        if type_mask & 0x08 != 0 {
+            types.push(SignalType::Gesture);
+        }
+        if type_mask & 0x10 != 0 {
+            types.push(SignalType::Timeline);
+        }
+    }
+
+    Ok(Message::Replay(ReplayMessage {
+        pattern,
+        from,
+        to,
+        limit,
+        types,
+    }))
+}
+
+fn decode_federation_sync(buf: &mut &[u8]) -> Result<Message> {
+    let op_byte = buf.get_u8();
+    let op = match op_byte {
+        0x01 => FederationOp::DeclareNamespaces,
+        0x02 => FederationOp::RequestSync,
+        0x03 => FederationOp::RevisionVector,
+        0x04 => FederationOp::SyncComplete,
+        _ => return Err(Error::DecodeError("unknown federation op".into())),
+    };
+
+    // Decode patterns
+    let pattern_count = buf.get_u16() as usize;
+    let mut patterns = Vec::with_capacity(pattern_count);
+    for _ in 0..pattern_count {
+        patterns.push(decode_string(buf)?);
+    }
+
+    // Decode revisions map
+    let revision_count = buf.get_u16() as usize;
+    let mut revisions = std::collections::HashMap::with_capacity(revision_count);
+    for _ in 0..revision_count {
+        let key = decode_string(buf)?;
+        let val = buf.get_u64();
+        revisions.insert(key, val);
+    }
+
+    // Flags: [has_since:1][has_origin:1][rsv:6]
+    let flags = buf.get_u8();
+    let since_revision = if flags & 0x80 != 0 {
+        Some(buf.get_u64())
+    } else {
+        None
+    };
+    let origin = if flags & 0x40 != 0 {
+        Some(decode_string(buf)?)
+    } else {
+        None
+    };
+
+    Ok(Message::FederationSync(FederationSyncMessage {
+        op,
+        patterns,
+        revisions,
+        since_revision,
+        origin,
+    }))
 }
 
 fn decode_bundle(buf: &mut &[u8]) -> Result<Message> {

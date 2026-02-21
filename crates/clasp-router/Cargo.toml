@@ -12,6 +12,8 @@ readme = "README.md"
 default = ["websocket"]
 # Full transport support - use for native deployments (Droplet, VPS)
 full = ["websocket", "quic", "tcp", "mqtt-server", "osc-server"]
+# Journal support for state persistence and replay
+journal = ["clasp-journal"]
 # WebSocket only - works on all platforms including DO App Platform
 websocket = ["clasp-transport/websocket"]
 # QUIC requires UDP - works on Droplets/VPS, NOT on DO App Platform
@@ -27,10 +29,14 @@ mqtt-server = ["mqttbytes", "serde_json"]
 mqtts = ["mqtt-server", "tokio-rustls", "rustls-pemfile"]
 # OSC server adapter - accept OSC clients via UDP with session tracking
 osc-server = ["rosc", "serde_json"]
+# Rules engine for server-side automation
+rules = ["clasp-rules"]
 
 [dependencies]
 clasp-core = { workspace = true }
 clasp-transport = { workspace = true }
+clasp-journal = { workspace = true, optional = true }
+clasp-rules = { workspace = true, optional = true }
 
 # Async
 tokio = { workspace = true }

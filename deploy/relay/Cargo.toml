@@ -28,19 +28,35 @@ websocket = ["clasp-router/websocket"]
 # QUIC (high-performance, requires UDP and TLS certificates)
 quic = ["clasp-router/quic", "rustls-pemfile"]
 # Full protocol support
-full = ["websocket", "quic", "mqtt-server", "osc-server", "rendezvous"]
+full = ["websocket", "quic", "mqtt-server", "osc-server", "rendezvous", "journal", "caps", "registry", "rules", "federation"]
 # MQTT server adapter (accept MQTT clients)
 mqtt-server = ["clasp-router/mqtt-server"]
 # OSC server adapter (accept OSC clients)
 osc-server = ["clasp-router/osc-server"]
 # Rendezvous server for WAN discovery (enabled by default)
 rendezvous = ["clasp-discovery"]
+# Journal for state persistence and replay
+journal = ["clasp-router/journal", "clasp-journal"]
+# Capability tokens (delegatable Ed25519 tokens)
+caps = ["clasp-caps"]
+# Entity registry (persistent device/user identity)
+registry = ["clasp-registry"]
+# Rules engine (server-side automation)
+rules = ["clasp-router/rules", "clasp-rules"]
+# Federation (multi-site state sync)
+federation = ["clasp-federation", "clasp-transport"]
 
 [dependencies]
 # Published crates from crates.io
 clasp-core = "3.5"
 clasp-router = "3.5"
 clasp-discovery = { version = "3.5", features = ["rendezvous"], optional = true }
+clasp-journal = { version = "3.5", features = ["sqlite"], optional = true }
+clasp-caps = { version = "3.5", optional = true }
+clasp-registry = { version = "3.5", features = ["sqlite"], optional = true }
+clasp-rules = { version = "3.5", optional = true }
+clasp-federation = { version = "3.5", optional = true }
+clasp-transport = { version = "3.5", features = ["websocket"], optional = true }
 
 # Runtime
 tokio = { version = "1", features = ["full"] }
@@ -57,6 +73,9 @@ anyhow = "1.0"
 
 # TLS certificate parsing (for QUIC)
 rustls-pemfile = { version = "2.0", optional = true }
+
+# Shared state (DashMap used by federation)
+dashmap = "5.5"
 
 # Auth system
 axum = "0.8"
@@ -77,3 +96,9 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 clasp-core = { path = "../../crates/clasp-core" }
 clasp-router = { path = "../../crates/clasp-router" }
 clasp-discovery = { path = "../../crates/clasp-discovery" }
+clasp-journal = { path = "../../crates/clasp-journal" }
+clasp-caps = { path = "../../crates/clasp-caps" }
+clasp-registry = { path = "../../crates/clasp-registry" }
+clasp-rules = { path = "../../crates/clasp-rules" }
+clasp-federation = { path = "../../crates/clasp-federation" }
+clasp-transport = { path = "../../crates/clasp-transport" }

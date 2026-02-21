@@ -78,6 +78,8 @@ pub struct ParamState {
     pub lock_holder: Option<String>,
     /// Metadata
     pub meta: Option<ParamMeta>,
+    /// Origin router ID (for federation loop prevention)
+    pub origin: Option<String>,
 }
 
 /// Parameter metadata
@@ -101,6 +103,7 @@ impl ParamState {
             strategy: ConflictStrategy::Lww,
             lock_holder: None,
             meta: None,
+            origin: None,
         }
     }
 

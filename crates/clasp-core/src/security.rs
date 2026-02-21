@@ -396,6 +396,26 @@ impl ValidatorChain {
     }
 }
 
+impl TokenValidator for ValidatorChain {
+    fn validate(&self, token: &str) -> ValidationResult {
+        for validator in &self.validators {
+            match validator.validate(token) {
+                ValidationResult::NotMyToken => continue,
+                result => return result,
+            }
+        }
+        ValidationResult::Invalid("no validator accepted the token".to_string())
+    }
+
+    fn name(&self) -> &str {
+        "ValidatorChain"
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
 impl Default for ValidatorChain {
     fn default() -> Self {
         Self::new()
@@ -631,6 +651,33 @@ mod tests {
         match chain.validate("unknown_token") {
             ValidationResult::Invalid(_) => {}
             _ => panic!("expected invalid token"),
+        }
+    }
+
+    #[test]
+    fn test_validator_chain_as_trait_object() {
+        let mut chain = ValidatorChain::new();
+
+        let cpsk = CpskValidator::new();
+        let token = CpskValidator::generate_token();
+        let scopes = vec![Scope::parse("admin:/**").unwrap()];
+        cpsk.register(token.clone(), TokenInfo::new(token.clone(), scopes));
+        chain.add(cpsk);
+
+        // Use through &dyn TokenValidator (trait object dispatch)
+        let validator: &dyn TokenValidator = &chain;
+        assert_eq!(validator.name(), "ValidatorChain");
+
+        match validator.validate(&token) {
+            ValidationResult::Valid(info) => {
+                assert!(info.has_scope(Action::Admin, "/any/path"));
+            }
+            _ => panic!("expected valid token through trait object"),
+        }
+
+        match validator.validate("unknown_prefix_token") {
+            ValidationResult::Invalid(_) => {}
+            _ => panic!("expected invalid for unknown token"),
         }
     }
 

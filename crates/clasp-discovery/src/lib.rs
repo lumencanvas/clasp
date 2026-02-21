@@ -248,6 +248,7 @@ impl Discovery {
                     bridge: false,
                     bridge_protocol: None,
                     meta,
+                    entity_id: None,
                 };
 
                 let now = std::time::Instant::now();
@@ -393,6 +394,7 @@ impl Discovery {
                                 bridge: false,
                                 bridge_protocol: None,
                                 meta,
+                                entity_id: None,
                             };
 
                             let now = std::time::Instant::now();

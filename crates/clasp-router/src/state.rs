@@ -6,6 +6,13 @@ use dashmap::DashMap;
 use parking_lot::RwLock;
 use std::time::{Duration, Instant};
 
+#[cfg(feature = "journal")]
+use std::sync::Arc;
+#[cfg(feature = "journal")]
+use clasp_core::SignalType;
+#[cfg(feature = "journal")]
+use clasp_journal::{Journal, JournalEntry};
+
 use crate::SessionId;
 
 /// Signal entry with registration time for cleanup
@@ -61,6 +68,9 @@ pub struct RouterState {
     signals: DashMap<String, SignalEntry>,
     /// Configuration
     config: RouterStateConfig,
+    /// Optional journal for state persistence and replay
+    #[cfg(feature = "journal")]
+    journal: Option<Arc<dyn Journal>>,
 }
 
 impl RouterState {
@@ -75,7 +85,21 @@ impl RouterState {
             listeners: DashMap::new(),
             signals: DashMap::new(),
             config,
+            #[cfg(feature = "journal")]
+            journal: None,
         }
+    }
+
+    /// Set the journal for state persistence and replay
+    #[cfg(feature = "journal")]
+    pub fn set_journal(&mut self, journal: Arc<dyn Journal>) {
+        self.journal = Some(journal);
+    }
+
+    /// Get a reference to the journal (if configured)
+    #[cfg(feature = "journal")]
+    pub fn journal(&self) -> Option<&Arc<dyn Journal>> {
+        self.journal.as_ref()
     }
 
     /// Register signals from an ANNOUNCE message
@@ -187,14 +211,56 @@ impl RouterState {
 
     /// Apply a SET message
     pub fn apply_set(&self, msg: &SetMessage, writer: &SessionId) -> Result<u64, UpdateError> {
-        self.set(
+        let result = self.set(
             &msg.address,
             msg.value.clone(),
             writer,
             msg.revision,
             msg.lock,
             msg.unlock,
-        )
+        )?;
+
+        // Fire-and-forget journal append
+        #[cfg(feature = "journal")]
+        if let Some(ref journal) = self.journal {
+            let entry = JournalEntry::from_set(
+                msg.address.clone(),
+                msg.value.clone(),
+                result,
+                writer.clone(),
+                clasp_core::time::now(),
+            );
+            let journal = Arc::clone(journal);
+            tokio::spawn(async move {
+                let _ = journal.append(entry).await;
+            });
+        }
+
+        Ok(result)
+    }
+
+    /// Record a PUBLISH event in the journal (fire-and-forget)
+    #[cfg(feature = "journal")]
+    pub fn journal_publish(
+        &self,
+        address: &str,
+        signal_type: SignalType,
+        value: Option<&Value>,
+        author: &str,
+    ) {
+        if let Some(ref journal) = self.journal {
+            let entry = JournalEntry::from_publish(
+                address.to_string(),
+                signal_type,
+                value.cloned().unwrap_or(Value::Null),
+                author.to_string(),
+                clasp_core::time::now(),
+            );
+            let journal = Arc::clone(journal);
+            tokio::spawn(async move {
+                let _ = journal.append(entry).await;
+            });
+        }
     }
 
     /// Get all parameters matching a pattern
@@ -227,6 +293,90 @@ impl RouterState {
     /// Create a full snapshot
     pub fn full_snapshot(&self) -> SnapshotMessage {
         self.snapshot("**")
+    }
+
+    /// Recover state from journal snapshot and replay entries.
+    ///
+    /// Loads the most recent snapshot, then replays any entries appended after
+    /// the snapshot was taken. This enables crash recovery.
+    #[cfg(feature = "journal")]
+    pub async fn recover_from_journal(&self) -> std::result::Result<usize, String> {
+        let journal = self
+            .journal
+            .as_ref()
+            .ok_or_else(|| "No journal configured".to_string())?;
+
+        let mut recovered = 0;
+
+        // Load snapshot if available
+        if let Ok(Some(snapshots)) = journal.load_snapshot().await {
+            for snap in &snapshots {
+                let _ = self.set(
+                    &snap.address,
+                    snap.value.clone(),
+                    &snap.writer,
+                    Some(snap.revision),
+                    false,
+                    false,
+                );
+                recovered += 1;
+            }
+            tracing::info!("Recovered {} params from journal snapshot", recovered);
+        }
+
+        // Replay entries since the snapshot
+        // For simplicity, replay all SET entries (they're idempotent with LWW)
+        if let Ok(entries) = journal.since(0, None).await {
+            for entry in &entries {
+                if entry.msg_type == 0x21 {
+                    // SET
+                    if let Some(revision) = entry.revision {
+                        let _ = self.set(
+                            &entry.address,
+                            entry.value.clone(),
+                            &entry.author,
+                            Some(revision),
+                            false,
+                            false,
+                        );
+                        recovered += 1;
+                    }
+                }
+            }
+            tracing::info!(
+                "Replayed {} journal entries ({} were SET operations)",
+                entries.len(),
+                entries.iter().filter(|e| e.msg_type == 0x21).count()
+            );
+        }
+
+        Ok(recovered)
+    }
+
+    /// Save current state as a journal snapshot.
+    #[cfg(feature = "journal")]
+    pub async fn save_snapshot(&self) -> std::result::Result<u64, String> {
+        let journal = self
+            .journal
+            .as_ref()
+            .ok_or_else(|| "No journal configured".to_string())?;
+
+        let all_params = self.get_matching("**");
+        let snapshots: Vec<clasp_journal::ParamSnapshot> = all_params
+            .into_iter()
+            .map(|(address, state)| clasp_journal::ParamSnapshot {
+                address,
+                value: state.value,
+                revision: state.revision,
+                writer: state.writer,
+                timestamp: state.timestamp,
+            })
+            .collect();
+
+        journal
+            .snapshot(&snapshots)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     /// Number of parameters

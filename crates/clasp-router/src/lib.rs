@@ -114,6 +114,9 @@ pub use session::{Session, SessionId};
 pub use state::{RouterState, RouterStateConfig};
 pub use subscription::SubscriptionManager;
 
+#[cfg(feature = "rules")]
+pub use router::execute_rule_actions;
+
 // Re-export adapter configs
 #[cfg(feature = "mqtt-server")]
 pub use adapters::{MqttServerAdapter, MqttServerConfig};

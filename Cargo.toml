@@ -11,6 +11,11 @@ members = [
     "crates/clasp-wasm",
     "crates/clasp-cli",
     "crates/clasp-test-utils",
+    "crates/clasp-registry",
+    "crates/clasp-journal",
+    "crates/clasp-federation",
+    "crates/clasp-caps",
+    "crates/clasp-rules",
     "tools/clasp-service",
     "tools/clasp-router",
     "clasp-e2e",
@@ -76,6 +81,14 @@ web-sys = { version = "0.3", features = ["WebSocket", "MessageEvent", "BinaryTyp
 # Testing
 criterion = "0.5"
 
+# Crypto
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+rand = "0.8"
+bs58 = "0.5"
+base64 = "0.22"
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde_bytes = "0.11"
+
 # Internal crates
 clasp-core = { version = "3.0", path = "crates/clasp-core" }
 clasp-transport = { version = "3.0", path = "crates/clasp-transport" }
@@ -86,6 +99,11 @@ clasp-client = { version = "3.0", path = "crates/clasp-client" }
 clasp-embedded = { version = "3.0", path = "crates/clasp-embedded" }
 clasp-cli = { version = "3.0", path = "crates/clasp-cli" }
 clasp-test-utils = { version = "3.0", path = "crates/clasp-test-utils" }
+clasp-registry = { version = "3.0", path = "crates/clasp-registry" }
+clasp-journal = { version = "3.0", path = "crates/clasp-journal" }
+clasp-federation = { version = "3.0", path = "crates/clasp-federation" }
+clasp-caps = { version = "3.0", path = "crates/clasp-caps" }
+clasp-rules = { version = "3.0", path = "crates/clasp-rules" }
 
 [profile.release]
 lto = true

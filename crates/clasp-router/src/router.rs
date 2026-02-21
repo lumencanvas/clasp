@@ -31,6 +31,11 @@ use clasp_core::{
     codec, AckMessage, Action, CpskValidator, ErrorMessage, Frame, Message, PublishMessage,
     SecurityMode, SetMessage, SignalType, SnapshotMessage, TokenValidator, ValidationResult,
 };
+
+#[cfg(feature = "journal")]
+use clasp_journal::Journal;
+#[cfg(feature = "rules")]
+use clasp_rules::RulesEngine;
 use clasp_transport::{TransportEvent, TransportReceiver, TransportSender, TransportServer};
 use dashmap::DashMap;
 use parking_lot::RwLock;
@@ -301,6 +306,9 @@ pub struct Router {
     write_validator: Option<Arc<dyn WriteValidator>>,
     /// Application-specific snapshot filter
     snapshot_filter: Option<Arc<dyn SnapshotFilter>>,
+    /// Rules engine for server-side automation
+    #[cfg(feature = "rules")]
+    rules_engine: Option<Arc<parking_lot::Mutex<RulesEngine>>>,
 }
 
 impl Router {
@@ -327,6 +335,8 @@ impl Router {
             gesture_registry,
             write_validator: None,
             snapshot_filter: None,
+            #[cfg(feature = "rules")]
+            rules_engine: None,
         }
     }
 
@@ -349,6 +359,35 @@ impl Router {
     /// Set the snapshot filter for application-specific data redaction
     pub fn set_snapshot_filter<F: SnapshotFilter + 'static>(&mut self, filter: F) {
         self.snapshot_filter = Some(Arc::new(filter));
+    }
+
+    /// Create a router with a journal for state persistence.
+    ///
+    /// The journal records all state mutations, enabling crash recovery
+    /// and REPLAY message support.
+    #[cfg(feature = "journal")]
+    pub fn with_journal(mut self, journal: Arc<dyn Journal>) -> Self {
+        // We need to recreate the state with journal support
+        let mut state = RouterState::with_config(self.config.state_config.clone());
+        state.set_journal(journal);
+        self.state = Arc::new(state);
+        self
+    }
+
+    /// Create a router with a rules engine for server-side automation.
+    ///
+    /// Rules are evaluated after SET and PUBLISH operations, allowing
+    /// automatic responses like "when motion detected, turn on lights".
+    #[cfg(feature = "rules")]
+    pub fn with_rules(mut self, engine: RulesEngine) -> Self {
+        self.rules_engine = Some(Arc::new(parking_lot::Mutex::new(engine)));
+        self
+    }
+
+    /// Get the rules engine interval rules for spawning timer tasks.
+    #[cfg(feature = "rules")]
+    pub fn rules_engine(&self) -> Option<&Arc<parking_lot::Mutex<RulesEngine>>> {
+        self.rules_engine.as_ref()
     }
 
     /// Get a reference to the CPSK validator if one is configured
@@ -876,6 +915,8 @@ impl Router {
             gesture_registry: self.gesture_registry.clone(),
             write_validator: self.write_validator.clone(),
             snapshot_filter: self.snapshot_filter.clone(),
+            #[cfg(feature = "rules")]
+            rules_engine: self.rules_engine.clone(),
         }
     }
 
@@ -905,6 +946,8 @@ impl Router {
         let gesture_registry = self.gesture_registry.clone();
         let write_validator = self.write_validator.clone();
         let snapshot_filter = self.snapshot_filter.clone();
+        #[cfg(feature = "rules")]
+        let rules_engine = self.rules_engine.clone();
 
         tokio::spawn(async move {
             let mut session: Option<Arc<Session>> = None;
@@ -981,6 +1024,8 @@ impl Router {
                     &gesture_registry,
                     &write_validator,
                     &snapshot_filter,
+                    #[cfg(feature = "rules")]
+                    &rules_engine,
                 )
                 .await
                 {
@@ -1060,6 +1105,8 @@ impl Router {
                                     &gesture_registry,
                                     &write_validator,
                                     &snapshot_filter,
+                                    #[cfg(feature = "rules")]
+                                    &rules_engine,
                                 )
                                 .await
                                 {
@@ -1227,6 +1274,7 @@ async fn handle_message(
     gesture_registry: &Option<Arc<GestureRegistry>>,
     write_validator: &Option<Arc<dyn WriteValidator>>,
     snapshot_filter: &Option<Arc<dyn SnapshotFilter>>,
+    #[cfg(feature = "rules")] rules_engine: &Option<Arc<parking_lot::Mutex<RulesEngine>>>,
 ) -> Option<MessageResult> {
     match msg {
         Message::Hello(hello) => {
@@ -1515,6 +1563,21 @@ async fn handle_message(
                         }
                     }
 
+                    // Evaluate rules engine after SET
+                    #[cfg(feature = "rules")]
+                    if let Some(ref engine) = rules_engine {
+                        let actions = engine.lock().evaluate(
+                            &set.address,
+                            &set.value,
+                            SignalType::Param,
+                            Some(session.id.as_str()),
+                            |addr| state.get(addr),
+                        );
+                        if !actions.is_empty() {
+                            execute_rule_actions(actions, state, sessions, subscriptions);
+                        }
+                    }
+
                     // Send ACK to sender
                     let ack = Message::Ack(AckMessage {
                         address: Some(set.address.clone()),
@@ -1748,6 +1811,35 @@ async fn handle_message(
                 }
             }
 
+            // Record in journal (fire-and-forget)
+            #[cfg(feature = "journal")]
+            state.journal_publish(
+                &pub_msg.address,
+                signal_type.unwrap_or(SignalType::Event),
+                pub_msg.value.as_ref(),
+                &session.id,
+            );
+
+            // Evaluate rules engine after PUBLISH
+            #[cfg(feature = "rules")]
+            if let Some(ref engine) = rules_engine {
+                let pub_value = pub_msg
+                    .value
+                    .as_ref()
+                    .cloned()
+                    .unwrap_or(clasp_core::Value::Null);
+                let actions = engine.lock().evaluate(
+                    &pub_msg.address,
+                    &pub_value,
+                    signal_type.unwrap_or(SignalType::Event),
+                    Some(session.id.as_str()),
+                    |addr| state.get(addr),
+                );
+                if !actions.is_empty() {
+                    execute_rule_actions(actions, state, sessions, subscriptions);
+                }
+            }
+
             Some(MessageResult::None)
         }
 
@@ -1763,6 +1855,97 @@ async fn handle_message(
             let result = Message::Result(clasp_core::ResultMessage { signals });
             let bytes = codec::encode(&result).ok()?;
             Some(MessageResult::Send(bytes))
+        }
+
+        #[cfg(feature = "journal")]
+        Message::Replay(replay) => {
+            let session = session.as_ref()?;
+
+            // Check scope for read access (in authenticated mode)
+            if security_mode == SecurityMode::Authenticated
+                && !session.has_strict_read_scope(&replay.pattern)
+            {
+                warn!(
+                    "Session {} denied REPLAY to {} - insufficient scope",
+                    session.id, replay.pattern
+                );
+                let error = Message::Error(ErrorMessage {
+                    code: 301,
+                    message: "Insufficient scope for replay".to_string(),
+                    address: Some(replay.pattern.clone()),
+                    correlation_id: None,
+                });
+                let bytes = codec::encode(&error).ok()?;
+                return Some(MessageResult::Send(bytes));
+            }
+
+            // Query the journal
+            if let Some(journal) = state.journal() {
+                match journal
+                    .query(
+                        &replay.pattern,
+                        replay.from,
+                        replay.to,
+                        replay.limit,
+                        &replay.types,
+                    )
+                    .await
+                {
+                    Ok(entries) => {
+                        // Send each journal entry as SET or PUBLISH messages
+                        for entry in entries {
+                            let msg = if entry.msg_type == 0x21 {
+                                // SET
+                                Message::Set(SetMessage {
+                                    address: entry.address,
+                                    value: entry.value,
+                                    revision: entry.revision,
+                                    lock: false,
+                                    unlock: false,
+                                })
+                            } else {
+                                // PUBLISH
+                                Message::Publish(PublishMessage {
+                                    address: entry.address,
+                                    signal: Some(entry.signal_type),
+                                    value: Some(entry.value),
+                                    payload: None,
+                                    samples: None,
+                                    rate: None,
+                                    id: None,
+                                    phase: None,
+                                    timestamp: None,
+                                    timeline: None,
+                                })
+                            };
+                            if let Ok(bytes) = codec::encode(&msg) {
+                                let _ = sender.send(bytes).await;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let error = Message::Error(ErrorMessage {
+                            code: 500,
+                            message: format!("Journal query failed: {}", e),
+                            address: Some(replay.pattern.clone()),
+                            correlation_id: None,
+                        });
+                        let bytes = codec::encode(&error).ok()?;
+                        return Some(MessageResult::Send(bytes));
+                    }
+                }
+            } else {
+                let error = Message::Error(ErrorMessage {
+                    code: 501,
+                    message: "Journal not configured on this router".to_string(),
+                    address: Some(replay.pattern.clone()),
+                    correlation_id: None,
+                });
+                let bytes = codec::encode(&error).ok()?;
+                return Some(MessageResult::Send(bytes));
+            }
+
+            Some(MessageResult::None)
         }
 
         Message::Announce(announce) => {
@@ -1988,6 +2171,121 @@ async fn handle_message(
         }
 
         _ => Some(MessageResult::None),
+    }
+}
+
+/// Execute pending actions produced by the rules engine.
+///
+/// Applies SET actions to state and broadcasts to subscribers.
+/// PUBLISH actions are encoded and broadcast to matching subscribers.
+/// Actions carry an origin like "rule:my_rule_id" to prevent re-triggering.
+#[cfg(feature = "rules")]
+pub fn execute_rule_actions(
+    actions: Vec<clasp_rules::PendingAction>,
+    state: &Arc<RouterState>,
+    sessions: &Arc<DashMap<SessionId, Arc<Session>>>,
+    subscriptions: &Arc<SubscriptionManager>,
+) {
+    for action in actions {
+        match action.action {
+            clasp_rules::RuleAction::Set { address, value } => {
+                match state.set(&address, value.clone(), &action.origin, None, false, false) {
+                    Ok(revision) => {
+                        let subscribers =
+                            subscriptions.find_subscribers(&address, Some(SignalType::Param));
+                        let set_msg = Message::Set(SetMessage {
+                            address: address.clone(),
+                            value,
+                            revision: Some(revision),
+                            lock: false,
+                            unlock: false,
+                        });
+                        if let Ok(bytes) = codec::encode(&set_msg) {
+                            for sub_session_id in subscribers {
+                                if let Some(sub_session) = sessions.get(&sub_session_id) {
+                                    try_send_with_drop_tracking_sync(
+                                        sub_session.value(),
+                                        bytes.clone(),
+                                        &sub_session_id,
+                                    );
+                                }
+                            }
+                        }
+                        debug!("Rule {} applied SET to {}", action.rule_id, address);
+                    }
+                    Err(e) => {
+                        warn!("Rule {} SET to {} failed: {:?}", action.rule_id, address, e);
+                    }
+                }
+            }
+            clasp_rules::RuleAction::Publish {
+                address,
+                signal,
+                value,
+            } => {
+                let pub_msg = Message::Publish(PublishMessage {
+                    address: address.clone(),
+                    signal: Some(signal),
+                    value,
+                    payload: None,
+                    samples: None,
+                    rate: None,
+                    id: None,
+                    phase: None,
+                    timestamp: None,
+                    timeline: None,
+                });
+                let subscribers = subscriptions.find_subscribers(&address, Some(signal));
+                if let Ok(bytes) = codec::encode(&pub_msg) {
+                    for sub_session_id in subscribers {
+                        if let Some(sub_session) = sessions.get(&sub_session_id) {
+                            try_send_with_drop_tracking_sync(
+                                sub_session.value(),
+                                bytes.clone(),
+                                &sub_session_id,
+                            );
+                        }
+                    }
+                }
+                debug!("Rule {} applied PUBLISH to {}", action.rule_id, address);
+            }
+            clasp_rules::RuleAction::SetFromTrigger { address, transform } => {
+                if let Some(current) = state.get(&address) {
+                    let transformed = transform.apply(&current);
+                    match state.set(&address, transformed.clone(), &action.origin, None, false, false) {
+                        Ok(revision) => {
+                            let subscribers =
+                                subscriptions.find_subscribers(&address, Some(SignalType::Param));
+                            let set_msg = Message::Set(SetMessage {
+                                address: address.clone(),
+                                value: transformed,
+                                revision: Some(revision),
+                                lock: false,
+                                unlock: false,
+                            });
+                            if let Ok(bytes) = codec::encode(&set_msg) {
+                                for sub_session_id in subscribers {
+                                    if let Some(sub_session) = sessions.get(&sub_session_id) {
+                                        try_send_with_drop_tracking_sync(
+                                            sub_session.value(),
+                                            bytes.clone(),
+                                            &sub_session_id,
+                                        );
+                                    }
+                                }
+                            }
+                            debug!("Rule {} applied SetFromTrigger to {}", action.rule_id, address);
+                        }
+                        Err(e) => {
+                            warn!("Rule {} SetFromTrigger to {} failed: {:?}", action.rule_id, address, e);
+                        }
+                    }
+                }
+            }
+            clasp_rules::RuleAction::Delay { .. } => {
+                // Delay actions are handled at a higher level (relay timer tasks)
+            }
+        }
     }
 }
 
