@@ -2,6 +2,8 @@
 //!
 //! Enforces server-side authorization rules for room admin/ban/meta paths,
 //! namespace metadata paths, DM inbox writes, and friend request writes.
+//! These checks complement protocol-level scope enforcement (see pentest PAT-01..PAT-05)
+//! with application-level identity and relationship validation.
 
 use clasp_core::Value;
 use clasp_router::{RouterState, Session, WriteValidator};

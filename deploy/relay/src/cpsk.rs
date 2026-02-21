@@ -12,6 +12,7 @@ use std::sync::Arc;
 /// On Unix, the file is created with mode 0o600 from the start (via OpenOptions),
 /// avoiding the TOCTOU window where `write()` + `set_permissions()` could briefly
 /// expose the file with default permissions.
+/// See pentest ADM-06: Admin Token File Exposure
 pub fn write_secret_file(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
     #[cfg(unix)]
     {

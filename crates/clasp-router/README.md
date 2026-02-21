@@ -17,10 +17,10 @@ Message router and server for CLASP (Creative Low-Latency Application Streaming 
 
 ```toml
 [dependencies]
-clasp-router = "3.1"
+clasp-router = "3.5"
 
 # Optional: Enable protocol adapters
-clasp-router = { version = "3.1", features = ["mqtt-server", "osc-server"] }
+clasp-router = { version = "3.5", features = ["mqtt-server", "osc-server"] }
 ```
 
 ## Feature Flags
@@ -35,6 +35,7 @@ clasp-router = { version = "3.1", features = ["mqtt-server", "osc-server"] }
 | `journal` | State persistence and replay via `clasp-journal` |
 | `rules` | Server-side automation via `clasp-rules` |
 | `federation` | Accept inbound federation peers |
+| `metrics` | Prometheus-compatible instrumentation via `metrics` crate |
 | `full` | All features enabled |
 
 ## Basic Usage

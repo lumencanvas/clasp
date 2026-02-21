@@ -17,11 +17,13 @@ pub(crate) async fn handle(
     // Auth flow: In Open mode, skip validation entirely. In Authenticated mode,
     // require a token, run it through the validator chain (CPSK -> caps -> entity),
     // and reject on any failure before creating a session.
+    // See pentest CAP-01: Token Forgery, ENT-01: Signature Bypass, ENT-04: Non-Existent Entity
     let (authenticated, subject, scopes) = match ctx.security_mode {
         SecurityMode::Open => (false, None, Vec::new()),
         SecurityMode::Authenticated => {
             let token = match &hello.token {
                 Some(t) => t,
+                // See pentest FED-09: Unauthenticated Federation
                 None => {
                     warn!("Connection rejected: no token provided in authenticated mode");
                     #[cfg(feature = "metrics")]

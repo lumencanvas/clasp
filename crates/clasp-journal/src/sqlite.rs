@@ -209,6 +209,7 @@ impl SqliteJournal {
     }
 
     /// Compute HMAC-SHA256 over address, value_json, and timestamp.
+    /// See pentest JNL-01: Journal Tampering
     #[cfg(feature = "integrity")]
     fn compute_hmac(key: &[u8; 32], address: &str, value_json: &str, timestamp: u64) -> String {
         let mut mac =
@@ -219,7 +220,7 @@ impl SqliteJournal {
         hex::encode(mac.finalize().into_bytes())
     }
 
-    /// Verify an HMAC against computed value.
+    /// Verify an HMAC against computed value. See pentest JNL-01: Journal Tampering
     #[cfg(feature = "integrity")]
     fn verify_hmac(
         key: &[u8; 32],
@@ -403,7 +404,8 @@ impl Journal for SqliteJournal {
                         });
                     }
                 }
-                // If stored_hmac is None, entry was written without integrity — allow it
+                // If stored_hmac is None, entry was written without integrity — allow it.
+                // Migration path: old entries written before HMAC was enabled have NULL hmac.
             }
             let _ = stored_hmac; // Suppress unused warning when integrity feature is off
 

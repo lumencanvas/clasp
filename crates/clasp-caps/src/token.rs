@@ -93,7 +93,8 @@ impl CapabilityToken {
         expires_at: u64,
         audience: Option<Vec<u8>>,
     ) -> Result<Self> {
-        // Verify attenuation: child scopes must be subset of parent scopes
+        // Verify attenuation: child scopes must be subset of parent scopes.
+        // See pentest CAP-02: Scope Attenuation Bypass, CAP-04: Proof Chain Manipulation
         for child_scope in &child_scopes {
             if !self.scope_allows(child_scope) {
                 return Err(CapError::AttenuationViolation(format!(
@@ -202,7 +203,8 @@ impl CapabilityToken {
         now > self.expires_at
     }
 
-    /// Get the delegation chain depth
+    /// Get the delegation chain depth.
+    /// Chain depth is bounded at validation time. See pentest CAP-03: Chain Depth Bypass
     pub fn chain_depth(&self) -> usize {
         self.proofs.len()
     }
@@ -266,6 +268,8 @@ struct SignableToken<'a> {
 ///
 /// A pattern is a subset if every address it matches is also matched by the parent.
 /// Simple heuristic: check segment-by-segment prefix match with wildcard handling.
+///
+/// See pentest CAP-10: Pattern Wildcard Injection, PAT-04: pattern_is_subset Edge Cases
 pub fn pattern_is_subset(child: &str, parent: &str) -> bool {
     // Exact match
     if child == parent {
@@ -294,7 +298,8 @@ pub fn pattern_is_subset(child: &str, parent: &str) -> bool {
         }
 
         if pp == "*" {
-            // ** is wider than *, not a subset (prevents scope widening)
+            // ** is wider than *, not a subset (prevents scope widening).
+            // See pentest CAP-10: Pattern Wildcard Injection
             if cp == "**" {
                 return false;
             }

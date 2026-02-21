@@ -34,6 +34,24 @@
 
 - [x] `docs/security/pentest-plan.md` -- 8 attack categories, 55 test cases
 
+## Phase 5: Inline Security Documentation (16-Phase Plan)
+
+- [x] Pentest cross-references in security-critical code paths (`See pentest <ID>` comments)
+- [x] Accuracy verification pass (router README version bump 3.1->3.5, added `metrics` feature flag)
+
+Files modified:
+- `crates/clasp-caps/src/token.rs` -- CAP-02, CAP-03, CAP-04, CAP-10, PAT-04
+- `crates/clasp-core/src/security.rs` -- TTL rationale, expiry semantics
+- `crates/clasp-router/src/handlers/federation.rs` -- FED-02, FED-03, FED-05, FED-06, FED-07, FED-08
+- `crates/clasp-router/src/handlers/set.rs` -- PAT-05, FED-01, FED-10
+- `crates/clasp-router/src/handlers/publish.rs` -- PAT-01, FED-01, FED-10
+- `crates/clasp-router/src/handlers/hello.rs` -- CAP-01, ENT-01, ENT-04, FED-09
+- `crates/clasp-journal/src/sqlite.rs` -- JNL-01 (compute + verify), migration note
+- `deploy/relay/src/cpsk.rs` -- ADM-06
+- `deploy/relay/src/auth.rs` -- ADM-01, Argon2id rationale
+- `deploy/relay/src/validator/write.rs` -- PAT-01..PAT-05 module-level ref
+- `crates/clasp-router/README.md` -- version 3.5, added `metrics` feature flag
+
 ---
 
 ## Summary
@@ -44,4 +62,5 @@
 | 2. Existing README Updates | 3 | Done |
 | 3. Architecture Diagrams | 7 | Done |
 | 4. Pentest Plan | 1 | Done |
-| **Total** | **16** | **Complete** |
+| 5. Inline Security Docs | 11 | Done |
+| **Total** | **27** | **Complete** |

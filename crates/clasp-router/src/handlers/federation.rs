@@ -12,8 +12,10 @@ use tracing::{debug, info, warn};
 
 use super::{send_chunked_snapshot, HandlerContext, MessageResult};
 
-/// Resource limits for federation operations
+/// Resource limits for federation operations.
+/// See pentest FED-02: Pattern Count Exhaustion
 const MAX_FEDERATION_PATTERNS: usize = 1000;
+/// See pentest FED-03: Revision Vector Exhaustion
 const MAX_REVISION_ENTRIES: usize = 10_000;
 
 pub(crate) async fn handle(
@@ -22,6 +24,7 @@ pub(crate) async fn handle(
 ) -> Option<MessageResult> {
     let session = ctx.session.as_ref()?;
 
+    // See pentest FED-06: Non-Federation Sync Attempt
     if !session.is_federation_peer() {
         warn!(
             "Session {} sent FederationSync but is not a federation peer",
@@ -111,7 +114,8 @@ async fn handle_declare_namespaces(
         router_id, fed_msg.patterns
     );
 
-    // Clean up previous federation subscriptions if re-declaring
+    // Clean up previous federation subscriptions if re-declaring.
+    // See pentest FED-08: Subscription Accumulation
     let old_namespaces = session.federation_namespaces();
     if !old_namespaces.is_empty() {
         for i in 0..old_namespaces.len() {
@@ -188,6 +192,7 @@ async fn handle_request_sync(
         return Some(MessageResult::Send(bytes));
     }
 
+    // See pentest FED-05: Unauthorized Sync Request, FED-07: Pattern Coverage Bypass
     let declared = session.federation_namespaces();
     for pattern in &fed_msg.patterns {
         let covered = declared.iter().any(|ns| {

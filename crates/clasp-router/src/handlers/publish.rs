@@ -14,6 +14,7 @@ pub(crate) async fn handle(
 ) -> Option<MessageResult> {
     let session = ctx.session.as_ref()?;
 
+    // See pentest PAT-01: Scope Bypass
     if ctx.security_mode == SecurityMode::Authenticated
         && !session.has_scope(Action::Write, &pub_msg.address)
     {
@@ -34,6 +35,7 @@ pub(crate) async fn handle(
     // SECURITY: Federation namespace enforcement -- prevents a compromised or
     // misconfigured peer from publishing events outside its declared namespaces.
     // Without this check, a peer could inject arbitrary events on the hub router.
+    // See pentest FED-01: Namespace Escape, FED-10: Cross-Namespace Write
     #[cfg(feature = "federation")]
     if session.is_federation_peer() {
         let namespaces = session.federation_namespaces();

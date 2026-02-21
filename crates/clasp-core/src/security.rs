@@ -192,7 +192,10 @@ impl TokenInfo {
         }
     }
 
-    /// Check if this token is expired
+    /// Check if this token is expired.
+    /// `None` expiry returns false -- tokens created with an explicit `None` expiry
+    /// (e.g. by tests or embedded devices) are valid indefinitely. Production tokens
+    /// should always have an expiry set via `CpskValidator::with_default_ttl`.
     pub fn is_expired(&self) -> bool {
         if let Some(expires_at) = self.expires_at {
             SystemTime::now() > expires_at
@@ -281,6 +284,7 @@ impl CpskValidator {
 
     /// Create a new CPSK validator with a default token TTL.
     /// Tokens registered without an explicit expiry will expire after this duration.
+    /// The relay uses 24h by default to prevent indefinitely-valid tokens (Phase 1.2).
     pub fn with_default_ttl(ttl: Duration) -> Self {
         Self {
             tokens: RwLock::new(HashMap::new()),

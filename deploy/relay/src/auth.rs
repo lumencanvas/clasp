@@ -25,6 +25,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tower_http::cors::CorsLayer;
 
 /// Per-key rate limiter for auth endpoints (H7, M6).
+/// See pentest ADM-01: Brute-Force Login
 struct RateLimiter {
     /// key -> (attempt_count, window_start)
     attempts: HashMap<String, (u32, Instant)>,
@@ -253,7 +254,7 @@ async fn register(
         })));
     }
 
-    // Hash password
+    // Hash password with Argon2id (memory-hard, resists GPU/ASIC attacks better than bcrypt)
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
     let hash = argon2
