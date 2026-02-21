@@ -1,4 +1,7 @@
 //! CLI argument parsing and configuration for the CLASP relay server.
+//!
+//! All runtime options (ports, auth, TLS, persistence, federation, etc.) are
+//! defined as `clap` arguments in [`Cli`].
 
 use clap::Parser;
 use std::path::PathBuf;

@@ -1,4 +1,7 @@
 //! Control message handlers -- PING, QUERY, REPLAY, ANNOUNCE, SYNC.
+//!
+//! Lightweight handlers for protocol housekeeping: heartbeat, signal discovery,
+//! journal replay, signal announcement, and clock synchronization.
 
 use clasp_core::{codec, AckMessage, Message};
 #[cfg(feature = "journal")]

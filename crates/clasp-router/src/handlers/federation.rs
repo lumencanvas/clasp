@@ -1,4 +1,8 @@
 //! FederationSync message handler -- inter-router state synchronization.
+//!
+//! Handles namespace declaration, full/delta sync requests, and revision vector
+//! exchange between federated CLASP routers. Only sessions with the `federation`
+//! feature flag may use these operations.
 
 use clasp_core::{
     codec, AckMessage, Action, ErrorMessage, Message, SecurityMode, SnapshotMessage,

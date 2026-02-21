@@ -28,7 +28,9 @@ pub(crate) async fn handle(
         return Some(MessageResult::Send(bytes));
     }
 
-    // Federation namespace enforcement: peers can only SET within declared namespaces
+    // SECURITY: Federation namespace enforcement -- prevents a compromised or
+    // misconfigured peer from writing to addresses outside its declared namespaces.
+    // Without this check, a peer could overwrite arbitrary state on the hub router.
     #[cfg(feature = "federation")]
     if session.is_federation_peer() {
         let namespaces = session.federation_namespaces();

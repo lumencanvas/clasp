@@ -1,4 +1,7 @@
 //! SUBSCRIBE / UNSUBSCRIBE message handlers.
+//!
+//! Manages per-session subscriptions with glob-pattern matching, enforces
+//! per-session subscription limits, and sends filtered snapshots on subscribe.
 
 use clasp_core::{codec, ErrorMessage, Message, SecurityMode};
 use tracing::{debug, warn};

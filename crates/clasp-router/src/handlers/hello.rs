@@ -1,4 +1,7 @@
 //! HELLO message handler -- authenticates clients and creates sessions.
+//!
+//! In `Authenticated` mode, the client must present a valid token (CPSK, capability,
+//! or entity). On success the handler creates a `Session`, sends WELCOME + snapshot.
 
 use clasp_core::{codec, ErrorMessage, Message, SecurityMode, ValidationResult};
 use std::sync::Arc;
@@ -11,6 +14,9 @@ pub(crate) async fn handle(
     hello: &clasp_core::HelloMessage,
     ctx: &HandlerContext<'_>,
 ) -> Option<MessageResult> {
+    // Auth flow: In Open mode, skip validation entirely. In Authenticated mode,
+    // require a token, run it through the validator chain (CPSK -> caps -> entity),
+    // and reject on any failure before creating a session.
     let (authenticated, subject, scopes) = match ctx.security_mode {
         SecurityMode::Open => (false, None, Vec::new()),
         SecurityMode::Authenticated => {

@@ -1,4 +1,8 @@
 //! BUNDLE message handler -- atomic multi-message operations.
+//!
+//! Validates all inner SET/PUBLISH messages before applying any (two-phase
+//! commit). If any message fails scope or write validation, the entire
+//! bundle is rejected.
 
 use clasp_core::{
     codec, AckMessage, Action, ErrorMessage, Message, SecurityMode, SetMessage, SignalType,

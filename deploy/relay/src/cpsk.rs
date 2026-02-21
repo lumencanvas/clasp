@@ -1,4 +1,8 @@
 //! CPSK token generation, file management, and shared validator wrapper.
+//!
+//! Provides [`SharedValidator`] so the same `CpskValidator` instance can be
+//! used by both the router (token validation) and the auth HTTP API (token
+//! registration). Also includes [`write_secret_file`] for safe credential I/O.
 
 use clasp_core::security::{CpskValidator, TokenValidator, ValidationResult};
 use std::sync::Arc;

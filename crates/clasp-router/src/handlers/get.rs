@@ -1,4 +1,8 @@
 //! GET message handler -- returns current state values.
+//!
+//! Looks up a single address in the router state and returns a SNAPSHOT
+//! containing the current value, revision, and writer. Respects scope checks
+//! and snapshot filtering.
 
 use clasp_core::{codec, Action, ErrorMessage, Message, SecurityMode};
 use tracing::warn;
