@@ -77,5 +77,6 @@ rosc = { workspace = true, optional = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 serde_json = { workspace = true }
+rmp-serde = { workspace = true }
 clasp-client = { workspace = true }
 clasp-test-utils = { workspace = true }
