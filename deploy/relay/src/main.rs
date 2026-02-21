@@ -24,6 +24,7 @@
 //! clasp-relay --mqtt-port 1883 --osc-port 8000 --quic-port 7331 --cert cert.pem --key key.pem
 //! ```
 
+mod app_config;
 mod auth;
 mod config;
 mod cpsk;
@@ -33,17 +34,17 @@ mod health;
 #[cfg(feature = "registry")]
 mod registry;
 mod server;
-mod validator;
 
 use anyhow::Result;
 use clap::Parser;
+use config::RelayConfig;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = config::Cli::parse();
 
-    // Setup logging
+    // Setup logging (uses cli.verbose before conversion)
     let filter = if cli.verbose {
         EnvFilter::new("debug,clasp=trace")
     } else {
@@ -63,5 +64,11 @@ async fn main() -> Result<()> {
         tracing_subscriber::fmt().with_env_filter(filter).init();
     }
 
-    server::run(cli).await
+    // Convert CLI args to RelayConfig (loads --app-config if specified)
+    let config = RelayConfig::from(cli);
+
+    // Rule-based validators are created in server.rs from the app config.
+    // Library consumers can still inject compiled Rust validators via
+    // RelayConfig.write_validator / .snapshot_filter (takes precedence).
+    server::run(config).await
 }

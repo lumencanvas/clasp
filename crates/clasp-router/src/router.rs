@@ -358,9 +358,19 @@ impl Router {
         self.write_validator = Some(Arc::new(validator));
     }
 
+    /// Set the write validator from a pre-wrapped `Arc` (for library embedding).
+    pub fn set_write_validator_arc(&mut self, validator: Arc<dyn WriteValidator>) {
+        self.write_validator = Some(validator);
+    }
+
     /// Set the snapshot filter for application-specific data redaction
     pub fn set_snapshot_filter<F: SnapshotFilter + 'static>(&mut self, filter: F) {
         self.snapshot_filter = Some(Arc::new(filter));
+    }
+
+    /// Set the snapshot filter from a pre-wrapped `Arc` (for library embedding).
+    pub fn set_snapshot_filter_arc(&mut self, filter: Arc<dyn SnapshotFilter>) {
+        self.snapshot_filter = Some(filter);
     }
 
     /// Create a router with a journal for state persistence.

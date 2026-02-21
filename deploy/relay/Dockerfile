@@ -35,11 +35,15 @@ FROM debian:bookworm-slim
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     ca-certificates \
+    curl \
     libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy binary from builder
 COPY --from=builder /app/target/release/clasp-relay /usr/local/bin/clasp-relay
+
+# Copy app config files
+COPY config /etc/clasp/
 
 # Create non-root user and data directory
 RUN useradd -r -s /bin/false clasp && \
@@ -54,7 +58,7 @@ EXPOSE 7340
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD timeout 1 bash -c 'cat < /dev/null > /dev/tcp/localhost/7330' || exit 1
+    CMD curl -sf http://localhost:7360/healthz || exit 1
 
 ENTRYPOINT ["clasp-relay"]
-CMD ["--ws-port", "7330", "--rendezvous-port", "7340", "--name", "relay.clasp.to"]
+CMD ["--ws-port", "7330", "--rendezvous-port", "7340", "--health-port", "7360", "--name", "relay.clasp.to"]

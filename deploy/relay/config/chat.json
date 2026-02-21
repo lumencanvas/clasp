@@ -1,0 +1,186 @@
+{
+  "scopes": [
+    "read:/chat/user/{userId}/**",
+    "read:/chat/user/*/profile",
+    "read:/chat/room/**",
+    "read:/chat/registry/**",
+    "read:/chat/requests/{userId}/**",
+
+    "write:/chat/user/{userId}/**",
+    "write:/chat/requests/**",
+    "write:/chat/user/*/dms/*",
+    "write:/chat/room/*/messages",
+    "write:/chat/room/*/presence/{userId}",
+    "write:/chat/room/*/typing/{userId}",
+    "write:/chat/room/*/reactions/**",
+    "write:/chat/room/*/video/**",
+    "write:/chat/room/*/crypto/pubkey/{userId}",
+    "write:/chat/room/*/crypto/proof/{userId}",
+    "write:/chat/room/*/crypto/keyex/*",
+    "write:/chat/room/*/admin/*",
+    "write:/chat/room/*/bans/*",
+    "write:/chat/room/*/meta",
+    "write:/chat/registry/rooms/*",
+    "write:/chat/registry/ns/**",
+    "write:/chat/registry/ns-meta/**"
+  ],
+
+  "write_rules": [
+    {
+      "path": "/chat/room/{roomId}/admin/{targetId}",
+      "checks": [
+        {
+          "type": "state_field_equals_session",
+          "lookup": "/chat/room/{roomId}/meta",
+          "field": "creatorId",
+          "allow_if_missing": true
+        }
+      ]
+    },
+    {
+      "path": "/chat/room/{roomId}/bans/{targetId}",
+      "mode": "any",
+      "checks": [
+        {
+          "type": "state_field_equals_session",
+          "lookup": "/chat/room/{roomId}/meta",
+          "field": "creatorId"
+        },
+        {
+          "type": "state_not_null",
+          "lookup": "/chat/room/{roomId}/admin/{session}"
+        }
+      ]
+    },
+    {
+      "path": "/chat/room/{roomId}/meta",
+      "checks": [
+        {
+          "type": "state_field_equals_session",
+          "lookup": "/chat/room/{roomId}/meta",
+          "field": "creatorId",
+          "allow_if_missing": true
+        }
+      ]
+    },
+    {
+      "path": "/chat/registry/ns-meta/{nsBase}/__auth",
+      "checks": [
+        {
+          "type": "state_field_equals_session",
+          "lookup": "/chat/registry/ns-meta/{nsBase}",
+          "field": "createdBy",
+          "allow_if_missing": true
+        }
+      ]
+    },
+    {
+      "path": "/chat/registry/ns-meta/{nsPath}",
+      "checks": [
+        {
+          "type": "state_field_equals_session",
+          "lookup": "/chat/registry/ns-meta/{nsPath}",
+          "field": "createdBy",
+          "allow_if_missing": true
+        }
+      ]
+    },
+    {
+      "path": "/chat/user/{targetId}/dms/{roomId}",
+      "allow_null_write": true,
+      "checks": [
+        {
+          "type": "value_field_equals_session",
+          "field": "fromId"
+        },
+        {
+          "type": "either_state_not_null",
+          "lookup_a": "/chat/user/{session}/friends/{targetId}",
+          "lookup_b": "/chat/user/{targetId}/friends/{session}"
+        }
+      ]
+    },
+    {
+      "path": "/chat/requests/{targetId}/{fromId}",
+      "allow_null_write": true,
+      "pre_checks": [
+        {
+          "type": "segment_equals_session",
+          "segment": "fromId"
+        }
+      ],
+      "checks": [
+        {
+          "type": "value_field_equals_session",
+          "field": "fromId"
+        }
+      ]
+    },
+    {
+      "path": "/chat/requests/**",
+      "checks": [
+        {
+          "type": "reject_unless_path_matches",
+          "pattern": "/chat/requests/{targetId}/{fromId}",
+          "message": "Invalid friend request path: must be /chat/requests/{targetId}/{fromId}"
+        }
+      ]
+    }
+  ],
+
+  "snapshot_transforms": [
+    {
+      "path": "/chat/room/{roomId}/meta",
+      "redact_fields": ["passwordHash", "passwordSalt"]
+    }
+  ],
+
+  "snapshot_visibility": [
+    {
+      "path_contains": "/__auth",
+      "visible": false
+    },
+    {
+      "path": "/chat/user/{userId}/profile",
+      "visible": true
+    },
+    {
+      "path": "/chat/user/{userId}/**",
+      "visible": "owner",
+      "owner_segment": "userId",
+      "public_sub": "profile"
+    },
+    {
+      "path": "/chat/requests/{userId}/**",
+      "visible": "owner",
+      "owner_segment": "userId"
+    },
+    {
+      "path": "/chat/room/{roomId}/meta",
+      "visible": true
+    },
+    {
+      "path": "/chat/room/{roomId}/presence/{uid}",
+      "visible": true
+    },
+    {
+      "path": "/chat/room/{roomId}/typing/{uid}",
+      "visible": true
+    },
+    {
+      "path": "/chat/room/{roomId}/**",
+      "visible": "require_state_not_null",
+      "lookup": "/chat/room/{roomId}/presence/{session}"
+    },
+    {
+      "visible": true
+    }
+  ],
+
+  "rate_limits": {
+    "login_max_attempts": 5,
+    "login_window_secs": 60,
+    "register_max_attempts": 10,
+    "register_window_secs": 60
+  }
+}

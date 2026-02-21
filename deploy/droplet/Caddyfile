@@ -4,6 +4,10 @@
 	}
 
 	handle {
-		reverse_proxy relay:7330
+		reverse_proxy relay:7330 {
+			health_uri /healthz
+			health_port 7360
+			health_interval 10s
+		}
 	}
 }

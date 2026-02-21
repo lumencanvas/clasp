@@ -1,13 +1,24 @@
-//! CLI argument parsing and configuration for the CLASP relay server.
+//! CLI argument parsing and programmatic configuration for the CLASP relay server.
 //!
-//! All runtime options (ports, auth, TLS, persistence, federation, etc.) are
-//! defined as `clap` arguments in [`Cli`].
+//! Two configuration paths exist:
+//! - [`Cli`]: `clap`-based argument parsing for the binary entrypoint.
+//! - [`RelayConfig`]: Programmatic configuration for library consumers.
+//!
+//! The binary converts `Cli` -> `RelayConfig` via `From<Cli>`. Library users
+//! construct `RelayConfig` directly (with [`Default`] providing sane defaults).
 
+use clasp_router::{WriteValidator, SnapshotFilter};
 use clap::Parser;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
 
 #[cfg(feature = "rendezvous")]
 pub use clasp_discovery::rendezvous::{RendezvousConfig, RendezvousServer};
+
+// ---------------------------------------------------------------------------
+// CLI (binary entrypoint)
+// ---------------------------------------------------------------------------
 
 #[derive(Parser)]
 #[command(name = "clasp-relay")]
@@ -35,7 +46,7 @@ pub struct Cli {
     pub auth_port: Option<u16>,
 
     /// Auth database path
-    #[arg(long, default_value = "chat-auth.db")]
+    #[arg(long, default_value = "relay-auth.db")]
     pub auth_db: String,
 
     /// QUIC listen port (enables QUIC transport, requires --cert and --key)
@@ -146,6 +157,13 @@ pub struct Cli {
     #[arg(long)]
     pub rules: Option<PathBuf>,
 
+    // -- App Config --
+
+    /// JSON file defining scopes, write rules, and snapshot rules for the application.
+    /// Replaces hardcoded application-specific validators.
+    #[arg(long = "app-config")]
+    pub app_config: Option<PathBuf>,
+
     // -- Admin Bootstrap --
 
     /// Default TTL for CPSK tokens in seconds (0 = no default expiry).
@@ -194,4 +212,214 @@ pub struct Cli {
     /// After receiving SIGTERM, the server waits this long before force-closing connections.
     #[arg(long = "drain-timeout", default_value = "30")]
     pub drain_timeout: u64,
+}
+
+// ---------------------------------------------------------------------------
+// RelayConfig (library API)
+// ---------------------------------------------------------------------------
+
+/// Programmatic relay configuration for library consumers.
+///
+/// Construct with [`Default::default()`] for sane defaults, then override
+/// individual fields. The binary entrypoint converts from [`Cli`] via
+/// `RelayConfig::from(cli)`.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use clasp_relay::config::RelayConfig;
+///
+/// let config = RelayConfig {
+///     ws_port: 9000,
+///     auth_port: Some(9001),
+///     ..Default::default()
+/// };
+/// ```
+pub struct RelayConfig {
+    // -- Network --
+    pub ws_port: u16,
+    pub host: String,
+    pub name: String,
+    pub auth_port: Option<u16>,
+    pub auth_db: String,
+    pub health_port: Option<u16>,
+    pub no_websocket: bool,
+
+    // -- QUIC --
+    pub quic_port: Option<u16>,
+    pub cert: Option<PathBuf>,
+    pub key: Option<PathBuf>,
+
+    // -- MQTT --
+    pub mqtt_port: Option<u16>,
+    pub mqtt_namespace: String,
+
+    // -- OSC --
+    pub osc_port: Option<u16>,
+    pub osc_namespace: String,
+
+    // -- Sessions --
+    pub max_sessions: usize,
+    pub session_timeout: u64,
+
+    // -- TTL --
+    pub no_ttl: bool,
+    pub param_ttl: u64,
+    pub signal_ttl: u64,
+
+    // -- Rendezvous --
+    pub rendezvous_port: u16,
+    pub rendezvous_ttl: u64,
+
+    // -- Persistence --
+    pub persist: Option<PathBuf>,
+    pub persist_interval: u64,
+
+    // -- Auth --
+    pub cors_origin: Option<String>,
+    pub token_ttl: u64,
+    pub admin_token: Option<PathBuf>,
+
+    // -- Journal --
+    pub journal: Option<PathBuf>,
+    pub journal_memory: bool,
+
+    // -- Capability Tokens --
+    pub trust_anchor: Vec<PathBuf>,
+    pub cap_max_depth: usize,
+
+    // -- Entity Registry --
+    pub registry_db: Option<PathBuf>,
+
+    // -- Rules --
+    pub rules: Option<PathBuf>,
+
+    // -- App Config --
+    pub app_config: Option<crate::app_config::AppConfig>,
+
+    // -- Federation --
+    pub federation_hub: Option<String>,
+    pub federation_id: Option<String>,
+    pub federation_namespace: Vec<String>,
+    pub federation_token: Option<String>,
+
+    // -- Metrics --
+    pub metrics_port: Option<u16>,
+
+    // -- Shutdown --
+    pub drain_timeout: Duration,
+
+    // -- Injectable validators (library API) --
+    /// Application-specific write validator. If `None`, no custom validation
+    /// is applied beyond scope checks.
+    pub write_validator: Option<Arc<dyn WriteValidator>>,
+    /// Application-specific snapshot filter. If `None`, snapshots are
+    /// delivered unfiltered.
+    pub snapshot_filter: Option<Arc<dyn SnapshotFilter>>,
+}
+
+impl Default for RelayConfig {
+    fn default() -> Self {
+        Self {
+            ws_port: 7330,
+            host: "0.0.0.0".into(),
+            name: "CLASP Relay".into(),
+            auth_port: None,
+            auth_db: "relay-auth.db".into(),
+            health_port: None,
+            no_websocket: false,
+            quic_port: None,
+            cert: None,
+            key: None,
+            mqtt_port: None,
+            mqtt_namespace: "/mqtt".into(),
+            osc_port: None,
+            osc_namespace: "/osc".into(),
+            max_sessions: 1000,
+            session_timeout: 300,
+            no_ttl: false,
+            param_ttl: 3600,
+            signal_ttl: 3600,
+            rendezvous_port: 7340,
+            rendezvous_ttl: 300,
+            persist: None,
+            persist_interval: 30,
+            cors_origin: None,
+            token_ttl: 86400,
+            admin_token: None,
+            journal: None,
+            journal_memory: false,
+            trust_anchor: Vec::new(),
+            cap_max_depth: 5,
+            registry_db: None,
+            rules: None,
+            app_config: None,
+            federation_hub: None,
+            federation_id: None,
+            federation_namespace: Vec::new(),
+            federation_token: None,
+            metrics_port: None,
+            drain_timeout: Duration::from_secs(30),
+            write_validator: None,
+            snapshot_filter: None,
+        }
+    }
+}
+
+impl From<Cli> for RelayConfig {
+    fn from(cli: Cli) -> Self {
+        // Load app config if specified
+        let app_config = cli.app_config.as_ref().map(|path| {
+            let json = std::fs::read_to_string(path)
+                .unwrap_or_else(|e| panic!("Failed to read app config {}: {}", path.display(), e));
+            serde_json::from_str::<crate::app_config::AppConfig>(&json)
+                .unwrap_or_else(|e| panic!("Failed to parse app config {}: {}", path.display(), e))
+        });
+
+        Self {
+            ws_port: cli.ws_port,
+            host: cli.host,
+            name: cli.name,
+            auth_port: cli.auth_port,
+            auth_db: cli.auth_db,
+            health_port: cli.health_port,
+            no_websocket: cli.no_websocket,
+            quic_port: cli.quic_port,
+            cert: cli.cert,
+            key: cli.key,
+            mqtt_port: cli.mqtt_port,
+            mqtt_namespace: cli.mqtt_namespace,
+            osc_port: cli.osc_port,
+            osc_namespace: cli.osc_namespace,
+            max_sessions: cli.max_sessions,
+            session_timeout: cli.session_timeout,
+            no_ttl: cli.no_ttl,
+            param_ttl: cli.param_ttl,
+            signal_ttl: cli.signal_ttl,
+            rendezvous_port: cli.rendezvous_port,
+            rendezvous_ttl: cli.rendezvous_ttl,
+            persist: cli.persist,
+            persist_interval: cli.persist_interval,
+            cors_origin: cli.cors_origin,
+            token_ttl: cli.token_ttl,
+            admin_token: cli.admin_token,
+            journal: cli.journal,
+            journal_memory: cli.journal_memory,
+            trust_anchor: cli.trust_anchor,
+            cap_max_depth: cli.cap_max_depth,
+            registry_db: cli.registry_db,
+            rules: cli.rules,
+            app_config,
+            federation_hub: cli.federation_hub,
+            federation_id: cli.federation_id,
+            federation_namespace: cli.federation_namespace,
+            federation_token: cli.federation_token,
+            metrics_port: cli.metrics_port,
+            drain_timeout: Duration::from_secs(cli.drain_timeout),
+            // The binary sets chat-specific validators below in main.rs;
+            // library consumers provide their own or leave as None.
+            write_validator: None,
+            snapshot_filter: None,
+        }
+    }
 }

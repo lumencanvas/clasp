@@ -81,10 +81,20 @@ pub struct AuthState {
     validator: Arc<CpskValidator>,
     login_limiter: Mutex<RateLimiter>,
     register_limiter: Mutex<RateLimiter>,
+    /// Scope templates from app config. `{userId}` is replaced at token issue time.
+    /// If None, issues full read/write tokens.
+    scope_templates: Option<Vec<String>>,
+    /// Rate limit configuration (from app config or defaults).
+    rate_config: crate::app_config::RateLimitConfig,
 }
 
 impl AuthState {
-    pub fn new(db_path: &str, validator: Arc<CpskValidator>) -> Result<Self> {
+    pub fn new(
+        db_path: &str,
+        validator: Arc<CpskValidator>,
+        scope_templates: Option<Vec<String>>,
+        rate_config: crate::app_config::RateLimitConfig,
+    ) -> Result<Self> {
         let conn = Connection::open(db_path)?;
 
         // Create users table
@@ -102,7 +112,23 @@ impl AuthState {
             validator,
             login_limiter: Mutex::new(RateLimiter::new()),
             register_limiter: Mutex::new(RateLimiter::new()),
+            scope_templates,
+            rate_config,
         })
+    }
+
+    /// Build scopes for a user by substituting `{userId}` in scope templates.
+    fn build_scopes(&self, user_id: &str) -> Vec<String> {
+        match &self.scope_templates {
+            Some(templates) => templates
+                .iter()
+                .map(|s| s.replace("{userId}", user_id))
+                .collect(),
+            None => {
+                tracing::warn!("No app config -- issuing full read/write token");
+                vec!["read:/**".into(), "write:/**".into()]
+            }
+        }
     }
 }
 
@@ -125,71 +151,6 @@ pub struct ErrorResponse {
     error: String,
 }
 
-/// Build scopes for a user.
-///
-/// Security: scopes are restricted so users can only write to their own
-/// identity-keyed paths. Room-level admin/ban/meta operations use dedicated
-/// paths keyed by the acting user's ID, and the client-side composables
-/// enforce role checks before writing.
-pub fn build_scopes(user_id: &str) -> Vec<String> {
-    vec![
-        // Read: own user data (profile, friends, DMs)
-        format!("read:/chat/user/{}/**", user_id),
-        // Read: other users' profiles (public info only)
-        "read:/chat/user/*/profile".to_string(),
-        // Read: room data (per-room gating is Phase 2)
-        "read:/chat/room/**".to_string(),
-        // Read: room/namespace discovery
-        "read:/chat/registry/**".to_string(),
-        // Read: own friend request inbox (wildcard for per-sender keys)
-        format!("read:/chat/requests/{}/**", user_id),
-
-        // User profile & identity
-        format!("write:/chat/user/{}/**", user_id),
-
-        // Friend requests (write to target's inbox, per-sender key)
-        "write:/chat/requests/**".to_string(),
-
-        // DM notifications (write to any user's DM inbox)
-        "write:/chat/user/*/dms/*".to_string(),
-
-        // Messages: any room (content auth is handled by E2E encryption)
-        "write:/chat/room/*/messages".to_string(),
-
-        // Presence & typing: own userId only
-        format!("write:/chat/room/*/presence/{}", user_id),
-        format!("write:/chat/room/*/typing/{}", user_id),
-
-        // Reactions: any room
-        "write:/chat/room/*/reactions/**".to_string(),
-
-        // Video: any room
-        "write:/chat/room/*/video/**".to_string(),
-
-        // Crypto: only own pubkey and proof paths (prevents MITM key injection)
-        format!("write:/chat/room/*/crypto/pubkey/{}", user_id),
-        format!("write:/chat/room/*/crypto/proof/{}", user_id),
-        // Key exchange: users send encrypted keys TO a specific peer
-        "write:/chat/room/*/crypto/keyex/*".to_string(),
-
-        // Admin: wildcard needed so creators can promote/demote others.
-        // Server-side role enforcement is a Phase 2 item.
-        "write:/chat/room/*/admin/*".to_string(),
-
-        // Bans: any ban path (admin role enforced client-side; server-side
-        // enforcement is a Phase 2 item requiring room membership tracking)
-        "write:/chat/room/*/bans/*".to_string(),
-
-        // Room meta: allow writes (creator check enforced client-side;
-        // server-side enforcement is Phase 2)
-        "write:/chat/room/*/meta".to_string(),
-
-        // Registry: room listings and namespace metadata
-        "write:/chat/registry/rooms/*".to_string(),
-        "write:/chat/registry/ns/**".to_string(),
-        "write:/chat/registry/ns-meta/**".to_string(),
-    ]
-}
 
 /// Validate a client-supplied user_id (M2).
 /// Allows alphanumeric, hyphens, and underscores. Max 64 chars.
@@ -218,15 +179,17 @@ async fn register(
     let ip = extract_ip(request.extensions());
 
     // Rate limit registration per IP
+    let register_window = Duration::from_secs(state.rate_config.register_window_secs);
+    let register_max = state.rate_config.register_max_attempts;
     {
         let mut limiter = state.register_limiter.lock().unwrap();
-        limiter.prune(REGISTER_WINDOW);
-        if limiter.is_blocked(&ip, REGISTER_MAX_ATTEMPTS, REGISTER_WINDOW) {
+        limiter.prune(register_window);
+        if limiter.is_blocked(&ip, register_max, register_window) {
             return Err((StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse {
                 error: "Too many registration attempts. Please wait and try again.".into(),
             })));
         }
-        limiter.record(&ip, REGISTER_WINDOW);
+        limiter.record(&ip, register_window);
     }
 
     let bytes = axum::body::to_bytes(request.into_body(), 1024 * 16)
@@ -306,7 +269,7 @@ async fn register(
 
     // Generate token and register with validator
     let token = CpskValidator::generate_token();
-    let scope_strings = build_scopes(&user_id);
+    let scope_strings = state.build_scopes(&user_id);
     let scopes: Vec<Scope> = scope_strings
         .iter()
         .filter_map(|s| Scope::parse(s).ok())
@@ -327,15 +290,6 @@ async fn register(
     }))
 }
 
-/// Max login attempts per username or IP within the rate window.
-const LOGIN_MAX_ATTEMPTS: u32 = 5;
-/// Login rate limiting window duration.
-const LOGIN_WINDOW: Duration = Duration::from_secs(60);
-
-/// Max registration/guest attempts per IP within the window (M6).
-const REGISTER_MAX_ATTEMPTS: u32 = 10;
-/// Registration rate limiting window duration.
-const REGISTER_WINDOW: Duration = Duration::from_secs(60);
 
 /// Extract client IP from ConnectInfo extension (set by into_make_service_with_connect_info).
 /// Falls back to "unknown" when not available (e.g., in tests).
@@ -368,15 +322,17 @@ async fn login(
     let password = req.password;
     let ip_key = format!("ip:{}", ip);
     let user_key = format!("user:{}", username.to_lowercase());
+    let login_window = Duration::from_secs(state.rate_config.login_window_secs);
+    let login_max = state.rate_config.login_max_attempts;
 
     // Check rate limits before doing any work
     {
         let mut limiter = state.login_limiter.lock().unwrap();
         // Periodically prune stale entries
-        limiter.prune(LOGIN_WINDOW);
+        limiter.prune(login_window);
 
-        if limiter.is_blocked(&ip_key, LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW)
-            || limiter.is_blocked(&user_key, LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW)
+        if limiter.is_blocked(&ip_key, login_max, login_window)
+            || limiter.is_blocked(&user_key, login_max, login_window)
         {
             tracing::warn!("Login rate-limited: {} / {}", username, ip);
             return Err((StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse {
@@ -399,8 +355,8 @@ async fn login(
         }).map_err(|_| {
             // Record failed attempt (username not found)
             let mut limiter = state.login_limiter.lock().unwrap();
-            limiter.record(&ip_key, LOGIN_WINDOW);
-            limiter.record(&user_key, LOGIN_WINDOW);
+            limiter.record(&ip_key, login_window);
+            limiter.record(&user_key, login_window);
             (StatusCode::UNAUTHORIZED, Json(ErrorResponse {
                 error: "Invalid username or password".into(),
             }))
@@ -418,8 +374,8 @@ async fn login(
         .map_err(|_| {
             // Record failed attempt (wrong password)
             let mut limiter = state.login_limiter.lock().unwrap();
-            limiter.record(&ip_key, LOGIN_WINDOW);
-            limiter.record(&user_key, LOGIN_WINDOW);
+            limiter.record(&ip_key, login_window);
+            limiter.record(&user_key, login_window);
             (StatusCode::UNAUTHORIZED, Json(ErrorResponse {
                 error: "Invalid username or password".into(),
             }))
@@ -434,7 +390,7 @@ async fn login(
 
     // Generate new token
     let token = CpskValidator::generate_token();
-    let scope_strings = build_scopes(&user_id);
+    let scope_strings = state.build_scopes(&user_id);
     let scopes: Vec<Scope> = scope_strings
         .iter()
         .filter_map(|s| Scope::parse(s).ok())
@@ -469,15 +425,17 @@ async fn guest(
     let ip = extract_ip(request.extensions());
 
     // Rate limit guest creation per IP
+    let register_window = Duration::from_secs(state.rate_config.register_window_secs);
+    let register_max = state.rate_config.register_max_attempts;
     {
         let mut limiter = state.register_limiter.lock().unwrap();
-        limiter.prune(REGISTER_WINDOW);
-        if limiter.is_blocked(&ip, REGISTER_MAX_ATTEMPTS, REGISTER_WINDOW) {
+        limiter.prune(register_window);
+        if limiter.is_blocked(&ip, register_max, register_window) {
             return Err((StatusCode::TOO_MANY_REQUESTS, Json(ErrorResponse {
                 error: "Too many requests. Please wait and try again.".into(),
             })));
         }
-        limiter.record(&ip, REGISTER_WINDOW);
+        limiter.record(&ip, register_window);
     }
 
     let bytes = axum::body::to_bytes(request.into_body(), 1024 * 16)
@@ -545,7 +503,7 @@ async fn guest(
         .unwrap_or_else(|| format!("guest-{}", &user_id[user_id.len()-6..]));
 
     let token = CpskValidator::generate_token();
-    let scope_strings = build_scopes(&user_id);
+    let scope_strings = state.build_scopes(&user_id);
     let scopes: Vec<Scope> = scope_strings
         .iter()
         .filter_map(|s| Scope::parse(s).ok())

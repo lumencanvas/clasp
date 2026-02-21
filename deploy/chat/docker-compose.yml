@@ -4,9 +4,13 @@ services:
     ports:
       - "7330:7330"
       - "7350:7350"
+      - "7360:7360"
     environment:
       RUST_LOG: info
-    command: ["--auth-port", "7350"]
+    command: ["--ws-port", "7330", "--auth-port", "7350", "--health-port", "7360",
+              "--persist", "/data/state.json",
+              "--app-config", "/etc/clasp/chat.json",
+              "--auth-db", "/data/chat-auth.db"]
     volumes:
       - relay-data:/data
     restart: unless-stopped

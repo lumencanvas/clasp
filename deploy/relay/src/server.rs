@@ -1,6 +1,6 @@
 //! Server orchestration: router setup, transport configuration, and main run loop.
 
-use crate::config::Cli;
+use crate::config::RelayConfig;
 use crate::cpsk::{write_secret_file, SharedValidator};
 
 use anyhow::{Context, Result};
@@ -13,16 +13,19 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
 
-/// Main server entry point. Call after CLI parsing and tracing initialization.
-pub async fn run(cli: Cli) -> Result<()> {
+/// Main server entry point.
+///
+/// Accepts a [`RelayConfig`] built either from CLI args or programmatically.
+/// The binary entrypoint does `Cli::parse()` -> `RelayConfig::from(cli)` -> `run(config)`.
+pub async fn run(config: RelayConfig) -> Result<()> {
     tracing::info!("╔══════════════════════════════════════════════════════════════╗");
     tracing::info!("║           CLASP Multi-Protocol Relay Server                  ║");
     tracing::info!("╚══════════════════════════════════════════════════════════════╝");
 
     // Start Prometheus metrics exporter if configured
     #[cfg(feature = "metrics")]
-    if let Some(metrics_port) = cli.metrics_port {
-        let metrics_addr: SocketAddr = format!("{}:{}", cli.host, metrics_port)
+    if let Some(metrics_port) = config.metrics_port {
+        let metrics_addr: SocketAddr = format!("{}:{}", config.host, metrics_port)
             .parse()
             .context("Invalid metrics address")?;
         let builder = metrics_exporter_prometheus::PrometheusBuilder::new();
@@ -33,18 +36,18 @@ pub async fn run(cli: Cli) -> Result<()> {
         tracing::info!("Metrics: http://{}/metrics", metrics_addr);
     }
 
-    // Create state store configuration based on CLI flags
-    let state_config = if cli.no_ttl {
+    // Create state store configuration based on config flags
+    let state_config = if config.no_ttl {
         tracing::info!("TTL disabled: parameters and signals persist indefinitely");
         RouterStateConfig::unlimited()
     } else {
-        let param_ttl = if cli.param_ttl > 0 {
-            Some(Duration::from_secs(cli.param_ttl))
+        let param_ttl = if config.param_ttl > 0 {
+            Some(Duration::from_secs(config.param_ttl))
         } else {
             None
         };
-        let signal_ttl = if cli.signal_ttl > 0 {
-            Some(Duration::from_secs(cli.signal_ttl))
+        let signal_ttl = if config.signal_ttl > 0 {
+            Some(Duration::from_secs(config.signal_ttl))
         } else {
             None
         };
@@ -65,7 +68,7 @@ pub async fn run(cli: Cli) -> Result<()> {
     };
 
     // Determine security mode based on auth
-    let auth_enabled = cli.auth_port.is_some();
+    let auth_enabled = config.auth_port.is_some();
     let security_mode = if auth_enabled {
         SecurityMode::Authenticated
     } else {
@@ -73,11 +76,11 @@ pub async fn run(cli: Cli) -> Result<()> {
     };
 
     // Create router configuration
-    let config = RouterConfig {
-        name: cli.name.clone(),
+    let router_config = RouterConfig {
+        name: config.name.clone(),
         security_mode,
-        max_sessions: cli.max_sessions,
-        session_timeout: cli.session_timeout,
+        max_sessions: config.max_sessions,
+        session_timeout: config.session_timeout,
         features: {
             let mut f = vec![
                 "param".to_string(),
@@ -98,12 +101,12 @@ pub async fn run(cli: Cli) -> Result<()> {
         state_config,
     };
 
-    let mut router = Router::new(config);
+    let mut router = Router::new(router_config);
 
     // Wire journal if configured
     #[cfg(feature = "journal")]
     {
-        if let Some(ref path) = cli.journal {
+        if let Some(ref path) = config.journal {
             let journal = std::sync::Arc::new(
                 clasp_journal::SqliteJournal::new(
                     path.to_str().expect("journal path must be valid UTF-8"),
@@ -112,7 +115,7 @@ pub async fn run(cli: Cli) -> Result<()> {
             );
             router = router.with_journal(journal);
             tracing::info!("Journal: {}", path.display());
-        } else if cli.journal_memory {
+        } else if config.journal_memory {
             let journal = std::sync::Arc::new(
                 clasp_journal::SqliteJournal::in_memory()
                     .expect("Failed to create in-memory journal"),
@@ -124,7 +127,7 @@ pub async fn run(cli: Cli) -> Result<()> {
 
     // Recover state from journal if available (after journal is wired, before serving)
     #[cfg(feature = "journal")]
-    if cli.journal.is_some() || cli.journal_memory {
+    if config.journal.is_some() || config.journal_memory {
         match router.state().recover_from_journal().await {
             Ok(count) => {
                 if count > 0 {
@@ -139,7 +142,7 @@ pub async fn run(cli: Cli) -> Result<()> {
     #[cfg(feature = "rules")]
     let mut interval_rules: Vec<(String, u64)> = Vec::new();
     #[cfg(feature = "rules")]
-    if let Some(ref rules_path) = cli.rules {
+    if let Some(ref rules_path) = config.rules {
         let json = std::fs::read_to_string(rules_path)
             .with_context(|| format!("Failed to read rules file {}", rules_path.display()))?;
         let rules: Vec<clasp_rules::Rule> = serde_json::from_str(&json)
@@ -164,15 +167,39 @@ pub async fn run(cli: Cli) -> Result<()> {
         }
     }
 
-    // Set up chat-specific write validation and snapshot filtering
-    if auth_enabled {
-        router.set_write_validator(crate::validator::ChatWriteValidator);
-        router.set_snapshot_filter(crate::validator::ChatSnapshotFilter);
-        tracing::info!("Chat write validator and snapshot filter enabled");
+    // Set up write validation and snapshot filtering.
+    // Explicit config.write_validator / .snapshot_filter (library API) takes precedence.
+    // Otherwise, if app_config has rules, create rule-based validators.
+    if let Some(validator) = config.write_validator {
+        router.set_write_validator_arc(validator);
+        tracing::info!("Custom write validator enabled (library override)");
+    } else if let Some(ref ac) = config.app_config {
+        if !ac.write_rules.is_empty() {
+            let v = Arc::new(crate::app_config::RuleWriteValidator::new(ac.write_rules.clone()));
+            router.set_write_validator_arc(v);
+            tracing::info!("Rule-based write validator: {} rule(s) from app config", ac.write_rules.len());
+        }
+    }
+    if let Some(filter) = config.snapshot_filter {
+        router.set_snapshot_filter_arc(filter);
+        tracing::info!("Custom snapshot filter enabled (library override)");
+    } else if let Some(ref ac) = config.app_config {
+        if !ac.snapshot_transforms.is_empty() || !ac.snapshot_visibility.is_empty() {
+            let f = Arc::new(crate::app_config::RuleSnapshotFilter::new(
+                ac.snapshot_transforms.clone(),
+                ac.snapshot_visibility.clone(),
+            ));
+            router.set_snapshot_filter_arc(f);
+            tracing::info!(
+                "Rule-based snapshot filter: {} transform(s), {} visibility rule(s) from app config",
+                ac.snapshot_transforms.len(),
+                ac.snapshot_visibility.len()
+            );
+        }
     }
 
     // Restore state from disk if --persist is set and file exists
-    if let Some(ref persist_path) = cli.persist {
+    if let Some(ref persist_path) = config.persist {
         if persist_path.exists() {
             match std::fs::read_to_string(persist_path) {
                 Ok(json) => match serde_json::from_str::<SnapshotMessage>(&json) {
@@ -208,16 +235,16 @@ pub async fn run(cli: Cli) -> Result<()> {
     #[cfg(feature = "registry")]
     let mut entity_store: Option<Arc<dyn clasp_registry::EntityStore>> = None;
 
-    if let Some(auth_port) = cli.auth_port {
-        let cpsk_validator = Arc::new(if cli.token_ttl > 0 {
-            tracing::info!("CPSK token default TTL: {}s", cli.token_ttl);
-            CpskValidator::with_default_ttl(Duration::from_secs(cli.token_ttl))
+    if let Some(auth_port) = config.auth_port {
+        let cpsk_validator = Arc::new(if config.token_ttl > 0 {
+            tracing::info!("CPSK token default TTL: {}s", config.token_ttl);
+            CpskValidator::with_default_ttl(Duration::from_secs(config.token_ttl))
         } else {
             CpskValidator::new()
         });
 
         // Bootstrap admin token if --admin-token is set
-        if let Some(ref admin_token_path) = cli.admin_token {
+        if let Some(ref admin_token_path) = config.admin_token {
             let token = if admin_token_path.exists() {
                 // Read existing token
                 let t = std::fs::read_to_string(admin_token_path)
@@ -254,10 +281,10 @@ pub async fn run(cli: Cli) -> Result<()> {
 
         // Add capability token validator if trust anchors provided
         #[cfg(feature = "caps")]
-        if !cli.trust_anchor.is_empty() {
+        if !config.trust_anchor.is_empty() {
             let anchors: Vec<Vec<u8>> = {
                 let mut result = Vec::new();
-                for p in &cli.trust_anchor {
+                for p in &config.trust_anchor {
                     // Trust anchor files contain hex-encoded signing keys (same format
                     // as `clasp key generate --out`). Read, hex-decode, derive public key.
                     let contents = std::fs::read_to_string(p)
@@ -288,17 +315,17 @@ pub async fn run(cli: Cli) -> Result<()> {
                 }
                 result
             };
-            chain.add(clasp_caps::CapabilityValidator::new(anchors, cli.cap_max_depth));
+            chain.add(clasp_caps::CapabilityValidator::new(anchors, config.cap_max_depth));
             tracing::info!(
                 "Capability tokens: {} trust anchor(s), max depth {}",
-                cli.trust_anchor.len(),
-                cli.cap_max_depth
+                config.trust_anchor.len(),
+                config.cap_max_depth
             );
         }
 
         // Add entity registry validator if configured
         #[cfg(feature = "registry")]
-        if let Some(ref db_path) = cli.registry_db {
+        if let Some(ref db_path) = config.registry_db {
             let store: Arc<dyn clasp_registry::EntityStore> = Arc::new(
                 clasp_registry::SqliteEntityStore::open(
                     db_path
@@ -314,19 +341,41 @@ pub async fn run(cli: Cli) -> Result<()> {
 
         router.set_validator(chain);
 
+        // Extract scope templates and rate limits from app config
+        let scope_templates = config.app_config.as_ref().map(|ac| ac.scopes.clone());
+        let rate_config = config
+            .app_config
+            .as_ref()
+            .and_then(|ac| ac.rate_limits.clone())
+            .unwrap_or_default();
+
+        if scope_templates.is_some() {
+            tracing::info!(
+                "Auth scopes: {} template(s) from app config",
+                scope_templates.as_ref().unwrap().len()
+            );
+        } else {
+            tracing::warn!("No app config scopes -- tokens will have full read/write access");
+        }
+
         let auth_state = Arc::new(
-            crate::auth::AuthState::new(&cli.auth_db, Arc::clone(&cpsk_validator))
-                .expect("Failed to initialize auth database"),
+            crate::auth::AuthState::new(
+                &config.auth_db,
+                Arc::clone(&cpsk_validator),
+                scope_templates,
+                rate_config,
+            )
+            .expect("Failed to initialize auth database"),
         );
         #[allow(unused_mut)]
-        let mut auth_app = crate::auth::auth_router(auth_state, cli.cors_origin.as_deref());
+        let mut auth_app = crate::auth::auth_router(auth_state, config.cors_origin.as_deref());
 
         // Mount entity registry REST routes if configured
         #[cfg(feature = "registry")]
         if let Some(ref store) = entity_store {
             // Collect trust anchor public keys as hex strings for /api/trust-anchors
             #[cfg(feature = "caps")]
-            let trust_anchor_hexes: Vec<String> = cli
+            let trust_anchor_hexes: Vec<String> = config
                 .trust_anchor
                 .iter()
                 .filter_map(|p| {
@@ -357,14 +406,14 @@ pub async fn run(cli: Cli) -> Result<()> {
                     Arc::clone(store),
                     Arc::clone(&cpsk_validator),
                 )
-                .with_trust_anchors(trust_anchor_hexes, cli.cap_max_depth)
+                .with_trust_anchors(trust_anchor_hexes, config.cap_max_depth)
             );
             auth_app = auth_app.merge(crate::registry::registry_router(reg_state));
             tracing::info!("Entity REST API mounted at /api/entities (admin auth required)");
             tracing::info!("Trust anchors API mounted at /api/trust-anchors (public)");
         }
 
-        let auth_addr: SocketAddr = format!("{}:{}", cli.host, auth_port).parse()?;
+        let auth_addr: SocketAddr = format!("{}:{}", config.host, auth_port).parse()?;
         tracing::info!("Auth HTTP: http://{}", auth_addr);
 
         let listener = tokio::net::TcpListener::bind(auth_addr).await?;
@@ -385,8 +434,8 @@ pub async fn run(cli: Cli) -> Result<()> {
 
     // WebSocket (default)
     #[cfg(feature = "websocket")]
-    let websocket_addr = if !cli.no_websocket {
-        let addr = format!("{}:{}", cli.host, cli.ws_port);
+    let websocket_addr = if !config.no_websocket {
+        let addr = format!("{}:{}", config.host, config.ws_port);
         tracing::info!("WebSocket: ws://{}", addr);
         protocols.push("WebSocket");
         Some(addr)
@@ -399,12 +448,12 @@ pub async fn run(cli: Cli) -> Result<()> {
 
     // QUIC
     #[cfg(feature = "quic")]
-    let quic_config = if let Some(quic_port) = cli.quic_port {
-        let cert_path = cli
+    let quic_config = if let Some(quic_port) = config.quic_port {
+        let cert_path = config
             .cert
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("--cert required for QUIC"))?;
-        let key_path = cli
+        let key_path = config
             .key
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("--key required for QUIC"))?;
@@ -426,7 +475,7 @@ pub async fn run(cli: Cli) -> Result<()> {
             .secret_der()
             .to_vec();
 
-        let addr: SocketAddr = format!("{}:{}", cli.host, quic_port).parse()?;
+        let addr: SocketAddr = format!("{}:{}", config.host, quic_port).parse()?;
         tracing::info!("QUIC: {}", addr);
         protocols.push("QUIC");
 
@@ -444,18 +493,18 @@ pub async fn run(cli: Cli) -> Result<()> {
 
     // MQTT
     #[cfg(feature = "mqtt-server")]
-    let mqtt_config = if let Some(mqtt_port) = cli.mqtt_port {
-        let addr = format!("{}:{}", cli.host, mqtt_port);
-        tracing::info!("MQTT: mqtt://{} (namespace: {})", addr, cli.mqtt_namespace);
+    let mqtt_config = if let Some(mqtt_port) = config.mqtt_port {
+        let addr = format!("{}:{}", config.host, mqtt_port);
+        tracing::info!("MQTT: mqtt://{} (namespace: {})", addr, config.mqtt_namespace);
         protocols.push("MQTT");
 
         Some(clasp_router::MqttServerConfig {
             bind_addr: addr,
-            namespace: cli.mqtt_namespace.clone(),
+            namespace: config.mqtt_namespace.clone(),
             require_auth: false,
             tls: None,
-            max_clients: cli.max_sessions,
-            session_timeout_secs: cli.session_timeout,
+            max_clients: config.max_sessions,
+            session_timeout_secs: config.session_timeout,
         })
     } else {
         None
@@ -466,14 +515,14 @@ pub async fn run(cli: Cli) -> Result<()> {
 
     // OSC
     #[cfg(feature = "osc-server")]
-    let osc_config = if let Some(osc_port) = cli.osc_port {
-        let addr = format!("{}:{}", cli.host, osc_port);
-        tracing::info!("OSC: udp://{} (namespace: {})", addr, cli.osc_namespace);
+    let osc_config = if let Some(osc_port) = config.osc_port {
+        let addr = format!("{}:{}", config.host, osc_port);
+        tracing::info!("OSC: udp://{} (namespace: {})", addr, config.osc_namespace);
         protocols.push("OSC");
 
         Some(clasp_router::OscServerConfig {
             bind_addr: addr,
-            namespace: cli.osc_namespace.clone(),
+            namespace: config.osc_namespace.clone(),
             session_timeout_secs: 30,
             auto_subscribe: false,
         })
@@ -488,18 +537,18 @@ pub async fn run(cli: Cli) -> Result<()> {
         anyhow::bail!("No protocols enabled. Enable at least one of: WebSocket, QUIC, MQTT, OSC");
     }
 
-    tracing::info!("Server name: {}", cli.name);
+    tracing::info!("Server name: {}", config.name);
     tracing::info!("Protocols: {}", protocols.join(", "));
     tracing::info!(
         "Max sessions: {}, Timeout: {}s",
-        cli.max_sessions,
-        cli.session_timeout
+        config.max_sessions,
+        config.session_timeout
     );
     tracing::info!("Security: {:?}", if auth_enabled { "Authenticated" } else { "Open" });
-    if cli.no_ttl {
+    if config.no_ttl {
         tracing::info!("TTL: disabled (unlimited parameter lifetime)");
     } else {
-        tracing::info!("TTL: param={}s, signal={}s", cli.param_ttl, cli.signal_ttl);
+        tracing::info!("TTL: param={}s, signal={}s", config.param_ttl, config.signal_ttl);
     }
     tracing::info!("────────────────────────────────────────────────────────────────");
 
@@ -516,11 +565,11 @@ pub async fn run(cli: Cli) -> Result<()> {
     };
 
     // Log persistence config
-    if let Some(ref persist_path) = cli.persist {
+    if let Some(ref persist_path) = config.persist {
         tracing::info!(
             "Persistence: {} (interval: {}s)",
             persist_path.display(),
-            cli.persist_interval
+            config.persist_interval
         );
     } else {
         tracing::info!("Persistence: disabled (use --persist <path> to enable)");
@@ -530,18 +579,18 @@ pub async fn run(cli: Cli) -> Result<()> {
 
     // Start rendezvous server if enabled
     #[cfg(feature = "rendezvous")]
-    if cli.rendezvous_port > 0 {
+    if config.rendezvous_port > 0 {
         use crate::config::{RendezvousConfig, RendezvousServer};
 
-        let rendezvous_addr = format!("{}:{}", cli.host, cli.rendezvous_port);
+        let rendezvous_addr = format!("{}:{}", config.host, config.rendezvous_port);
         tracing::info!(
             "Rendezvous: http://{} (TTL: {}s)",
             rendezvous_addr,
-            cli.rendezvous_ttl
+            config.rendezvous_ttl
         );
 
         let rendezvous_config = RendezvousConfig {
-            ttl: cli.rendezvous_ttl,
+            ttl: config.rendezvous_ttl,
             ..Default::default()
         };
         let rendezvous = RendezvousServer::new(rendezvous_config);
@@ -585,10 +634,10 @@ pub async fn run(cli: Cli) -> Result<()> {
     }
 
     // Spawn background persistence task if --persist is set
-    if let Some(ref path) = cli.persist {
+    if let Some(ref path) = config.persist {
         let bg_state = Arc::clone(&state_arc);
         let bg_path = path.clone();
-        let bg_interval = cli.persist_interval;
+        let bg_interval = config.persist_interval;
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(bg_interval));
             interval.tick().await; // skip first immediate tick
@@ -601,12 +650,12 @@ pub async fn run(cli: Cli) -> Result<()> {
 
     // Start federation leaf if configured
     #[cfg(feature = "federation")]
-    if let Some(ref hub_url) = cli.federation_hub {
+    if let Some(ref hub_url) = config.federation_hub {
         let fed_config = clasp_federation::FederationConfig {
             mode: clasp_federation::FederationMode::Leaf {
                 hub_endpoint: hub_url.clone(),
             },
-            router_id: cli
+            router_id: config
                 .federation_id
                 .clone()
                 .unwrap_or_else(|| {
@@ -614,12 +663,12 @@ pub async fn run(cli: Cli) -> Result<()> {
                     let token = CpskValidator::generate_token();
                     format!("relay-{}", &token[5..21])
                 }),
-            owned_namespaces: if cli.federation_namespace.is_empty() {
+            owned_namespaces: if config.federation_namespace.is_empty() {
                 vec!["/**".to_string()]
             } else {
-                cli.federation_namespace.clone()
+                config.federation_namespace.clone()
             },
-            auth_token: cli.federation_token.clone(),
+            auth_token: config.federation_token.clone(),
             ..Default::default()
         };
         let fed_state = Arc::clone(&state_arc);
@@ -638,8 +687,8 @@ pub async fn run(cli: Cli) -> Result<()> {
 
     // Start health check server if configured
     let health_state = Arc::new(crate::health::HealthState::new());
-    if let Some(health_port) = cli.health_port {
-        let health_addr: SocketAddr = format!("{}:{}", cli.host, health_port)
+    if let Some(health_port) = config.health_port {
+        let health_addr: SocketAddr = format!("{}:{}", config.host, health_port)
             .parse()
             .context("Invalid health check address")?;
         let hs = Arc::clone(&health_state);
@@ -653,8 +702,8 @@ pub async fn run(cli: Cli) -> Result<()> {
 
     // Run serve_all alongside a shutdown signal listener
     let shutdown_state = Arc::clone(&state_arc);
-    let persist_path_shutdown = cli.persist.clone();
-    let drain_timeout = Duration::from_secs(cli.drain_timeout);
+    let persist_path_shutdown = config.persist.clone();
+    let drain_timeout = config.drain_timeout;
 
     tokio::select! {
         result = router.serve_all(multi_config) => {
@@ -668,7 +717,7 @@ pub async fn run(cli: Cli) -> Result<()> {
 
             // Wait for in-flight messages to drain
             tracing::info!("Draining connections (timeout: {:?})...", drain_timeout);
-            tokio::time::sleep(drain_timeout.min(Duration::from_secs(5))).await;
+            tokio::time::sleep(drain_timeout).await;
 
             // Write final snapshot
             if let Some(ref path) = persist_path_shutdown {
