@@ -2,6 +2,7 @@
 name = "clasp-e2e"
 version.workspace = true
 edition.workspace = true
+publish = false
 description = "End-to-end tests, benchmarks, and load tests for CLASP protocol"
 
 [features]

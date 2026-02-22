@@ -3,6 +3,7 @@ name = "clasp-service"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 description = "CLASP Bridge Service for Electron IPC"
 
 [[bin]]
