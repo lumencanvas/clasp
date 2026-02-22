@@ -42,7 +42,7 @@ services:
       - "--app-config"
       - "/etc/clasp/chat.json"
       - "--cors-origin"
-      - "https://${RELAY_DOMAIN}"
+      - "https://${RELAY_DOMAIN},https://clasp.chat"
       - "--admin-token"
       - "/data/admin.token"
       - "--name"

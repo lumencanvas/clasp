@@ -8,7 +8,7 @@ import { AVATAR_COLORS, USER_STATUSES, DEFAULT_RELAY_URL, AUTH_API_URL } from '.
 const router = useRouter()
 const route = useRoute()
 const { connecting, connected, error: claspError, url, connect } = useClasp()
-const { userId, displayName, avatarColor, status, setDisplayName, setAvatarColor, setStatus } = useIdentity()
+const { userId, displayName, avatarColor, status, setDisplayName, setAvatarColor, setStatus, setUserId } = useIdentity()
 
 const nameInput = ref(displayName.value)
 const serverUrl = ref(url.value)
@@ -33,8 +33,27 @@ async function handleConnect() {
       localStorage.setItem('clasp-chat-token', data.token)
     } else if (res.status === 409) {
       const data = await res.json()
-      localError.value = data.error || 'That name is taken by a registered user'
-      return
+      const msg = data.error || ''
+      if (msg.includes('identity belongs to a registered user')) {
+        // Stale UUID from a previous registration — generate a fresh one and retry once
+        setUserId(crypto.randomUUID())
+        const retry = await fetch(`${AUTH_API_URL}/auth/guest`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: nameInput.value.trim(), user_id: userId.value }),
+        })
+        if (retry.ok) {
+          const retryData = await retry.json()
+          localStorage.setItem('clasp-chat-token', retryData.token)
+        } else {
+          const retryData = await retry.json()
+          localError.value = retryData.error || 'That name is taken by a registered user'
+          return
+        }
+      } else {
+        localError.value = msg || 'That name is taken by a registered user'
+        return
+      }
     }
   } catch {
     // Open relay, no auth needed

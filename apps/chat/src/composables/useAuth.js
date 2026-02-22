@@ -88,6 +88,7 @@ function logout() {
   localStorage.removeItem('clasp-chat-token')
   localStorage.removeItem('clasp-chat-auth-userId')
   localStorage.removeItem('clasp-chat-auth-username')
+  localStorage.removeItem('clasp-chat-userId')
 }
 
 export function useAuth() {

@@ -32,7 +32,12 @@ async function handleSubmit() {
       authError.value = 'Password must be at least 6 characters'
       return
     }
-    const ok = await register(username.value.trim(), password.value, userId.value)
+    let ok = await register(username.value.trim(), password.value, userId.value)
+    if (!ok && authError.value && authError.value.includes('identity')) {
+      // Stale UUID from a previous registration — generate a fresh one and retry
+      setUserId(crypto.randomUUID())
+      ok = await register(username.value.trim(), password.value, userId.value)
+    }
     if (ok) {
       if (authUserId.value) setUserId(authUserId.value)
       setDisplayName(username.value.trim())

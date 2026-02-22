@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'deploy/relay/**'
+      - 'deploy/droplet/**'
       - 'crates/**'
       - '.github/workflows/deploy-relay.yml'
 
@@ -41,9 +42,11 @@ jobs:
           envs: GHCR_TOKEN
           script: |
             echo "$GHCR_TOKEN" | docker login ghcr.io -u github-actions --password-stdin
-            cd /opt/clasp/deploy/droplet
+            cd /opt/clasp
+            git pull origin main
+            cd deploy/droplet
             docker compose pull relay
-            docker compose up -d relay
+            docker compose up -d
             docker logout ghcr.io
             docker image prune -f
         env:
