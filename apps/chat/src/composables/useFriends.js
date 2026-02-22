@@ -106,6 +106,20 @@ function init() {
   // After SNAPSHOT batch, show a single summary toast if there were pending requests
   initialLoadTimer = setTimeout(() => {
     initialLoadTimer = null
+
+    // Re-filter: remove requests from users who are already friends
+    // (handles race where requests SNAPSHOT arrived before friends SNAPSHOT)
+    const before = pendingRequests.value.length
+    pendingRequests.value = pendingRequests.value.filter(r => {
+      if (friends.value.has(r.fromId)) {
+        // Clean up the stale request on the server too
+        set(`${ADDR.REQUESTS}/${userId.value}/${r.fromId}`, null)
+        return false
+      }
+      return true
+    })
+    initialRequestCount = pendingRequests.value.length
+
     if (initialRequestCount > 0) {
       const msg = initialRequestCount === 1
         ? '1 pending friend request'

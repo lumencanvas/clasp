@@ -47,6 +47,7 @@ services:
       - "/data/admin.token"
       - "--name"
       - "${RELAY_DOMAIN}"
+      - "--no-ttl"
     volumes:
       - ${DATA_DIR:-/mnt/clasp_data}/relay:/data
     restart: unless-stopped
