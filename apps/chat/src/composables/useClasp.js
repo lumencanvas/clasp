@@ -9,10 +9,15 @@ const connecting = ref(false)
 const error = ref(null)
 const sessionId = ref(null)
 
-// Persisted settings
+// Persisted settings — migrate stale relay.clasp.to URLs to relay.clasp.chat
 const savedUrl = localStorage.getItem('clasp-chat-url')
+if (savedUrl && savedUrl.includes('relay.clasp.to')) {
+  localStorage.removeItem('clasp-chat-url')
+}
 
-const url = ref(savedUrl || DEFAULT_RELAY_URL)
+const url = ref(
+  (savedUrl && !savedUrl.includes('relay.clasp.to')) ? savedUrl : DEFAULT_RELAY_URL
+)
 
 async function connect(displayName) {
   if (connecting.value || connected.value) return

@@ -135,7 +135,7 @@ async function handleConnect() {
           <input
             v-model="serverUrl"
             type="text"
-            placeholder="wss://relay.clasp.to"
+            placeholder="wss://relay.clasp.chat"
           />
         </div>
 
