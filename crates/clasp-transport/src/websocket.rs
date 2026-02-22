@@ -327,20 +327,23 @@ impl TransportServer for WebSocketServer {
                 .await
                 .map_err(|e| TransportError::ConnectionFailed(e.to_string()))?;
 
-            // Peek at incoming bytes to detect plain HTTP health checks.
-            // App Platform (and other load balancers) send GET /healthz as a
-            // plain HTTP request — not a WebSocket upgrade. Without this
-            // intercept, tungstenite rejects them as bad handshakes.
+            // Peek at incoming bytes to detect plain HTTP requests.
+            // Load balancers, health checkers, and platform routers may probe
+            // the WS port with plain HTTP — not a WebSocket upgrade. Without
+            // this intercept, tungstenite rejects them as bad handshakes.
             let mut peek_buf = [0u8; 512];
             match stream.peek(&mut peek_buf).await {
                 Ok(n) if n > 0 => {
                     if let Ok(text) = std::str::from_utf8(&peek_buf[..n]) {
-                        let is_health = text.starts_with("GET /healthz");
-                        let is_ws_upgrade = text
-                            .to_ascii_lowercase()
-                            .contains("upgrade: websocket");
-                        if is_health && !is_ws_upgrade {
-                            debug!("Health check from {}, responding 200", addr);
+                        let lower = text.to_ascii_lowercase();
+                        let is_http = text.starts_with("GET ")
+                            || text.starts_with("HEAD ")
+                            || text.starts_with("POST ")
+                            || text.starts_with("OPTIONS ");
+                        let is_ws_upgrade = lower.contains("upgrade: websocket");
+
+                        if is_http && !is_ws_upgrade {
+                            debug!("Plain HTTP probe from {}, responding 200", addr);
                             let resp = "HTTP/1.1 200 OK\r\n\
                                         Content-Type: text/plain\r\n\
                                         Content-Length: 3\r\n\
@@ -351,7 +354,15 @@ impl TransportServer for WebSocketServer {
                         }
                     }
                 }
-                _ => {}
+                Ok(_) => {
+                    // Empty peek — TCP probe, just close
+                    debug!("Empty TCP probe from {}", addr);
+                    let _ = stream.shutdown().await;
+                    continue;
+                }
+                Err(_) => {
+                    continue;
+                }
             }
 
             break (stream, addr);
