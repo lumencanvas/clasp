@@ -68,3 +68,4 @@ ENV/
 
 # Rust specific
 *.pdb
+apps/docs/.vite/
