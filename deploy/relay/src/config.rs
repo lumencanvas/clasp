@@ -160,7 +160,7 @@ pub struct Cli {
     // -- App Config --
 
     /// JSON file defining scopes, write rules, and snapshot rules for the application.
-    /// Replaces hardcoded application-specific validators.
+    /// If not specified, auto-detects from /etc/clasp/ or ./config/ (single JSON file).
     #[arg(long = "app-config")]
     pub app_config: Option<PathBuf>,
 
@@ -368,8 +368,33 @@ impl Default for RelayConfig {
 
 impl From<Cli> for RelayConfig {
     fn from(cli: Cli) -> Self {
-        // Load app config if specified
-        let app_config = cli.app_config.as_ref().map(|path| {
+        // Resolve app config path: explicit flag or auto-detect from well-known locations
+        let app_config_path = cli.app_config.clone().or_else(|| {
+            for dir in &["/etc/clasp", "./config"] {
+                let dir = std::path::Path::new(dir);
+                if dir.is_dir() {
+                    if let Ok(entries) = std::fs::read_dir(dir) {
+                        let jsons: Vec<_> = entries
+                            .filter_map(|e| e.ok())
+                            .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
+                            .collect();
+                        if jsons.len() == 1 {
+                            let path = jsons[0].path();
+                            tracing::info!("Auto-detected app config: {}", path.display());
+                            return Some(path);
+                        } else if jsons.len() > 1 {
+                            tracing::debug!(
+                                "Multiple JSON files in {}, skipping auto-detect (use --app-config)",
+                                dir.display()
+                            );
+                        }
+                    }
+                }
+            }
+            None
+        });
+
+        let app_config = app_config_path.as_ref().map(|path| {
             let json = std::fs::read_to_string(path)
                 .unwrap_or_else(|e| panic!("Failed to read app config {}: {}", path.display(), e));
             serde_json::from_str::<crate::app_config::AppConfig>(&json)

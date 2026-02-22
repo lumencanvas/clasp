@@ -1,201 +1,60 @@
-# CLASP Documentation
-
-**Creative Low-Latency Application Streaming Protocol**
-
-CLASP is a universal protocol bridge and signal router for creative applications. It unifies disparate protocols (OSC, MIDI, DMX, Art-Net, MQTT, WebSocket, HTTP) into a single, routable message system optimized for real-time performance.
-
+---
+title: CLASP
+description: Real-time signal router and protocol bridge
+order: 0
 ---
 
-## Quick Start by Role
+# CLASP
 
-### I'm building a web or desktop app
-Start with the [First Connection Tutorial](tutorials/first-connection.md), then explore the [JavaScript](reference/api/javascript/clasp-core.md) or [Python](reference/api/python/clasp-to.md) API reference.
+CLASP is a real-time signal router that bridges protocols like OSC, MIDI, MQTT, DMX, Art-Net, sACN, HTTP, and WebSocket into a single unified API. One API for state, events, and streams across JavaScript, Python, and Rust -- with built-in auth, persistence, federation, and 8 protocol bridges.
 
-### I'm working with live performance / VJ / lighting
-See the [Live Performance Guide](use-cases/live-performance.md) for connecting lighting, audio, and video systems. Learn how to [add OSC](how-to/connections/add-osc.md), [MIDI](how-to/connections/add-midi.md), and [DMX](how-to/connections/add-dmx.md) connections.
-
-### I'm building an installation or IoT system
-Check the [Installation Art Guide](use-cases/installation-art.md) and [Home Automation Guide](use-cases/home-automation.md). Learn about [MQTT integration](how-to/connections/add-mqtt.md) and [sensor pipelines](tutorials/sensor-to-visualization.md).
-
-### I'm working with embedded systems / microcontrollers
-See the [Embedded Systems Guide](use-cases/embedded-systems.md) and [ESP32 Tutorial](tutorials/embedded-sensor-node.md). Reference the [clasp-embedded API](reference/api/rust/clasp-embedded.md).
-
-### I'm deploying to cloud / building a SaaS
-Read the [Cloud Deployment Guide](use-cases/cloud-deployment.md) and [Docker setup](how-to/installation/docker.md). Learn about [security](how-to/security/enable-tls.md) and [capability tokens](how-to/security/capability-tokens.md).
-
-### I want to understand the protocol
-Start with [Why CLASP?](explanation/why-clasp.md) and [Architecture Overview](explanation/architecture.md), then dive into the [Protocol Reference](reference/protocol/overview.md).
-
----
-
-## Documentation Sections
-
-### [Tutorials](tutorials/README.md) — Learning-Oriented
-Step-by-step guides to learn CLASP by doing.
-
-- [First Connection](tutorials/first-connection.md) — Connect two apps in 5 minutes
-- [Control Lights from Web](tutorials/control-lights-from-web.md) — Build a web UI controlling DMX
-- [Sensor to Visualization](tutorials/sensor-to-visualization.md) — IoT sensor → visual app pipeline
-- [Cross-Language Chat](tutorials/cross-language-chat.md) — JS ↔ Python ↔ Rust communication
-- [Embedded Sensor Node](tutorials/embedded-sensor-node.md) — Build an ESP32 sensor with CLASP
-
-### [How-To Guides](how-to/README.md) — Task-Oriented
-Solve specific problems with focused instructions.
-
-- **[Installation](how-to/installation/)** — Install CLI, libraries, desktop app, Docker
-- **[Connections](how-to/connections/)** — Add OSC, MIDI, DMX, Art-Net, MQTT, HTTP, WebSocket
-- **[State](how-to/state/)** — Subscribe, get/set values, handle conflicts, use locks
-- **[Timing](how-to/timing/)** — Clock sync, scheduled bundles, atomic operations
-- **[Discovery](how-to/discovery/)** — mDNS, UDP broadcast, manual configuration
-- **[Security](how-to/security/)** — TLS, capability tokens, pairing
-- **[Advanced](how-to/advanced/)** — P2P WebRTC, custom bridges, embed router, performance tuning
-- **[Troubleshooting](how-to/troubleshooting.md)** — Common issues and solutions
-
-### [Reference](reference/README.md) — Information-Oriented
-Complete, accurate technical details.
-
-- **[Protocol](reference/protocol/)** — Messages, signal types, addressing, data types, frame format, QoS
-- **[API](reference/api/)** — Rust, JavaScript, Python library documentation
-- **[CLI](reference/cli/)** — Command-line tool reference
-- **[Bridges](reference/bridges/)** — OSC, MIDI, Art-Net, DMX, MQTT, sACN, HTTP mapping
-- **[Transports](reference/transports/)** — WebSocket, QUIC, UDP, WebRTC, Serial, BLE
-- **[Configuration](reference/configuration/)** — Router config, bridge config, feature flags
-
-### [Explanation](explanation/README.md) — Understanding-Oriented
-Concepts, background, and design rationale.
-
-- [Why CLASP?](explanation/why-clasp.md) — The problem CLASP solves
-- [Architecture](explanation/architecture.md) — System architecture overview
-- [Router vs Client](explanation/router-vs-client.md) — Understanding roles
-- [Signals Not Messages](explanation/signals-not-messages.md) — Semantic signal types
-- [State Management](explanation/state-management.md) — How state works
-- [Timing Model](explanation/timing-model.md) — Clock sync and scheduling
-- [Security Model](explanation/security-model.md) — Encryption and tokens
-
-### [Use Cases](use-cases/README.md) — Persona-Specific Guides
-Real-world applications and workflows.
-
-- [Live Performance](use-cases/live-performance.md) — VJ, lighting, music production
-- [Installation Art](use-cases/installation-art.md) — Interactive installations
-- [Home Automation](use-cases/home-automation.md) — IoT and smart home
-- [Software Integration](use-cases/software-integration.md) — Connecting applications
-- [Embedded Systems](use-cases/embedded-systems.md) — Microcontrollers
-- [Cloud Deployment](use-cases/cloud-deployment.md) — Docker, Kubernetes, SaaS
-
-### [Integrations](integrations/README.md) — Third-Party Software
-Connect CLASP to popular creative tools.
-
-- [TouchOSC](integrations/touchosc.md)
-- [Resolume](integrations/resolume.md)
-- [QLab](integrations/qlab.md)
-- [Ableton Live](integrations/ableton.md)
-- [TouchDesigner](integrations/touchdesigner.md)
-- [MadMapper](integrations/madmapper.md)
-- [Home Assistant](integrations/home-assistant.md)
-
-### [Appendix](appendix/)
-- [Glossary](appendix/glossary.md) — Term definitions
-- [FAQ](appendix/faq.md) — Frequently asked questions
-- [Changelog](appendix/changelog.md) — Version history
-- [Migration from OSC](appendix/migration/from-osc.md)
-- [Migration from MQTT](appendix/migration/from-mqtt.md)
-
----
-
-## Install
-
-### CLI
+## Quick Install
 
 ```bash
-cargo install clasp-cli
+npm install @clasp-to/core
 ```
 
-### Libraries
-
-| Platform | Package | Install |
-|----------|---------|---------|
-| **Rust** | [clasp-client](https://crates.io/crates/clasp-client) | `cargo add clasp-client` |
-| **JavaScript** | [@clasp-to/core](https://www.npmjs.com/package/@clasp-to/core) | `npm install @clasp-to/core` |
-| **Python** | [clasp-to](https://pypi.org/project/clasp-to/) | `pip install clasp-to` |
-
-### Desktop App
-
-Download from [GitHub Releases](https://github.com/lumencanvas/clasp/releases/latest):
-- **macOS**: CLASP Bridge.dmg
-- **Windows**: CLASP Bridge Setup.exe
-- **Linux**: clasp-bridge.AppImage
-
----
-
-## Quick Example
-
-**Start a router:**
-```bash
-clasp server --port 7330
-```
-
-**JavaScript client:**
-```typescript
+```javascript
 import { ClaspBuilder } from '@clasp-to/core';
 
 const client = await new ClaspBuilder('ws://localhost:7330')
   .withName('My App')
   .connect();
 
-client.on('/sensors/*', (value, address) => {
-  console.log(`${address} = ${value}`);
-});
-
-await client.set('/lights/brightness', 0.8);
+client.set('/lights/brightness', 0.8);
+client.on('/lights/*', (value, address) => console.log(address, value));
 ```
 
-**Python client:**
-```python
-from clasp import ClaspBuilder
+## Features
 
-client = await (
-    ClaspBuilder('ws://localhost:7330')
-    .with_name('Sensor')
-    .connect()
-)
+| Category | Details |
+|---|---|
+| **Protocol Bridges** | OSC, MIDI, MQTT, DMX, Art-Net, sACN, HTTP, WebSocket |
+| **Signal Types** | Param, Event, Stream, Gesture, Timeline |
+| **State Management** | Revisions, conflict resolution, late-joiner sync |
+| **Auth** | CPSK tokens, Ed25519 capability delegation, entity registry |
+| **Server Features** | Rules engine, journal persistence, app config |
+| **Deployment** | Federation, discovery, Docker, cloud |
 
-await client.set('/sensors/temperature', 23.5)
-```
+## Start Here
 
----
+| Goal | Link |
+|---|---|
+| New to CLASP? | [First Connection](getting-started/first-connection.md) |
+| Building a client? | [JavaScript SDK](sdk/javascript.md) / [Python SDK](sdk/python.md) / [Rust SDK](sdk/rust.md) |
+| Deploying to production? | [Relay Server](deployment/relay.md) |
+| Understanding the protocol? | [Architecture](concepts/architecture.md) |
 
-## Architecture Overview
+## Choose Your Path
 
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  TouchOSC   │     │   Ableton   │     │  LED Strip  │
-│  (OSC)      │     │   (MIDI)    │     │  (Art-Net)  │
-└──────┬──────┘     └──────┬──────┘     └──────┬──────┘
-       │                   │                   │
-       └───────────────────┼───────────────────┘
-                           │
-                    ┌──────▼──────┐
-                    │    CLASP    │
-                    │   Router    │
-                    └──────┬──────┘
-                           │
-       ┌───────────────────┼───────────────────┐
-       │                   │                   │
-┌──────▼──────┐     ┌──────▼──────┐     ┌──────▼──────┐
-│  Web UI     │     │  IoT Hub    │     │  Resolume   │
-│ (WebSocket) │     │  (MQTT)     │     │  (OSC)      │
-└─────────────┘     └─────────────┘     └─────────────┘
-```
+**Web / Desktop Developer**
+SDK guide -> State management -> Auth tokens. Start with the [JavaScript SDK](sdk/javascript.md), learn [state operations](core/state.md), then configure [auth](auth/README.md).
 
----
+**Creative / Live Performance**
+Connect your tools, bridge protocols, deploy. Start with [First Connection](getting-started/first-connection.md), set up [Protocol Bridges](protocols/README.md), then [deploy](deployment/relay.md).
 
-## Resources
+**IoT / Embedded**
+Lightweight clients, automatic discovery, multi-site federation. Start with the [Embedded SDK](sdk/rust.md), configure [Discovery](server/discovery.md), then set up [Federation](server/federation.md).
 
-- **Website**: [clasp.to](https://clasp.to)
-- **GitHub**: [lumencanvas/clasp](https://github.com/lumencanvas/clasp)
-- **Protocol Spec**: [CLASP-Protocol.md](https://github.com/lumencanvas/clasp/blob/main/CLASP-Protocol.md)
-- **Quick Reference**: [CLASP-QuickRef.md](https://github.com/lumencanvas/clasp/blob/main/CLASP-QuickRef.md)
-
----
-
-*CLASP — Connect everything.*
+**DevOps / Deployment**
+Run, secure, and scale CLASP infrastructure. Start with the [Relay Server](deployment/relay.md), containerize with [Docker](deployment/docker.md), then follow the [Production Checklist](deployment/production-checklist.md).

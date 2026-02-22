@@ -167,6 +167,18 @@ All new code (admin tooling, security hardening, tests) compiles without warning
 
 ---
 
+### Documentation Site
+- Docs site: **51 pages, 0 broken links** (Vite build passes)
+- P2P & WebRTC: **DOCUMENTED** (`docs/core/p2p.md` -- full API, video streaming, examples)
+- Clock Sync & Timing: **DOCUMENTED** (`docs/core/timing.md` -- ClockSync, SessionTime, JitterBuffer)
+- Error Codes: **DOCUMENTED** (appended to `docs/reference/protocol-spec.md` -- all 15 codes)
+- Example Projects: **DOCUMENTED** (categorized index in `docs/getting-started/README.md`)
+- Reconnection Lifecycle: **DOCUMENTED** (added to all 3 SDK pages)
+- Gesture Deep Dive: **DOCUMENTED** (expanded in `docs/core/signals.md`)
+- Video Streaming: **DOCUMENTED** (P2P + relay approaches in `docs/core/p2p.md`)
+
+---
+
 ## Recommended Next Steps
 
 1. **Commit & PR** -- All work is on `feat/distributed-infrastructure`, uncommitted

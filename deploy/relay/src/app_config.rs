@@ -197,8 +197,13 @@ impl Default for RateLimitConfig {
 
 /// Match a pattern like `/chat/room/{roomId}/admin/{targetId}` against an address.
 ///
-/// Returns named captures if the pattern matches. `**` matches everything remaining.
-/// `{session}` is reserved — it's substituted before matching.
+/// Returns named captures if the pattern matches.
+///
+/// - `{name}` captures a single segment
+/// - `*` matches any single segment (no capture)
+/// - `**` matches everything remaining (must be last; if mid-pattern, remaining
+///   segments are silently ignored)
+/// - `{session}` is reserved — it's substituted before matching
 pub fn match_address<'a>(pattern: &'a str, address: &'a str) -> Option<HashMap<&'a str, &'a str>> {
     let pat_segments: Vec<&str> = pattern.split('/').collect();
     let addr_segments: Vec<&str> = address.split('/').collect();
@@ -246,11 +251,13 @@ pub fn match_address<'a>(pattern: &'a str, address: &'a str) -> Option<HashMap<&
 }
 
 /// Substitute captures and `{session}` into a template string.
+///
+/// Safety: `{session}` is replaced first, then named captures. This is safe because
+/// `is_valid_user_id()` in auth.rs rejects user IDs containing `{` or `}`, preventing
+/// double-substitution injection (e.g. a session_id of `{roomId}` expanding to a capture).
 fn substitute(template: &str, captures: &HashMap<&str, &str>, session_id: &str) -> String {
     let mut result = template.to_string();
-    // Replace {session} first
     result = result.replace("{session}", session_id);
-    // Replace named captures
     for (name, value) in captures {
         result = result.replace(&format!("{{{}}}", name), value);
     }
@@ -536,13 +543,24 @@ impl RuleSnapshotFilter {
                                     }
                                     // Check if sub-path is public
                                     if let Some(ref public_sub) = rule.public_sub {
-                                        // Extract the part after the owner segment
-                                        // by re-matching and checking what comes after
-                                        let owner_prefix = format!("{}/", owner);
-                                        if let Some(rest) = address.rsplit_once(&owner_prefix) {
-                                            let sub = rest.1;
-                                            if sub == public_sub || sub.starts_with(&format!("{}/", public_sub)) {
-                                                return true;
+                                        // Use pattern structure to find the sub-path after
+                                        // the owner segment (avoids fragile string searching)
+                                        let pat_segments: Vec<&str> = pattern.split('/').collect();
+                                        let addr_segments: Vec<&str> = address.split('/').collect();
+                                        if let Some(owner_idx) = pat_segments.iter().position(|s| {
+                                            s.starts_with('{')
+                                                && s.ends_with('}')
+                                                && &s[1..s.len() - 1] == segment_name.as_str()
+                                        }) {
+                                            if owner_idx + 1 < addr_segments.len() {
+                                                let sub_path =
+                                                    addr_segments[owner_idx + 1..].join("/");
+                                                if sub_path == *public_sub
+                                                    || sub_path
+                                                        .starts_with(&format!("{}/", public_sub))
+                                                {
+                                                    return true;
+                                                }
                                             }
                                         }
                                     }
@@ -576,8 +594,8 @@ impl RuleSnapshotFilter {
                         }
                     }
                     _ => {
-                        tracing::warn!("Unknown visibility mode: {}", mode);
-                        true
+                        tracing::warn!("Unknown visibility mode: '{}', defaulting to hidden", mode);
+                        false
                     }
                 },
             };

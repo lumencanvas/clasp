@@ -103,7 +103,7 @@ TTL:
 
 Auth:
       --auth-port <PORT>       Auth HTTP server port (enables authentication)
-      --auth-db <PATH>         Auth database path [default: chat-auth.db]
+      --auth-db <PATH>         Auth database path [default: relay-auth.db]
       --cors-origin <ORIGIN>   Allowed CORS origin(s), comma-separated
 
 Persistence:
@@ -128,6 +128,10 @@ Registry (requires --features registry):
 Rules (requires --features rules):
       --rules <PATH>           JSON file containing rule definitions
 
+App Config:
+      --app-config <PATH>      Application config JSON (scopes, write rules, snapshot rules).
+                               Auto-detects from /etc/clasp/ or ./config/ if not specified.
+
 Federation (requires --features federation):
       --federation-hub <URL>   Hub WebSocket URL for leaf mode
       --federation-id <ID>     Local router identity
@@ -146,6 +150,9 @@ clasp-relay --auth-port 7350
 
 # With auth + journal persistence
 clasp-relay --auth-port 7350 --journal ./journal.db
+
+# With app-specific config (chat, etc.)
+clasp-relay --auth-port 7350 --app-config config/chat.json
 
 # With rules engine
 clasp-relay --auth-port 7350 --rules ./rules.json
@@ -244,17 +251,44 @@ curl -X GET http://localhost:7350/api/entities \
   -H "Authorization: Bearer cpsk_..."
 ```
 
-## Development vs Production
+## App Config
 
-| | Production | Development |
-|---|---|---|
-| **Dockerfile** | `Dockerfile` | `Dockerfile.dev` |
-| **Crates** | crates.io | Local workspace |
-| **Build from** | `deploy/relay/` | Repository root |
+The `--app-config` flag loads a JSON file that defines application-specific behavior without writing Rust code:
+
+- **Scopes** — per-user auth scope templates (e.g. `read:/chat/user/{userId}/**`)
+- **Write rules** — declarative validation (who can write where, field checks, state lookups)
+- **Snapshot transforms** — field redaction before delivery (e.g. strip password hashes)
+- **Snapshot visibility** — owner-only paths, friendship checks, public sub-paths
+- **Rate limits** — login/register attempt throttling
+
+### Auto-detection
+
+When `--app-config` is not specified, the relay checks these paths in order:
+
+1. `/etc/clasp/*.json` — system/Docker install
+2. `./config/*.json` — local dev (from the relay working directory)
+
+If exactly one `.json` file is found, it is used automatically. If multiple files exist, the relay skips auto-detection and requires an explicit `--app-config` flag.
+
+### Writing a config
+
+See [`config/chat.json`](config/chat.json) for a complete example (the CLASP Chat app config). The schema supports these check types in write rules:
+
+- `state_field_equals_session` — state lookup field must match session identity
+- `state_not_null` — state must exist at a path
+- `value_field_equals_session` — written value field must match session identity
+- `segment_equals_session` — path segment must match session identity
+- `either_state_not_null` — at least one of two state paths must exist
+- `require_value_field` — written value must contain a field
+- `reject_unless_path_matches` — reject writes not matching a sub-pattern
+
+## Development
+
+The production `Dockerfile` builds from published crates on crates.io. For local development, build directly with Cargo:
 
 ```bash
-# Development build (using monorepo)
-docker build -f deploy/relay/Dockerfile.dev -t clasp-relay-dev .
+cd deploy/relay
+cargo run --features full -- --auth-port 7350
 ```
 
 ## Connecting

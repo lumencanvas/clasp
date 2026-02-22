@@ -1,106 +1,153 @@
-# Getting Started with CLASP
+---
+title: Installation
+description: Install CLASP for JavaScript, Python, Rust, or Docker
+order: 1
+---
 
-CLASP (Creative Low-Latency Application Streaming Protocol) is a universal protocol bridge for creative applications. This guide will help you get up and running.
+# Installation
 
-## Installation
+CLASP provides client libraries for JavaScript, Python, and Rust, plus a standalone relay server for production deployment. Install the client library for your language and optionally run a local router for development.
 
-### Desktop App
+## Client Libraries
 
-The easiest way to get started is with the CLASP Bridge desktop app:
+### JavaScript
 
-- **macOS**: Download [CLASP Bridge.dmg](https://github.com/lumencanvas/clasp/releases/latest)
-- **Windows**: Download [CLASP Bridge Setup.exe](https://github.com/lumencanvas/clasp/releases/latest)
-- **Linux**: Download [clasp-bridge.AppImage](https://github.com/lumencanvas/clasp/releases/latest)
+```bash
+npm install @clasp-to/core
+```
 
-### CLI Tool
+Current version: **3.4.0**. Requires Node.js 18+ or any modern browser.
 
-Install the command-line tool via Cargo:
+Verify the installation:
+
+```javascript
+import { ClaspBuilder } from '@clasp-to/core';
+
+const client = await new ClaspBuilder('ws://localhost:7330').withName('test').connect();
+client.set('/hello', 'world');
+```
+
+### Python
+
+```bash
+pip install clasp-to
+```
+
+Current version: **3.3.1**. Requires Python 3.9+.
+
+Verify the installation:
+
+```python
+from clasp import Clasp
+
+client = Clasp('ws://localhost:7330', name='test')
+await client.connect()
+client.set('/hello', 'world')
+```
+
+### Rust
+
+```bash
+cargo add clasp-client
+```
+
+Verify the installation:
+
+```rust
+use clasp_client::ClaspClient;
+
+let client = ClaspClient::connect("ws://localhost:7330", "test").await?;
+client.set("/hello", "world").await?;
+```
+
+## Router / Server
+
+Client libraries need a running router to connect to. Pick one of the following methods.
+
+### For Development
+
+Install the CLI and start a local router:
 
 ```bash
 cargo install clasp-cli
+clasp server
 ```
 
-Or build from source:
+The router starts on `ws://localhost:7330` by default.
+
+### For Production
+
+Pull and run the official Docker image:
 
 ```bash
-git clone https://github.com/lumencanvas/clasp.git
-cd clasp
-cargo install --path crates/clasp-cli
+docker pull ghcr.io/lumencanvas/clasp-relay
+docker run -p 7330:7330 ghcr.io/lumencanvas/clasp-relay
 ```
 
-### As a Library
+### Build from Source
 
-Add to your `Cargo.toml`:
-
-```toml
-[dependencies]
-clasp-core = "3.1"
-clasp-bridge = { version = "3.1", features = ["osc", "mqtt"] }
-```
-
-## Quick Start
-
-### Using the Desktop App
-
-1. Launch CLASP Bridge
-2. Click **ADD** in the sidebar to start a server
-3. Select your protocol (OSC, MQTT, WebSocket, etc.)
-4. Configure the settings and click **START SERVER**
-5. Use the **Monitor** tab to see incoming signals
-
-### Using the CLI
+Clone the repository and build the relay binary:
 
 ```bash
-# Start an OSC server
-clasp osc --port 9000
-
-# Start an MQTT connection
-clasp mqtt --host localhost --port 1883
-
-# Start a WebSocket server
-clasp websocket --mode server --url 0.0.0.0:8080
-
-# Start an HTTP REST API
-clasp http --bind 0.0.0.0:3000
+cd deploy/relay
+cargo build --release
+./target/release/clasp-relay
 ```
 
-### Using the Library
+## Docker (Quickest Start)
 
-```rust
-use clasp_bridge::{OscBridge, OscBridgeConfig, Bridge, BridgeEvent};
+If you just want something running immediately:
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    // Create an OSC bridge
-    let config = OscBridgeConfig {
-        bind_addr: "0.0.0.0:9000".to_string(),
-        namespace: "/osc".to_string(),
-        ..Default::default()
-    };
-
-    let mut bridge = OscBridge::new(config);
-    let mut events = bridge.start().await?;
-
-    // Handle incoming messages
-    while let Some(event) = events.recv().await {
-        match event {
-            BridgeEvent::ToClasp(msg) => {
-                println!("Received: {:?}", msg);
-            }
-            BridgeEvent::Connected => {
-                println!("Bridge connected");
-            }
-            _ => {}
-        }
-    }
-
-    Ok(())
-}
+```bash
+docker run -p 7330:7330 ghcr.io/lumencanvas/clasp-relay
 ```
+
+This starts a router with default configuration on port 7330. No auth, no persistence -- suitable for local development only. See [Relay Server](../deployment/relay.md) for production configuration.
+
+## Example Projects
+
+The `examples/` directory contains working code across all three SDKs. Each example is self-contained and can be run directly.
+
+### Basics
+
+| Example | JS | Python | Rust |
+|---------|:--:|:------:|:----:|
+| Publish values | `simple-publisher.js` | -- | `basic-client.rs` |
+| Subscribe to values | `simple-subscriber.js` | -- | -- |
+| All signal types | `signal-types.js` | `signal_types.py` | `signal_types.rs` |
+
+### State & Coordination
+
+| Example | JS | Python | Rust |
+|---------|:--:|:------:|:----:|
+| Bundles & scheduling | `bundles-and-scheduling.js` | `bundles_and_scheduling.py` | `bundles_and_scheduling.rs` |
+| Late-joiner sync | `late-joiner.js` | `late_joiner.py` | `late_joiner.rs` |
+| Locks | `locks.js` | -- | -- |
+| Discovery | `discovery.js` | -- | -- |
+
+### P2P & Video
+
+| Example | JS | Python | Rust |
+|---------|:--:|:------:|:----:|
+| P2P WebRTC | `p2p-webrtc.js` | `p2p_webrtc.py` | `p2p_webrtc.rs` |
+| Video (P2P) | `video-p2p.html` | -- | -- |
+| Video (relay) | `video-relay.html` | -- | -- |
+
+### Input & Security
+
+| Example | JS | Python | Rust |
+|---------|:--:|:------:|:----:|
+| Gestures (touch/pen) | `gestures.js` | -- | -- |
+| Security tokens | `security-tokens.js` | `security_tokens.py` | `security_tokens.rs` |
+
+### Embedded
+
+| Example | JS | Python | Rust |
+|---------|:--:|:------:|:----:|
+| Embedded server | `embedded-server.js` | `embedded_server.py` | `embedded-server.rs` |
+
+All examples are in the [`examples/`](https://github.com/lumencanvas/clasp/tree/main/examples) directory.
 
 ## Next Steps
 
-- [Concepts](../concepts/) - Understand addresses, signals, and routing
-- [Protocols](../protocols/) - Protocol-specific documentation
-- [Examples](../examples/) - Real-world usage examples
-- [API Reference](../api/) - Complete API documentation
+- [First Connection](first-connection.md) -- send your first signal through CLASP in 5 minutes

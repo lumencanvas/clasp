@@ -11,7 +11,7 @@ Deploys the CLASP relay server on a DigitalOcean Droplet with:
 | Container | Purpose |
 |-----------|---------|
 | `caddy` | Reverse proxy, auto HTTPS termination |
-| `relay` | CLASP WebSocket relay + HTTP auth API |
+| `relay` | CLASP WebSocket relay + HTTP auth API (uses `chat.json` for app-specific rules) |
 
 The relay exposes two internal ports:
 - **7330** — WebSocket (CLASP protocol)
@@ -113,11 +113,13 @@ Caddy handles everything automatically:
 
 ## Persistent data
 
-The auth database (`chat-auth.db`) is stored on the block storage volume at:
+The auth database is stored on the block storage volume at:
 
 ```
 /mnt/clasp_data/relay/chat-auth.db
 ```
+
+The compose file passes `--auth-db /data/chat-auth.db` and `--app-config /etc/clasp/chat.json` to the relay. The app config is baked into the Docker image; the auth database lives on the volume.
 
 This file contains registered usernames and Argon2 password hashes. It survives:
 - Container rebuilds (`docker compose up --build`)

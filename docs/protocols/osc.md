@@ -1,113 +1,109 @@
+---
+title: OSC Bridge
+description: Bridge OpenSound Control to CLASP
+order: 2
+---
+
 # OSC Bridge
 
-The OSC (Open Sound Control) bridge provides bidirectional communication with OSC-compatible applications like TouchOSC, Max/MSP, Ableton Live, Resolume, and many others.
+Bridge OpenSound Control (OSC) messages to CLASP. OSC addresses map directly to CLASP paths under the `/osc` namespace, making existing OSC-based tools (TouchOSC, Max/MSP, SuperCollider, Ableton Live) work with CLASP without reconfiguration.
 
-## Configuration
+## Quick Start
 
-```rust
-use clasp_bridge::{OscBridge, OscBridgeConfig};
-
-let config = OscBridgeConfig {
-    bind_addr: "0.0.0.0:9000".to_string(),  // Listen address
-    remote_addr: Some("192.168.1.100:8000".to_string()), // Send address
-    namespace: "/osc".to_string(),           // CLASP namespace prefix
-};
-
-let bridge = OscBridge::new(config);
-```
-
-### CLI Usage
+**Standalone bridge** -- runs as a separate process, connects to a router:
 
 ```bash
-# Listen on port 9000
-clasp osc --port 9000
-
-# Listen on specific interface
-clasp osc --bind 192.168.1.50 --port 9000
+clasp osc --listen 8000 --target ws://localhost:7330
 ```
 
-### Desktop App
+**Embedded in relay** -- runs inside the relay process:
 
-1. Click **ADD** in the sidebar
-2. Select **OSC Server**
-3. Configure bind address and port
-4. Click **START SERVER**
+```bash
+clasp-relay --osc-port 8000
+```
+
+Both accept OSC messages on UDP port 8000 and route them into the CLASP address space.
 
 ## Address Mapping
 
-OSC addresses are mapped to CLASP addresses with the namespace prefix:
+OSC addresses map one-to-one to CLASP paths by prepending the namespace prefix (default `/osc`):
 
 | OSC Address | CLASP Address |
-|-------------|---------------|
-| `/1/fader1` | `/osc/1/fader1` |
-| `/track/1/volume` | `/osc/track/1/volume` |
+|---|---|
+| `/synth/volume` | `/osc/synth/volume` |
+| `/mixer/ch/1/fader` | `/osc/mixer/ch/1/fader` |
 | `/cue/go` | `/osc/cue/go` |
 
-## Value Type Conversion
+The mapping is bidirectional:
 
-| OSC Type | CLASP Type |
-|----------|------------|
-| `i` (int32) | `Int` |
-| `f` (float32) | `Float` |
-| `s` (string) | `String` |
-| `b` (blob) | `Bytes` |
-| `T` (true) | `Bool(true)` |
-| `F` (false) | `Bool(false)` |
-| `N` (nil) | `Null` |
-| Arrays | `Array` |
+- **Inbound**: OSC messages arriving on the listen port are translated to CLASP signals and forwarded to the router.
+- **Outbound**: CLASP signals published to addresses under `/osc/**` are translated back to OSC messages and sent to the originating OSC client (or a configured target).
 
-## Examples
+To customize the namespace:
 
-### Receiving OSC Messages
-
-```rust
-use clasp_bridge::{OscBridge, OscBridgeConfig, Bridge, BridgeEvent};
-use clasp_core::Message;
-
-#[tokio::main]
-async fn main() {
-    let config = OscBridgeConfig {
-        bind_addr: "0.0.0.0:9000".to_string(),
-        ..Default::default()
-    };
-
-    let mut bridge = OscBridge::new(config);
-    let mut events = bridge.start().await.unwrap();
-
-    while let Some(event) = events.recv().await {
-        if let BridgeEvent::ToClasp(Message::Set(msg)) = event {
-            println!("Address: {}", msg.address);
-            println!("Value: {:?}", msg.value);
-        }
-    }
-}
+```bash
+clasp osc --listen 8000 --namespace /stage/osc --target ws://localhost:7330
 ```
 
-### Sending OSC Messages
+## Value Mapping
 
-```rust
-use clasp_bridge::{OscBridge, OscBridgeConfig, Bridge};
-use clasp_core::{Message, SetMessage, Value};
+OSC argument types map to CLASP value types:
 
-async fn send_osc(bridge: &OscBridge) {
-    let msg = Message::Set(SetMessage {
-        address: "/osc/1/fader1".to_string(),
-        value: Value::Float(0.75),
-        revision: None,
-        lock: false,
-        unlock: false,
-    });
+| OSC Type | Tag | CLASP Type |
+|---|---|---|
+| float32 | `f` | f64 |
+| int32 | `i` | i64 |
+| string | `s` | string |
+| blob | `b` | bytes |
+| True / False | `T` / `F` | bool |
+| double | `d` | f64 |
+| int64 | `h` | i64 |
 
-    bridge.send(msg).await.unwrap();
-}
+**Multi-argument messages**: OSC messages with multiple arguments are mapped to a CLASP array value. For example, `/color 255 0 128` becomes `[255, 0, 128]` at `/osc/color`.
+
+**OSC bundles**: An OSC bundle is translated to a CLASP bundle, preserving the timetag as a scheduled execution time. Nested bundles are flattened.
+
+## Configuration
+
+| Option | CLI Flag | Default | Description |
+|---|---|---|---|
+| Listen port | `--listen` | `8000` | UDP port for incoming OSC messages |
+| Target router | `--target` | `ws://localhost:7330` | WebSocket URL of the CLASP router |
+| Namespace | `--namespace` | `/osc` | CLASP path prefix for bridged addresses |
+| Send port | `--send-port` | (auto) | UDP port for outbound OSC messages |
+| Transport | `--transport` | `udp` | `udp` or `tcp` |
+
+## Embedded Mode
+
+Run the OSC bridge inside the relay process for lower latency and simpler deployment:
+
+```bash
+clasp-relay --osc-port 8000 --osc-namespace /osc
 ```
 
-## Common Applications
+In embedded mode, the bridge shares the relay's state store directly. There is no network hop between the bridge and the router. This is the recommended setup when the relay and OSC devices are on the same network.
 
-| Application | Default Port | Notes |
-|-------------|--------------|-------|
-| TouchOSC | 9000 | Mobile control surfaces |
-| Resolume | 7000 | VJ software |
-| Max/MSP | 8000 | Visual programming |
-| Ableton Live | 9001 | DAW (via Max4Live) |
-| QLab | 53000 | Show control |
+Embedded mode supports the same address and value mappings as standalone mode.
+
+## Troubleshooting
+
+**No messages received**
+- Verify the listen port matches what your OSC sender is targeting: `clasp osc --listen 8000`
+- Check firewall rules -- UDP port must be open for inbound traffic
+- Confirm the sender is using UDP (not TCP) if the bridge is in default UDP mode
+
+**Namespace mismatch**
+- If you set a custom namespace with `--namespace`, CLASP clients must subscribe to that namespace (e.g., `/stage/osc/**` instead of `/osc/**`)
+
+**Messages received but not forwarded**
+- Check that the target router is reachable: `curl -s ws://localhost:7330` or verify the relay is running
+- Look at bridge logs for connection errors: `clasp osc --listen 8000 --target ws://localhost:7330 --log-level debug`
+
+**OSC bundles not arriving atomically**
+- Ensure the CLASP client subscribes with bundle awareness. Bundles are delivered as atomic units only to subscribers that request bundle delivery.
+
+## Next Steps
+
+- [MIDI Bridge](midi.md) -- bridge MIDI controllers and instruments
+- [Protocol Bridges Overview](../protocols/README.md) -- all 8 protocol bridges
+- Bridge Configuration -- address mapping and value transforms

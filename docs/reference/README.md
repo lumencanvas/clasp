@@ -1,75 +1,55 @@
-# Reference Documentation
+---
+title: Reference
+description: Complete reference documentation for CLASP
+order: 1
+---
 
-Complete, accurate technical documentation for CLASP.
+# Reference
 
-## Protocol Specification
+Complete reference documentation for CLASP CLIs, protocol specification, configuration schemas, and SDK APIs.
 
-Core protocol details for implementers:
+## CLIs
 
-- [Protocol Overview](protocol/overview.md) — Design principles and architecture
-- [Messages](protocol/messages.md) — All message types (HELLO, SET, SUBSCRIBE, etc.)
-- [Signal Types](protocol/signal-types.md) — Param, Event, Stream, Gesture, Timeline
-- [Addressing](protocol/addressing.md) — Address format and wildcard patterns
-- [Data Types](protocol/data-types.md) — Value types and encoding
-- [Frame Format](protocol/frame-format.md) — Binary frame structure
-- [QoS Levels](protocol/qos.md) — Fire, Confirm, Commit reliability
+- [Relay CLI Reference](relay-cli.md) -- complete `clasp-relay` command-line reference
+- [CLASP CLI Reference](clasp-cli.md) -- complete `clasp` command-line reference
 
-## API Reference
+## Protocol
 
-Library documentation by language:
+- [Wire Protocol Specification](protocol-spec.md) -- binary frame format, message types, value encoding
+
+## Configuration Schemas
+
+- [App Config Schema](app-config-schema.md) -- JSON schema for scopes, write rules, snapshot transforms, and rate limits
+- [Rules Schema](rules-schema.md) -- complete JSON schema for the rules engine
+- [Router Config](router-config.md) -- `RouterConfig` reference for embedding routers in Rust
+## Transports
+
+- [Transport Guide](../core/transports.md) -- WebSocket, QUIC, TCP, UDP, Serial, BLE configuration and usage
+
+## SDK APIs
 
 ### Rust
-- [clasp-core](api/rust/clasp-core.md) — Core types and codec
-- [clasp-client](api/rust/clasp-client.md) — Client library
-- [clasp-router](api/rust/clasp-router.md) — Router library
-- [clasp-bridge](api/rust/clasp-bridge.md) — Bridge implementations
-- [clasp-transport](api/rust/clasp-transport.md) — Transport implementations
-- [clasp-discovery](api/rust/clasp-discovery.md) — Discovery mechanisms
-- [clasp-embedded](api/rust/clasp-embedded.md) — Embedded/no_std client
+
+- [Rust Crates Overview](rust-crates.md) -- all CLASP Rust crates, dependencies, and feature flags
 
 ### JavaScript
-- [@clasp-to/core](api/javascript/clasp-core.md) — JavaScript/TypeScript client
-- [Browser Usage](api/javascript/browser.md) — Browser-specific notes
-- [Node.js Usage](api/javascript/nodejs.md) — Node.js-specific notes
+
+- [JavaScript API](js-api.md) -- complete `@clasp-to/core` API reference
 
 ### Python
-- [clasp-to](api/python/clasp-to.md) — Python client package
 
-## CLI Reference
+- [Python API](python-api.md) -- complete `clasp-to` API reference
 
-Command-line tool documentation:
+## Bridges
 
-- [clasp server](cli/clasp-server.md) — Start a CLASP router
-- [clasp osc](cli/clasp-osc.md) — OSC protocol connection
-- [clasp midi](cli/clasp-midi.md) — MIDI protocol connection
-- [clasp mqtt](cli/clasp-mqtt.md) — MQTT protocol connection
-- [clasp http](cli/clasp-http.md) — HTTP REST API
+- [OSC Bridge](../protocols/osc.md) -- OSC to CLASP mapping
+- [MIDI Bridge](../protocols/midi.md) -- MIDI to CLASP mapping
+- [Art-Net Bridge](../protocols/artnet.md) -- Art-Net to CLASP mapping
+- [DMX Bridge](../protocols/dmx.md) -- DMX to CLASP mapping
+- [MQTT Bridge](../protocols/mqtt.md) -- MQTT to CLASP mapping
+- [sACN Bridge](../protocols/sacn.md) -- sACN to CLASP mapping
+- [HTTP Bridge](../protocols/http.md) -- HTTP to CLASP mapping
 
-## Bridge Reference
+## Next Steps
 
-Protocol-to-CLASP mapping documentation:
-
-- [OSC Bridge](bridges/osc.md) — OSC ↔ CLASP mapping
-- [MIDI Bridge](bridges/midi.md) — MIDI ↔ CLASP mapping
-- [Art-Net Bridge](bridges/artnet.md) — Art-Net ↔ CLASP mapping
-- [DMX Bridge](bridges/dmx.md) — DMX ↔ CLASP mapping
-- [MQTT Bridge](bridges/mqtt.md) — MQTT ↔ CLASP mapping
-- [sACN Bridge](bridges/sacn.md) — sACN ↔ CLASP mapping
-- [HTTP Bridge](bridges/http.md) — HTTP ↔ CLASP mapping
-
-## Transport Reference
-
-Network transport documentation:
-
-- [WebSocket](transports/websocket.md) — WebSocket transport
-- [QUIC](transports/quic.md) — QUIC transport
-- [UDP](transports/udp.md) — UDP transport
-- [WebRTC](transports/webrtc.md) — WebRTC DataChannel
-- [Serial](transports/serial.md) — Serial/UART transport
-- [BLE](transports/ble.md) — Bluetooth Low Energy
-
-## Configuration Reference
-
-- [Router Configuration](configuration/router-config.md) — Router options
-- [Bridge Configuration](configuration/bridge-config.md) — Bridge options
-- [Feature Flags](configuration/feature-flags.md) — Cargo feature flags
+Start with whichever reference you need. For a guided introduction, see the [Getting Started](../getting-started/README.md) guide. For architecture context, see the [Architecture](../concepts/architecture.md) explanation.

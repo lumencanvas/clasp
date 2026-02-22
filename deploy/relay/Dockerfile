@@ -61,4 +61,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -sf http://localhost:7360/healthz || exit 1
 
 ENTRYPOINT ["clasp-relay"]
-CMD ["--ws-port", "7330", "--rendezvous-port", "7340", "--health-port", "7360", "--name", "relay.clasp.to"]
+CMD ["--ws-port", "7330", "--auth-port", "7350", "--health-port", "7360", \
+     "--app-config", "/etc/clasp/chat.json", "--name", "relay.clasp.to"]

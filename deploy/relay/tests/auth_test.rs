@@ -7,11 +7,36 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use tower::ServiceExt;
 
-use clasp_relay::auth::{auth_router, build_scopes, AuthState};
+use clasp_relay::app_config::AppConfig;
+use clasp_relay::auth::{auth_router, AuthState};
+
+fn load_chat_config() -> AppConfig {
+    let json = include_str!("../config/chat.json");
+    serde_json::from_str(json).expect("Failed to parse chat.json")
+}
+
+/// Build scopes by substituting {userId} in chat.json scope templates.
+fn build_scopes(user_id: &str) -> Vec<String> {
+    let config = load_chat_config();
+    config
+        .scopes
+        .iter()
+        .map(|s| s.replace("{userId}", user_id))
+        .collect()
+}
 
 fn setup_app() -> axum::Router {
+    let config = load_chat_config();
     let validator = Arc::new(CpskValidator::new());
-    let state = Arc::new(AuthState::new(":memory:", validator).unwrap());
+    let state = Arc::new(
+        AuthState::new(
+            ":memory:",
+            validator,
+            Some(config.scopes),
+            config.rate_limits.unwrap_or_default(),
+        )
+        .unwrap(),
+    );
     auth_router(state, None)
 }
 
@@ -473,8 +498,17 @@ fn scope_write_implies_read_on_friend_requests_at_action_level() {
 /// H2: CORS — explicit origin should be set when provided
 #[tokio::test]
 async fn cors_explicit_origin_is_set() {
+    let config = load_chat_config();
     let validator = Arc::new(CpskValidator::new());
-    let state = Arc::new(AuthState::new(":memory:", validator).unwrap());
+    let state = Arc::new(
+        AuthState::new(
+            ":memory:",
+            validator,
+            Some(config.scopes),
+            config.rate_limits.unwrap_or_default(),
+        )
+        .unwrap(),
+    );
     let app = auth_router(state, Some("https://chat.example.com"));
 
     // Preflight request

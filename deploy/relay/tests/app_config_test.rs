@@ -711,6 +711,29 @@ fn test_snapshot_strips_other_user_all_private_paths() {
     assert_eq!(addresses, vec!["/chat/user/bob/profile"]);
 }
 
+#[test]
+fn test_snapshot_public_sub_with_owner_id_in_subpath() {
+    // Regression: owner ID appearing in both the owner segment and sub-path
+    // must not confuse the sub-path extraction (was using rsplit_once on owner string)
+    let state = RouterState::new();
+    let params = vec![
+        // bob's profile (public_sub)
+        make_pv("/chat/user/bob/profile", Value::String("pub".into())),
+        // bob's friend list entry where friend is also named "bob"
+        make_pv(
+            "/chat/user/bob/friends/bob",
+            Value::String("self-friend".into()),
+        ),
+    ];
+    let addresses = filter(params, "alice", &state);
+    // alice should only see bob's profile, NOT bob/friends/bob
+    assert_eq!(
+        addresses,
+        vec!["/chat/user/bob/profile"],
+        "owner ID in sub-path should not leak private data"
+    );
+}
+
 // ===========================================================
 //  Snapshot filter -- Room membership gating
 // ===========================================================

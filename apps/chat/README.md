@@ -79,6 +79,13 @@ For local dev without the public relay:
 
 ```bash
 cd deploy/relay
+cargo run --features full -- --auth-port 7350
+```
+
+The relay auto-detects `config/chat.json` for chat-specific security rules (room creator checks, DM friendship validation, snapshot privacy). You can also run via Docker Compose:
+
+```bash
+cd deploy/relay
 docker compose up
 ```
 

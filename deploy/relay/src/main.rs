@@ -20,6 +20,9 @@
 //! # With auth enabled
 //! clasp-relay --auth-port 7350
 //!
+//! # With app-specific rules
+//! clasp-relay --auth-port 7350 --app-config config/chat.json
+//!
 //! # All protocols
 //! clasp-relay --mqtt-port 1883 --osc-port 8000 --quic-port 7331 --cert cert.pem --key key.pem
 //! ```
