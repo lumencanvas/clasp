@@ -1,28 +1,73 @@
 ---
 title: Transports
-description: Wire-level carriers for CLASP frames -- WebSocket, QUIC, TCP, UDP, Serial, BLE
+description: How CLASP frames move between devices -- the pipe, not the payload
 order: 5
 ---
 
 # Transports
 
-Transports are the wire layer that carries CLASP binary frames between clients and routers. They are distinct from [protocol bridges](../protocols/README.md) -- a bridge translates between an external protocol (OSC, MIDI, MQTT) and CLASP signals, while a transport carries native CLASP frames directly.
+A transport is the pipe that carries CLASP binary frames between two endpoints. It has nothing to do with *what* you're sending (signals, state, events) -- only *how* the bytes get from A to B.
 
-CLASP is transport-agnostic. A client on WebSocket and a client on QUIC communicate through the same router with no difference in behavior. All transports implement the same `Transport` trait and produce the same binary frames.
+Think of it like shipping a package. The package contents (your CLASP signals) are always the same regardless of whether the delivery truck drives, flies, or takes a boat. The transport is the delivery method.
 
-## Choosing a Transport
+## Transports vs Bridges
 
-| Transport | Best For | Reliable | Ordered | Browser | Encryption | Feature Flag |
-|-----------|----------|----------|---------|---------|------------|--------------|
-| WebSocket | Web apps, general use | Yes | Yes | Yes | WSS (TLS) | `websocket` (default) |
-| QUIC | Mobile, high-performance native | Yes | Yes | No | TLS 1.3 (built-in) | `quic` (default) |
-| TCP | Server-to-server, LAN | Yes | Yes | No | None (add TLS externally) | `tcp` (default) |
-| UDP | Discovery, fire-and-forget | No | No | No | None | `udp` (default) |
-| Serial | Hardware, microcontrollers | Yes | Yes | No | None | `serial` |
-| BLE | Wireless controllers, battery devices | Yes | Yes | No | BLE pairing | `ble` |
-| WebRTC | P2P, browser-to-browser | Yes | Yes | Yes | DTLS | `webrtc` |
+This is the most important distinction to understand:
 
-Default features include `websocket`, `tcp`, `udp`, and `quic`. Serial, BLE, and WebRTC require explicit feature flags:
+**A transport** carries native CLASP frames. Both sides speak CLASP. No translation happens. WebSocket, QUIC, BLE, Serial -- these are all transports.
+
+**A bridge** translates between CLASP and a foreign protocol. One side speaks OSC or MIDI or MQTT, the other side speaks CLASP. The bridge sits in the middle and converts. See [Protocol Bridges](../protocols/README.md).
+
+```
+TRANSPORT (no translation):
+  CLASP Client ──[CLASP frames over WebSocket]──> CLASP Router
+
+BRIDGE (translation):
+  OSC Device ──[OSC messages]──> Bridge ──[CLASP frames]──> CLASP Router
+```
+
+## Where Transports Run
+
+This is the second key thing to understand: **transports are a client-side choice, not a server configuration**.
+
+The relay server listens on two transports: **WebSocket** (always, port 7330) and optionally **QUIC** (with `--quic-port`). That's it. The relay does not listen on BLE, Serial, UDP, or raw TCP.
+
+So how do a BLE sensor or a serial-connected Arduino participate? Through an intermediate process:
+
+```
+                                              The relay only
+                                              speaks WS + QUIC
+                                                    |
+ESP32 ──[BLE]──> Laptop running    ──[WebSocket]──> clasp-relay
+                 CLASP client                       :7330
+                 with BLE transport
+
+Arduino ──[Serial/USB]──> Raspberry Pi ──[WebSocket]──> clasp-relay
+                          running                       :7330
+                          CLASP client
+```
+
+The laptop scans for BLE devices, connects to the ESP32 over BLE, receives CLASP frames, and forwards them to the relay over WebSocket. The laptop is acting as a transparent bridge between two transports. This is different from a protocol bridge -- no translation happens. The ESP32 is sending real CLASP binary frames over BLE; the laptop just shuttles them to the relay.
+
+Similarly, an Arduino sends CLASP frames over USB serial to a Raspberry Pi, which forwards them to the relay over WebSocket.
+
+The ESP32 and Arduino don't know or care that the relay uses WebSocket. They just send CLASP frames over whatever transport they support. The intermediate machine handles the hop.
+
+## Available Transports
+
+| Transport | Best For | Relay Support | Feature Flag |
+|-----------|----------|---------------|--------------|
+| [WebSocket](../transports/websocket.md) | Web apps, general use | Direct (default) | `websocket` (default) |
+| [QUIC](../transports/quic.md) | Mobile, high-perf native | Direct (`--quic-port`) | `quic` (default) |
+| [TCP](../transports/tcp.md) | Server-to-server, LAN | Embed `clasp-router` | `tcp` (default) |
+| [UDP](../transports/udp.md) | Discovery, fire-and-forget | Embed `clasp-router` | `udp` (default) |
+| [Serial](../transports/serial.md) | Hardware, microcontrollers | Via intermediate | `serial` |
+| [BLE](../transports/ble.md) | Wireless controllers, battery | Via intermediate | `ble` |
+| [WebRTC](../transports/webrtc.md) | P2P, browser-to-browser | Not needed (P2P) | `webrtc` |
+
+**"Direct"** means the relay binary has built-in support. **"Via intermediate"** means a CLASP client process on a host machine bridges between the transport and the relay. **"Embed `clasp-router`"** means you use the `clasp-router` Rust crate directly in your own binary to accept TCP/UDP connections.
+
+Default Cargo features include `websocket`, `tcp`, `udp`, and `quic`. Serial, BLE, and WebRTC require explicit feature flags:
 
 ```bash
 cargo build --features serial,ble
@@ -30,294 +75,83 @@ cargo build --features serial,ble
 cargo build --features full
 ```
 
-## WebSocket
+## How a Transport Works Internally
 
-The default transport for browser clients and the most widely supported option. The relay listens on WebSocket by default.
-
-**URLs:** `ws://host:port` (plaintext) or `wss://host:port` (TLS)
-
-**Configuration (`WebSocketConfig`):**
-
-| Field | Default | Description |
-|-------|---------|-------------|
-| `subprotocol` | `"clasp"` | WebSocket subprotocol for handshake negotiation |
-| `max_message_size` | 64KB | Maximum frame size before rejection |
-| `ping_interval` | 30s | Keep-alive ping interval |
-| `channel_buffer_size` | 1000 | Internal send/receive queue depth |
-
-**Relay CLI:**
-
-```bash
-clasp-relay --ws-port 7330          # default
-clasp-relay --no-websocket          # disable WebSocket entirely
-```
-
-**Client code:**
-
-```js
-// JavaScript
-import { ClaspBuilder } from '@clasp-to/core'
-const client = new ClaspBuilder('ws://localhost:7330').build()
-```
+Every transport implements the same Rust trait. This is what makes CLASP transport-agnostic -- swap the pipe, keep the protocol:
 
 ```rust
-// Rust
-use clasp_transport::websocket::WebSocketTransport;
-use clasp_transport::traits::Transport;
+// Every transport produces a sender and receiver
+let (sender, receiver) = SomeTransport::connect("address").await?;
 
-let (sender, receiver) = WebSocketTransport::connect("ws://localhost:7330").await?;
-```
+// Send CLASP binary frames
+sender.send(clasp_frame_bytes).await?;
 
-**WASM:** In browser builds, use the `wasm-websocket` feature instead of `websocket`. This swaps the tokio-tungstenite backend for a `web-sys` WebSocket implementation. The `wasm` feature flag enables this automatically.
-
-**Reverse proxy (nginx):**
-
-```nginx
-location /clasp {
-    proxy_pass http://127.0.0.1:7330;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host $host;
+// Receive CLASP binary frames
+if let Some(TransportEvent::Data(bytes)) = receiver.recv().await {
+    // These bytes are the same CLASP binary format
+    // regardless of which transport delivered them
 }
 ```
 
-## QUIC
-
-A modern transport built on UDP with built-in TLS 1.3, connection migration, and stream multiplexing. Ideal for mobile apps and high-performance native clients.
-
-**ALPN:** `clasp/2`
-
-**Configuration (`QuicConfig`):**
-
-| Field | Default | Description |
-|-------|---------|-------------|
-| `enable_0rtt` | `true` | 0-RTT connection establishment for repeat connections |
-| `keep_alive_ms` | 5000 | Keep-alive interval (0 to disable) |
-| `idle_timeout_ms` | 30000 | Connection dropped after this idle period |
-| `initial_window` | 10 | Initial congestion window in packets |
-| `cert_verification` | `SystemRoots` | Certificate verification mode |
-
-**Certificate verification modes (`CertVerification`):**
-
-- `SystemRoots` -- Use OS root certificates (recommended for production)
-- `SkipVerification` -- Skip verification (development only, vulnerable to MITM)
-- `CustomRoots(Vec<Vec<u8>>)` -- Custom root certificates (DER-encoded)
-
-**Relay CLI:**
-
-```bash
-clasp-relay --quic-port 7331 --cert cert.pem --key key.pem
-```
-
-**Client code (Rust):**
+The full trait hierarchy lives in `clasp-transport::traits`:
 
 ```rust
-use clasp_transport::quic::{QuicTransport, QuicConfig};
-
-// Production (system root certs)
-let client = QuicTransport::new_client()?;
-let conn = client.connect(addr, "relay.example.com").await?;
-let (sender, receiver) = conn.open_bi().await?;
-
-// Development (skip verification)
-let client = QuicTransport::new_client_with_config(QuicConfig::insecure())?;
-```
-
-**Advantages over WebSocket:** 0-RTT reconnection, seamless network migration (Wi-Fi to cellular), no head-of-line blocking across multiplexed streams, unreliable datagrams via `send_datagram()` / `recv_datagram()`.
-
-## TCP
-
-Raw TCP with length-prefixed framing. Each CLASP message is preceded by a 4-byte big-endian length prefix. Useful for server-to-server links and LAN setups where WebSocket overhead is unnecessary.
-
-**Configuration (`TcpConfig`):**
-
-| Field | Default | Description |
-|-------|---------|-------------|
-| `max_message_size` | 64KB | Maximum message size |
-| `read_buffer_size` | 8192 | Read buffer size in bytes |
-| `keepalive_secs` | 30 | TCP keep-alive interval (0 to disable) |
-
-**Client code (Rust):**
-
-```rust
-use clasp_transport::tcp::TcpTransport;
-
-let transport = TcpTransport::new();
-let (sender, receiver) = transport.connect("192.168.1.10:7330").await?;
-```
-
-**Server:**
-
-```rust
-use clasp_transport::tcp::TcpServer;
-
-let mut server = TcpServer::bind("0.0.0.0:7330").await?;
-let (sender, receiver, peer_addr) = server.accept().await?;
-```
-
-## UDP
-
-Connectionless, fire-and-forget transport. Best for discovery broadcasts and scenarios where occasional packet loss is acceptable. UDP provides no reliability or ordering guarantees -- use it only for Fire QoS signals.
-
-**Configuration (`UdpConfig`):**
-
-| Field | Default | Description |
-|-------|---------|-------------|
-| `recv_buffer_size` | 65536 | Receive buffer size in bytes |
-| `max_packet_size` | 65507 | Maximum UDP payload (protocol limit) |
-
-**Client code (Rust):**
-
-```rust
-use clasp_transport::udp::{UdpTransport, UdpBroadcast};
-
-// Point-to-point
-let transport = UdpTransport::bind("0.0.0.0:0").await?;
-transport.send_to(b"data", target_addr).await?;
-
-// Broadcast (for discovery)
-let broadcast = UdpBroadcast::new(7340).await?;
-broadcast.broadcast(b"announce").await?;
-```
-
-> **Warning:** UDP provides no delivery guarantees. Messages may be lost, duplicated, or arrive out of order. Only use UDP for signals where loss is acceptable (discovery, sensor telemetry with high send rates).
-
-## Serial
-
-Direct serial port communication for hardware integration. Requires the `serial` feature flag.
-
-**Configuration (`SerialConfig`):**
-
-| Field | Default | Description |
-|-------|---------|-------------|
-| `baud_rate` | 115200 | Serial baud rate |
-| `data_bits` | 8 | Data bits per frame |
-| `stop_bits` | 1 | Stop bits |
-| `parity` | `None` | `None`, `Odd`, or `Even` |
-| `flow_control` | `None` | `None`, `Hardware`, or `Software` |
-
-**Port discovery:**
-
-```rust
-use clasp_transport::serial::SerialTransport;
-
-let ports = SerialTransport::list_ports()?;
-// Linux:  ["/dev/ttyUSB0", "/dev/ttyACM0"]
-// macOS:  ["/dev/tty.usbserial-1420", "/dev/tty.usbmodem14201"]
-// Windows: ["COM3", "COM4"]
-```
-
-**Connect:**
-
-```rust
-let (sender, receiver) = SerialTransport::connect("/dev/ttyUSB0").await?;
-
-// With custom config
-let config = SerialConfig { baud_rate: 9600, ..Default::default() };
-let (sender, receiver) = SerialTransport::connect_with_config("/dev/ttyUSB0", config).await?;
-```
-
-Typical use cases: DMX controllers over USB, Arduino/ESP32 CLASP bridges, direct microcontroller communication.
-
-## BLE
-
-Bluetooth Low Energy transport using GATT services. Designed for wireless controllers and battery-powered devices. Requires the `ble` feature flag.
-
-**CLASP GATT Service:**
-
-| UUID | Role |
-|------|------|
-| `0x7330` | CLASP Service |
-| `0x7331` | TX Characteristic (client writes to peripheral) |
-| `0x7332` | RX Characteristic (peripheral notifies client) |
-
-**Configuration (`BleConfig`):**
-
-| Field | Default | Description |
-|-------|---------|-------------|
-| `device_name_filter` | `None` | Filter scan results by device name substring |
-| `scan_duration_secs` | 5 | How long to scan for devices |
-| `mtu` | 512 | Maximum transmission unit (BLE 5.0) |
-| `write_without_response` | `true` | Lower latency writes (no ACK from peripheral) |
-
-**Scan and connect workflow:**
-
-```rust
-use clasp_transport::ble::{BleTransport, BleConfig};
-
-let config = BleConfig {
-    device_name_filter: Some("CLASP".into()),
-    ..Default::default()
-};
-let ble = BleTransport::with_config(config).await?;
-
-// Scan for devices
-let devices = ble.scan().await?;
-for device in &devices {
-    println!("{:?} (CLASP: {})", device.name, device.has_clasp_service);
-}
-
-// Connect to a device
-let (sender, receiver) = ble.connect(&devices[0]).await?;
-```
-
-## WebRTC
-
-WebRTC support is documented in the [P2P & WebRTC](p2p.md) page. It requires the `webrtc` feature flag and is used for direct peer-to-peer communication that bypasses the relay entirely.
-
-## Transport Trait
-
-All transports implement the same trait hierarchy from `clasp-transport::traits`:
-
-```rust
-#[async_trait]
 pub trait TransportSender: Send + Sync {
     async fn send(&self, data: Bytes) -> Result<()>;
-    fn try_send(&self, data: Bytes) -> Result<()>;
+    fn try_send(&self, data: Bytes) -> Result<()>;  // non-blocking
     fn is_connected(&self) -> bool;
     async fn close(&self) -> Result<()>;
 }
 
-#[async_trait]
 pub trait TransportReceiver: Send {
     async fn recv(&mut self) -> Option<TransportEvent>;
 }
+```
 
-#[async_trait]
-pub trait Transport: Send + Sync {
-    type Sender: TransportSender;
-    type Receiver: TransportReceiver;
-    async fn connect(addr: &str) -> Result<(Self::Sender, Self::Receiver)>;
-}
+`TransportEvent` is one of: `Data(Bytes)`, `Connected`, `Disconnected { reason }`, or `Error(String)`.
 
-#[async_trait]
+Servers (things that accept incoming connections) implement `TransportServer`:
+
+```rust
 pub trait TransportServer: Send + Sync {
-    type Sender: TransportSender;
-    type Receiver: TransportReceiver;
     async fn accept(&mut self) -> Result<(Self::Sender, Self::Receiver, SocketAddr)>;
 }
 ```
 
-`TransportEvent` carries connection lifecycle events: `Connected`, `Disconnected { reason }`, `Data(Bytes)`, and `Error(String)`.
-
 ## Mixed-Transport Systems
 
-A router accepts connections from multiple transports simultaneously. Clients on different transports interact transparently through the shared state store:
+A single CLASP deployment often uses multiple transports at once. All clients see the same shared state regardless of how they connect:
 
 ```
-Browser (WSS) ──────┐
-                     │
-Mobile App (QUIC) ──┼── Router ── State Store
-                     │
-ESP32 (Serial) ─────┘
+Browser (WSS) ───────────────────┐
+                                 │
+Mobile App (QUIC) ──────────────┼── clasp-relay ── State Store
+                                 │
+Laptop (WS, bridging for:) ─────┘
+  |-- ESP32 via BLE
+  |-- Arduino via Serial
+  |-- Sensor hub via UDP
 ```
 
-The relay exposes WebSocket and QUIC on separate ports. TCP and UDP are available when embedding `clasp-router` directly. See [Relay Server](../deployment/relay.md) for multi-protocol configuration.
+Every client in this diagram can `set()`, `subscribe()`, and `emit()` on the same address space. The browser can read sensor data from the Arduino. The mobile app can control lights connected to the ESP32. The transport is invisible to the application layer.
+
+## Choosing a Transport
+
+| Need | Use |
+|------|-----|
+| Broadest compatibility, works everywhere | WebSocket |
+| Fast reconnects on mobile, network switching | QUIC |
+| Lowest possible latency on LAN | UDP |
+| Direct microcontroller connection | Serial |
+| Wireless battery-powered device | BLE |
+| Browser-to-browser without a server | WebRTC |
+| Server-to-server on trusted LAN | TCP |
+
+When in doubt, use WebSocket. It works in browsers, behind proxies, through firewalls, and is the default for both the relay and all SDKs.
 
 ## Next Steps
 
-- [Relay Server](../deployment/relay.md) -- production deployment with multi-protocol support
+- [Transport reference pages](../transports/) -- detailed docs for each transport
+- [Protocol Bridges](../protocols/README.md) -- for connecting non-CLASP devices (OSC, MIDI, etc.)
 - [P2P & WebRTC](p2p.md) -- direct peer-to-peer connections bypassing the relay
-- [Architecture](../concepts/architecture.md) -- how transports fit into the crate layers
 - [Signals](signals.md) -- the signal types carried by transports

@@ -32,6 +32,11 @@ const SECTION_CONFIG = [
     basePath: 'core'
   },
   {
+    key: 'transports',
+    label: 'TRANSPORTS',
+    basePath: 'transports'
+  },
+  {
     key: 'protocols',
     label: 'PROTOCOL BRIDGES',
     basePath: 'protocols'
