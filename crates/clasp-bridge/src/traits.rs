@@ -10,7 +10,7 @@ use crate::Result;
 #[derive(Debug, Clone)]
 pub enum BridgeEvent {
     /// Message to send to Clasp
-    ToClasp(Message),
+    ToClasp(Box<Message>),
     /// Bridge connected
     Connected,
     /// Bridge disconnected

@@ -84,6 +84,12 @@ pub struct GestureRegistry {
     flush_interval: Duration,
 }
 
+impl Default for GestureRegistry {
+    fn default() -> Self {
+        Self::new(Duration::from_millis(16))
+    }
+}
+
 impl GestureRegistry {
     /// Create a new gesture registry with the specified flush interval
     pub fn new(flush_interval: Duration) -> Self {
@@ -91,11 +97,6 @@ impl GestureRegistry {
             gestures: DashMap::new(),
             flush_interval,
         }
-    }
-
-    /// Create with default 16ms flush interval (60fps)
-    pub fn default() -> Self {
-        Self::new(Duration::from_millis(16))
     }
 
     /// Process a publish message, returning what should be forwarded
@@ -197,10 +198,8 @@ pub fn spawn_flush_task(
             ticker.tick().await;
 
             let to_flush = registry.flush_stale();
-            if !to_flush.is_empty() {
-                if flush_tx.send(to_flush).is_err() {
-                    break; // Channel closed
-                }
+            if !to_flush.is_empty() && flush_tx.send(to_flush).is_err() {
+                break; // Channel closed
             }
 
             // Cleanup very old gestures (> 5 minutes with no end)

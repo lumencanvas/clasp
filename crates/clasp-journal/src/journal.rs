@@ -43,4 +43,9 @@ pub trait Journal: Send + Sync {
 
     /// Get the total number of entries in the journal.
     async fn len(&self) -> Result<usize>;
+
+    /// Check whether the journal is empty.
+    async fn is_empty(&self) -> Result<bool> {
+        Ok(self.len().await? == 0)
+    }
 }

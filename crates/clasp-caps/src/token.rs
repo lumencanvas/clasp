@@ -212,8 +212,7 @@ impl CapabilityToken {
     /// Encode to the `cap_<base64>` wire format
     pub fn encode(&self) -> Result<String> {
         use base64::Engine;
-        let bytes =
-            rmp_serde::to_vec_named(self).map_err(|e| CapError::Encoding(e.to_string()))?;
+        let bytes = rmp_serde::to_vec_named(self).map_err(|e| CapError::Encoding(e.to_string()))?;
         Ok(format!(
             "{}{}",
             TOKEN_PREFIX,
@@ -337,7 +336,6 @@ pub fn pattern_is_subset(child: &str, parent: &str) -> bool {
     // Both must be exhausted for equal-length patterns
     pi >= parent_parts.len() && ci >= child_parts.len()
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -519,7 +517,7 @@ mod tests {
     fn test_decode_truncated_payload() {
         use base64::Engine;
         // Valid base64 but truncated msgpack payload
-        let truncated = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&[0x92, 0x01]);
+        let truncated = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0x92, 0x01]);
         let result = CapabilityToken::decode(&format!("cap_{}", truncated));
         assert!(result.is_err());
     }
@@ -528,7 +526,8 @@ mod tests {
     fn test_decode_corrupted_msgpack() {
         use base64::Engine;
         // Valid base64 but not valid msgpack for CapabilityToken
-        let garbage = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b"this is not msgpack");
+        let garbage =
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b"this is not msgpack");
         let result = CapabilityToken::decode(&format!("cap_{}", garbage));
         assert!(result.is_err());
     }
@@ -563,7 +562,9 @@ mod tests {
         .unwrap();
 
         // Delegate with empty scopes — should succeed (empty is a subset of anything)
-        let child = root.delegate(&child_key, vec![], future_timestamp(), None).unwrap();
+        let child = root
+            .delegate(&child_key, vec![], future_timestamp(), None)
+            .unwrap();
         assert!(child.scopes.is_empty());
         assert!(child.verify_signature().is_ok());
     }

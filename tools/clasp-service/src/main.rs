@@ -136,6 +136,7 @@ struct BridgeDiagnostics {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[allow(dead_code)]
 enum BridgeStatus {
     Starting,
     Running,
@@ -509,7 +510,7 @@ impl BridgeService {
                                 }
 
                                 // Extract address and value from the message
-                                let (address, value) = match &msg {
+                                let (address, value) = match &*msg {
                                     Message::Set(set) => {
                                         (set.address.clone(), value_to_json(&set.value))
                                     }
@@ -658,7 +659,7 @@ impl BridgeService {
             if let Some(b) = bridges.get(&id) {
                 let metrics = b.metrics.read().await.clone();
                 let errors = b.recent_errors.read().await.clone();
-                let uptime = b.started_at.elapsed().as_secs();
+                let _uptime = b.started_at.elapsed().as_secs();
 
                 let status = if b.bridge.is_running() {
                     BridgeStatus::Running

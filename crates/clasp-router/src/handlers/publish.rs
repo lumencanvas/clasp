@@ -3,9 +3,9 @@
 use clasp_core::{codec, Action, ErrorMessage, Message, SecurityMode, SignalType};
 use tracing::{debug, warn};
 
+use super::{broadcast_to_subscriber_list, HandlerContext, MessageResult};
 use crate::gesture::GestureResult;
 use crate::p2p::{analyze_address, P2PAddressType};
-use super::{broadcast_to_subscriber_list, HandlerContext, MessageResult};
 
 pub(crate) async fn handle(
     pub_msg: &clasp_core::PublishMessage,
@@ -111,12 +111,7 @@ pub(crate) async fn handle(
 
             let subscribers = ctx.subscriptions.find_subscribers(&pub_msg.address, None);
             if let Ok(bytes) = codec::encode(original_msg) {
-                broadcast_to_subscriber_list(
-                    &bytes,
-                    &subscribers,
-                    ctx.sessions,
-                    Some(&session.id),
-                );
+                broadcast_to_subscriber_list(&bytes, &subscribers, ctx.sessions, Some(&session.id));
             }
             return Some(MessageResult::None);
         }
@@ -132,7 +127,8 @@ pub(crate) async fn handle(
                 GestureResult::Forward(messages) => {
                     for forward_msg in messages {
                         let msg_to_send = Message::Publish(forward_msg.clone());
-                        let subscribers = ctx.subscriptions
+                        let subscribers = ctx
+                            .subscriptions
                             .find_subscribers(&forward_msg.address, signal_type);
                         if let Ok(bytes) = codec::encode(&msg_to_send) {
                             broadcast_to_subscriber_list(
@@ -153,18 +149,15 @@ pub(crate) async fn handle(
         }
     }
 
-    let subscribers = ctx.subscriptions.find_subscribers(&pub_msg.address, signal_type);
+    let subscribers = ctx
+        .subscriptions
+        .find_subscribers(&pub_msg.address, signal_type);
 
     #[cfg(feature = "metrics")]
     metrics::histogram!("clasp_broadcast_fanout").record(subscribers.len() as f64);
 
     if let Ok(bytes) = codec::encode(original_msg) {
-        broadcast_to_subscriber_list(
-            &bytes,
-            &subscribers,
-            ctx.sessions,
-            Some(&session.id),
-        );
+        broadcast_to_subscriber_list(&bytes, &subscribers, ctx.sessions, Some(&session.id));
     }
 
     #[cfg(feature = "journal")]
@@ -191,7 +184,10 @@ pub(crate) async fn handle(
         );
         if !actions.is_empty() {
             crate::router::execute_rule_actions(
-                actions, ctx.state, ctx.sessions, ctx.subscriptions,
+                actions,
+                ctx.state,
+                ctx.sessions,
+                ctx.subscriptions,
             );
         }
     }

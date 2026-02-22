@@ -80,7 +80,11 @@ pub async fn discover(tx: mpsc::Sender<DiscoveryEvent>) -> Result<()> {
                         device.name, device.endpoints
                     );
 
-                    if tx.send(DiscoveryEvent::Found(device)).await.is_err() {
+                    if tx
+                        .send(DiscoveryEvent::Found(Box::new(device)))
+                        .await
+                        .is_err()
+                    {
                         break;
                     }
                 }

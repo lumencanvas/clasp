@@ -13,9 +13,7 @@ use rosc::decoder;
 use rosc::encoder;
 use rosc::{OscBundle, OscMessage, OscPacket, OscTime, OscType};
 use std::net::UdpSocket;
-use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc;
 
 pub async fn run_tests(suite: &mut TestSuite) {
     suite.add_result(test_osc_receive_float().await);
@@ -35,7 +33,7 @@ async fn test_osc_receive_float() -> TestResult {
         "OSC: Receive float from external sender",
         Duration::from_secs(5),
         || async {
-            let port = find_available_udp_port();
+            let _port = find_available_udp_port();
 
             // Create a real OSC message using rosc library
             let msg = OscMessage {
@@ -47,7 +45,7 @@ async fn test_osc_receive_float() -> TestResult {
                 encoder::encode(&packet).map_err(|e| format!("Failed to encode OSC: {:?}", e))?;
 
             // Send it to our CLASP OSC bridge port
-            let socket = UdpSocket::bind("127.0.0.1:0")
+            let _socket = UdpSocket::bind("127.0.0.1:0")
                 .map_err(|e| format!("Failed to bind sender socket: {}", e))?;
 
             // For this test, we verify the encoding works

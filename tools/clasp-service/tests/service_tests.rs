@@ -30,7 +30,7 @@ fn parse_concatenated_json(s: &str) -> Vec<serde_json::Value> {
         if let Some(Ok(value)) = stream.next() {
             let bytes_read = stream.byte_offset();
             results.push(value);
-            remaining = &remaining[bytes_read..].trim_start();
+            remaining = remaining[bytes_read..].trim_start();
         } else {
             break;
         }

@@ -67,7 +67,11 @@ impl CapabilityValidator {
             &token.proofs[0].issuer
         };
 
-        if !self.trust_anchors.iter().any(|anchor| anchor == root_issuer) {
+        if !self
+            .trust_anchors
+            .iter()
+            .any(|anchor| anchor == root_issuer)
+        {
             return Err(CapError::UntrustedIssuer(hex::encode(root_issuer)));
         }
 
@@ -337,7 +341,11 @@ mod tests {
         let validator = make_validator();
         match validator.validate("cap_!!!not-valid-base64!!!") {
             ValidationResult::Invalid(msg) => {
-                assert!(msg.contains("encoding"), "expected encoding error, got: {}", msg);
+                assert!(
+                    msg.contains("encoding"),
+                    "expected encoding error, got: {}",
+                    msg
+                );
             }
             other => panic!("expected Invalid, got {:?}", other),
         }
@@ -348,7 +356,7 @@ mod tests {
         let validator = make_validator();
         // Valid prefix + valid base64, but truncated msgpack
         use base64::Engine;
-        let truncated = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&[0x92, 0x01, 0x02]);
+        let truncated = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0x92, 0x01, 0x02]);
         match validator.validate(&format!("cap_{}", truncated)) {
             ValidationResult::Invalid(_) => {}
             other => panic!("expected Invalid, got {:?}", other),
@@ -373,7 +381,11 @@ mod tests {
         let encoded = token.encode().unwrap();
         match validator.validate(&encoded) {
             ValidationResult::Invalid(msg) => {
-                assert!(msg.contains("signature"), "expected signature error, got: {}", msg);
+                assert!(
+                    msg.contains("signature"),
+                    "expected signature error, got: {}",
+                    msg
+                );
             }
             other => panic!("expected Invalid, got {:?}", other),
         }
@@ -398,18 +410,32 @@ mod tests {
         .unwrap();
 
         let child = root
-            .delegate(&key_b, vec!["write:/**".to_string()], future_timestamp(), None)
+            .delegate(
+                &key_b,
+                vec!["write:/**".to_string()],
+                future_timestamp(),
+                None,
+            )
             .unwrap();
 
         let grandchild = child
-            .delegate(&key_c, vec!["read:/**".to_string()], future_timestamp(), None)
+            .delegate(
+                &key_c,
+                vec!["read:/**".to_string()],
+                future_timestamp(),
+                None,
+            )
             .unwrap();
 
         // grandchild has chain_depth 2, which exceeds max_depth 1
         let encoded = grandchild.encode().unwrap();
         match validator.validate(&encoded) {
             ValidationResult::Invalid(msg) => {
-                assert!(msg.contains("deep") || msg.contains("chain"), "expected chain depth error, got: {}", msg);
+                assert!(
+                    msg.contains("deep") || msg.contains("chain"),
+                    "expected chain depth error, got: {}",
+                    msg
+                );
             }
             other => panic!("expected Invalid, got {:?}", other),
         }
@@ -434,7 +460,10 @@ mod tests {
         )
         .unwrap();
         let encoded_a = token_a.encode().unwrap();
-        assert!(matches!(validator.validate(&encoded_a), ValidationResult::Valid(_)));
+        assert!(matches!(
+            validator.validate(&encoded_a),
+            ValidationResult::Valid(_)
+        ));
 
         // Token from anchor B
         let token_b = CapabilityToken::create_root(
@@ -445,7 +474,10 @@ mod tests {
         )
         .unwrap();
         let encoded_b = token_b.encode().unwrap();
-        assert!(matches!(validator.validate(&encoded_b), ValidationResult::Valid(_)));
+        assert!(matches!(
+            validator.validate(&encoded_b),
+            ValidationResult::Valid(_)
+        ));
 
         // Token from untrusted anchor C
         let key_c = SigningKey::from_bytes(&[99u8; 32]);
@@ -457,6 +489,9 @@ mod tests {
         )
         .unwrap();
         let encoded_c = token_c.encode().unwrap();
-        assert!(matches!(validator.validate(&encoded_c), ValidationResult::Invalid(_)));
+        assert!(matches!(
+            validator.validate(&encoded_c),
+            ValidationResult::Invalid(_)
+        ));
     }
 }

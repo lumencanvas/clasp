@@ -39,7 +39,7 @@ fn print_stats(name: &str, latencies: &mut [u64]) {
     let p50 = percentile(latencies, 50.0);
     let p95 = percentile(latencies, 95.0);
     let p99 = percentile(latencies, 99.0);
-    let avg: u64 = latencies.iter().sum::<u64>() / latencies.len() as u64;
+    let _avg: u64 = latencies.iter().sum::<u64>() / latencies.len() as u64;
     let jitter = calculate_jitter(latencies);
 
     println!(
@@ -254,8 +254,8 @@ async fn main() {
     println!("═══ Wildcard Pattern Matching Latency ═══");
 
     // Exact address match (no wildcards)
-    let mut lat = benchmark_wildcard_latency(port, 1000, "/bench/exact/value", |i| {
-        format!("/bench/exact/value")
+    let mut lat = benchmark_wildcard_latency(port, 1000, "/bench/exact/value", |_i| {
+        "/bench/exact/value".to_string()
     })
     .await;
     print_stats("Exact match", &mut lat);

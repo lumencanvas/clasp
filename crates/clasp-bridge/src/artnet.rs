@@ -110,10 +110,12 @@ impl ArtNetBridge {
         // Create DMX output command
         // In artnet_protocol 0.2, Output has: version, sequence, physical, subnet, length, data
         // The subnet field is used for the universe/subnet addressing
-        let mut output = Output::default();
-        output.subnet = universe; // Universe goes in subnet field
-        output.data = data.to_vec().into();
-        output.length = data.len() as u16;
+        let output = Output {
+            subnet: universe,
+            data: data.to_vec(),
+            length: data.len() as u16,
+            ..Default::default()
+        };
 
         let command = ArtCommand::Output(output);
         let bytes = command
@@ -181,7 +183,11 @@ impl Bridge for ArtNetBridge {
                                     artnet_to_clasp(&command, &namespace, &universes, &dmx_state)
                                 {
                                     for msg in messages {
-                                        if tx.send(BridgeEvent::ToClasp(msg)).await.is_err() {
+                                        if tx
+                                            .send(BridgeEvent::ToClasp(Box::new(msg)))
+                                            .await
+                                            .is_err()
+                                        {
                                             break;
                                         }
                                     }
@@ -212,36 +218,33 @@ impl Bridge for ArtNetBridge {
     }
 
     async fn send(&self, message: Message) -> Result<()> {
-        match &message {
-            Message::Set(set) => {
-                // Parse address: /artnet/{universe}/{channel}
-                let parts: Vec<&str> = set.address.split('/').collect();
+        if let Message::Set(set) = &message {
+            // Parse address: /artnet/{universe}/{channel}
+            let parts: Vec<&str> = set.address.split('/').collect();
 
-                if parts.len() >= 4 {
-                    let universe: u16 = parts[2]
-                        .parse()
-                        .map_err(|_| BridgeError::Mapping("Invalid universe".to_string()))?;
-                    let channel: usize = parts[3]
-                        .parse()
-                        .map_err(|_| BridgeError::Mapping("Invalid channel".to_string()))?;
+            if parts.len() >= 4 {
+                let universe: u16 = parts[2]
+                    .parse()
+                    .map_err(|_| BridgeError::Mapping("Invalid universe".to_string()))?;
+                let channel: usize = parts[3]
+                    .parse()
+                    .map_err(|_| BridgeError::Mapping("Invalid channel".to_string()))?;
 
-                    if channel > 0 && channel <= 512 {
-                        let value = set.value.as_i64().unwrap_or(0).clamp(0, 255) as u8;
+                if channel > 0 && channel <= 512 {
+                    let value = set.value.as_i64().unwrap_or(0).clamp(0, 255) as u8;
 
-                        // Get the DMX data, update it, then release the lock before await
-                        let dmx_copy = {
-                            let mut state = self.dmx_state.lock();
-                            let dmx = state.entry(universe).or_insert([0u8; 512]);
-                            dmx[channel - 1] = value;
-                            *dmx // Copy the array
-                        };
+                    // Get the DMX data, update it, then release the lock before await
+                    let dmx_copy = {
+                        let mut state = self.dmx_state.lock();
+                        let dmx = state.entry(universe).or_insert([0u8; 512]);
+                        dmx[channel - 1] = value;
+                        *dmx // Copy the array
+                    };
 
-                        // Now send without holding the lock
-                        self.send_dmx(universe, &dmx_copy).await?;
-                    }
+                    // Now send without holding the lock
+                    self.send_dmx(universe, &dmx_copy).await?;
                 }
             }
-            _ => {}
         }
 
         Ok(())

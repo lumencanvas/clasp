@@ -43,7 +43,7 @@ fn print_stats(name: &str, latencies: &mut [u64]) {
     let p999 = percentile(latencies, 99.9);
     let min = latencies[0];
     let max = latencies[latencies.len() - 1];
-    let avg: u64 = latencies.iter().sum::<u64>() / latencies.len() as u64;
+    let _avg: u64 = latencies.iter().sum::<u64>() / latencies.len() as u64;
 
     println!(
         "  ✓ {:35} │ p50: {:>6}µs │ p95: {:>6}µs │ p99: {:>6}µs │ p99.9: {:>6}µs │ min: {:>5}µs │ max: {:>6}µs │ n={}",

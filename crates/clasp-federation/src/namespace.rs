@@ -28,8 +28,7 @@ impl NamespaceManager {
 
     /// Register a peer's namespace patterns
     pub fn register_peer(&mut self, router_id: &str, patterns: Vec<String>) {
-        self.peer_namespaces
-            .insert(router_id.to_string(), patterns);
+        self.peer_namespaces.insert(router_id.to_string(), patterns);
     }
 
     /// Remove a peer's namespace registrations

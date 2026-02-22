@@ -9,7 +9,7 @@
 use crate::{TestResult, TestSuite};
 use bytes::BytesMut;
 use clasp_core::types::{PublishMessage, SetMessage, SignalType};
-use clasp_core::{codec, Frame, Message, QoS, Value};
+use clasp_core::{codec, Message, Value};
 use hdrhistogram::Histogram;
 use mqttbytes::v4::read as mqtt_read;
 use mqttbytes::v4::Publish;
@@ -38,7 +38,7 @@ pub fn benchmark_three_way_encoding(iterations: usize) -> TestResult {
     let clasp_start = Instant::now();
     for _ in 0..iterations {
         let msg = Message::Set(SetMessage {
-            address: format!("/{}", topic.replace("/", "/")),
+            address: format!("/{}", topic),
             value: Value::Float(float_value),
             revision: None,
             lock: false,
@@ -53,7 +53,7 @@ pub fn benchmark_three_way_encoding(iterations: usize) -> TestResult {
     let osc_start = Instant::now();
     for _ in 0..iterations {
         let msg = OscMessage {
-            addr: format!("/{}", topic.replace("/", "/")),
+            addr: format!("/{}", topic),
             args: vec![OscType::Float(float_value as f32)],
         };
         let packet = OscPacket::Message(msg);
@@ -131,7 +131,7 @@ pub fn benchmark_three_way_decoding(iterations: usize) -> TestResult {
 
     // Pre-encode messages
     let clasp_msg = Message::Set(SetMessage {
-        address: format!("/{}", topic.replace("/", "/")),
+        address: format!("/{}", topic),
         value: Value::Float(float_value),
         revision: None,
         lock: false,
@@ -140,7 +140,7 @@ pub fn benchmark_three_way_decoding(iterations: usize) -> TestResult {
     let clasp_encoded = codec::encode(&clasp_msg).unwrap();
 
     let osc_msg = OscMessage {
-        addr: format!("/{}", topic.replace("/", "/")),
+        addr: format!("/{}", topic),
         args: vec![OscType::Float(float_value as f32)],
     };
     let osc_encoded = encoder::encode(&OscPacket::Message(osc_msg)).unwrap();
@@ -716,7 +716,7 @@ pub fn visualize_osc_to_clasp_bridge() -> TestResult {
     let name = "BRIDGE: OSC to CLASP data transformation".to_string();
 
     let mut output = String::new();
-    output.push_str("\n");
+    output.push('\n');
     output.push_str("╔═══════════════════════════════════════════════════════════════════════╗\n");
     output.push_str("║           OSC -> CLASP BRIDGE DATA TRANSFORMATION                     ║\n");
     output
@@ -763,7 +763,7 @@ pub fn visualize_osc_to_clasp_bridge() -> TestResult {
         clasp_bytes[3],
         ((clasp_bytes[2] as u16) << 8) | clasp_bytes[3] as u16
     ));
-    output.push_str("\n");
+    output.push('\n');
 
     // Example 2: Multiple values (RGB)
     output.push_str("━━━ Example 2: RGB color /light/color = [1.0, 0.5, 0.0] ━━━\n\n");
@@ -838,7 +838,7 @@ pub fn visualize_midi_to_clasp_bridge() -> TestResult {
     let name = "BRIDGE: MIDI to CLASP data transformation".to_string();
 
     let mut output = String::new();
-    output.push_str("\n");
+    output.push('\n');
     output.push_str("╔═══════════════════════════════════════════════════════════════════════╗\n");
     output.push_str("║           MIDI -> CLASP BRIDGE DATA TRANSFORMATION                    ║\n");
     output
@@ -867,7 +867,7 @@ pub fn visualize_midi_to_clasp_bridge() -> TestResult {
     let clasp_cc_bytes = codec::encode(&clasp_cc).unwrap();
 
     output.push_str("CLASP representation:\n");
-    output.push_str(&format!("  Address: /midi/device/cc/1/7\n"));
+    output.push_str("  Address: /midi/device/cc/1/7\n");
     output.push_str(&format!(
         "  Value: {} (normalized from 100/127)\n\n",
         normalized_value
@@ -902,9 +902,9 @@ pub fn visualize_midi_to_clasp_bridge() -> TestResult {
     let clasp_note_bytes = codec::encode(&clasp_note).unwrap();
 
     output.push_str("CLASP representation (as Event):\n");
-    output.push_str(&format!("  Address: /midi/device/note/1/60\n"));
-    output.push_str(&format!("  Signal: Event (one-shot trigger)\n"));
-    output.push_str(&format!("  Value: 1.0 (velocity normalized)\n\n"));
+    output.push_str("  Address: /midi/device/note/1/60\n");
+    output.push_str("  Signal: Event (one-shot trigger)\n");
+    output.push_str("  Value: 1.0 (velocity normalized)\n\n");
     output.push_str(&format_hex_dump(&clasp_note_bytes, "  "));
     output.push_str(&format!("  Total: {} bytes\n\n", clasp_note_bytes.len()));
 
@@ -946,7 +946,7 @@ pub fn test_security_jwt_validation() -> TestResult {
 
     let name = "SECURITY: JWT token validation".to_string();
     let mut output = String::new();
-    output.push_str("\n");
+    output.push('\n');
     output.push_str("╔═══════════════════════════════════════════════════════════════════════╗\n");
     output.push_str("║                    JWT SECURITY VALIDATION TESTS                      ║\n");
     output
@@ -987,7 +987,7 @@ pub fn test_security_jwt_validation() -> TestResult {
         &Validation::default(),
     ) {
         Ok(data) => {
-            output.push_str(&format!("  [PASS] Decoded successfully\n"));
+            output.push_str("  [PASS] Decoded successfully\n");
             output.push_str(&format!("    Subject: {}\n", data.claims.sub));
             output.push_str(&format!("    Read scopes: {:?}\n", data.claims.clasp.read));
             output.push_str(&format!(
@@ -1000,7 +1000,7 @@ pub fn test_security_jwt_validation() -> TestResult {
             all_passed = false;
         }
     }
-    output.push_str("\n");
+    output.push('\n');
 
     // Test 2: Expired token
     output.push_str("Test 2: Expired token rejection\n");
@@ -1032,7 +1032,7 @@ pub fn test_security_jwt_validation() -> TestResult {
             output.push_str(&format!("  [PASS] Correctly rejected: {}\n", e));
         }
     }
-    output.push_str("\n");
+    output.push('\n');
 
     // Test 3: Invalid signature
     output.push_str("Test 3: Invalid signature rejection\n");
@@ -1051,7 +1051,7 @@ pub fn test_security_jwt_validation() -> TestResult {
             output.push_str(&format!("  [PASS] Correctly rejected: {}\n", e));
         }
     }
-    output.push_str("\n");
+    output.push('\n');
 
     // Test 4: Tampered token
     output.push_str("Test 4: Tampered token rejection\n");
@@ -1075,7 +1075,7 @@ pub fn test_security_jwt_validation() -> TestResult {
             output.push_str(&format!("  [PASS] Correctly rejected: {}\n", e));
         }
     }
-    output.push_str("\n");
+    output.push('\n');
 
     // Test 5: Algorithm confusion attack
     output.push_str("Test 5: Algorithm confusion attack prevention\n");
@@ -1112,7 +1112,7 @@ pub fn test_security_jwt_validation() -> TestResult {
 pub fn test_security_scope_enforcement() -> TestResult {
     let name = "SECURITY: Address scope enforcement".to_string();
     let mut output = String::new();
-    output.push_str("\n");
+    output.push('\n');
     output.push_str("╔═══════════════════════════════════════════════════════════════════════╗\n");
     output.push_str("║                   ADDRESS SCOPE ENFORCEMENT TESTS                     ║\n");
     output
@@ -1245,7 +1245,7 @@ pub fn test_security_scope_enforcement() -> TestResult {
 pub fn stress_test_throughput_limit() -> TestResult {
     let name = "STRESS: Find throughput limit".to_string();
     let mut output = String::new();
-    output.push_str("\n");
+    output.push('\n');
     output.push_str("╔═══════════════════════════════════════════════════════════════════════╗\n");
     output.push_str("║                    THROUGHPUT LIMIT STRESS TEST                       ║\n");
     output
@@ -1307,7 +1307,7 @@ pub fn stress_test_concurrent_access() -> TestResult {
 
     let name = "STRESS: Concurrent multi-threaded access".to_string();
     let mut output = String::new();
-    output.push_str("\n");
+    output.push('\n');
     output.push_str("╔═══════════════════════════════════════════════════════════════════════╗\n");
     output.push_str("║                 CONCURRENT ACCESS STRESS TEST                         ║\n");
     output
@@ -1369,7 +1369,7 @@ pub fn stress_test_concurrent_access() -> TestResult {
 pub fn stress_test_memory_stability() -> TestResult {
     let name = "STRESS: Memory stability under sustained load".to_string();
     let mut output = String::new();
-    output.push_str("\n");
+    output.push('\n');
     output.push_str("╔═══════════════════════════════════════════════════════════════════════╗\n");
     output.push_str("║                  MEMORY STABILITY STRESS TEST                         ║\n");
     output

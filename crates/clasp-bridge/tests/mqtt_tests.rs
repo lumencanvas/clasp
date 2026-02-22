@@ -180,15 +180,12 @@ async fn test_clasp_to_mqtt_translation() {
     let received_clone = received.clone();
     tokio::spawn(async move {
         loop {
-            match eventloop.poll().await {
-                Ok(Event::Incoming(Packet::Publish(publish))) => {
-                    if publish.topic == "test/output/value" {
-                        let payload = String::from_utf8_lossy(&publish.payload);
-                        *received_clone.lock().unwrap() = Some(payload.to_string());
-                        break;
-                    }
+            if let Ok(Event::Incoming(Packet::Publish(publish))) = eventloop.poll().await {
+                if publish.topic == "test/output/value" {
+                    let payload = String::from_utf8_lossy(&publish.payload);
+                    *received_clone.lock().unwrap() = Some(payload.to_string());
+                    break;
                 }
-                _ => {}
             }
         }
     });

@@ -63,10 +63,7 @@ impl FederationManager {
     ///
     /// The link will perform the CLASP handshake, exchange federation metadata,
     /// and begin relaying messages. Call `link.run(receiver)` to start it.
-    pub fn create_link(
-        &self,
-        sender: Arc<dyn clasp_transport::TransportSender>,
-    ) -> FederationLink {
+    pub fn create_link(&self, sender: Arc<dyn clasp_transport::TransportSender>) -> FederationLink {
         FederationLink::new(self.config.clone(), sender, self.event_tx.clone())
     }
 
@@ -80,26 +77,28 @@ impl FederationManager {
                 router_id,
                 patterns,
             } => {
-                info!(
-                    "Registering peer {} namespaces: {:?}",
-                    router_id, patterns
-                );
+                info!("Registering peer {} namespaces: {:?}", router_id, patterns);
                 self.namespaces
                     .write()
                     .await
                     .register_peer(router_id, patterns.clone());
 
-                self.peers.write().await.entry(router_id.clone()).and_modify(|p| {
-                    p.namespaces = patterns.clone();
-                    p.state = PeerState::Syncing;
-                }).or_insert_with(|| PeerInfo {
-                    router_id: router_id.clone(),
-                    session_id: None,
-                    namespaces: patterns.clone(),
-                    endpoint: None,
-                    outbound: true,
-                    state: PeerState::Syncing,
-                });
+                self.peers
+                    .write()
+                    .await
+                    .entry(router_id.clone())
+                    .and_modify(|p| {
+                        p.namespaces = patterns.clone();
+                        p.state = PeerState::Syncing;
+                    })
+                    .or_insert_with(|| PeerInfo {
+                        router_id: router_id.clone(),
+                        session_id: None,
+                        namespaces: patterns.clone(),
+                        endpoint: None,
+                        outbound: true,
+                        state: PeerState::Syncing,
+                    });
 
                 // Check for conflicts
                 let conflicts = self.namespaces.read().await.find_conflicts();

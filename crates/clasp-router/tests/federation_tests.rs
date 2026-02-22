@@ -6,11 +6,11 @@
 
 #![cfg(all(feature = "websocket", feature = "federation"))]
 
-use clasp_core::{
-    codec, FederationOp, FederationSyncMessage, HelloMessage, Message,
-};
+use clasp_core::{codec, FederationOp, FederationSyncMessage, HelloMessage, Message};
 use clasp_router::{Router, RouterConfig};
-use clasp_transport::{Transport, TransportEvent, TransportReceiver, TransportSender, WebSocketTransport};
+use clasp_transport::{
+    Transport, TransportEvent, TransportReceiver, TransportSender, WebSocketTransport,
+};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::net::TcpListener;
@@ -140,11 +140,15 @@ async fn declare_and_ack<S: TransportSender, R: TransportReceiver>(
     sender.send(codec::encode(&declare).unwrap()).await.unwrap();
 
     let response = recv_msg(receiver).await;
-    assert!(response.is_some(), "should receive response for DeclareNamespaces");
+    assert!(
+        response.is_some(),
+        "should receive response for DeclareNamespaces"
+    );
     let msg = response.unwrap();
     assert!(
         matches!(msg, Message::Ack(_)),
-        "expected ACK for DeclareNamespaces, got: {:?}", msg
+        "expected ACK for DeclareNamespaces, got: {:?}",
+        msg
     );
 }
 
@@ -305,7 +309,10 @@ async fn test_request_sync_within_declared_namespaces() {
     })
     .await;
 
-    assert!(response.is_ok(), "should receive SyncComplete for valid sync request");
+    assert!(
+        response.is_ok(),
+        "should receive SyncComplete for valid sync request"
+    );
 
     handle.abort();
 }
@@ -366,7 +373,10 @@ async fn test_revision_vector_filters_out_of_scope_addresses() {
     })
     .await;
 
-    assert!(snapshot.is_err(), "should NOT receive snapshot for out-of-scope addresses");
+    assert!(
+        snapshot.is_err(),
+        "should NOT receive snapshot for out-of-scope addresses"
+    );
 
     handle.abort();
 }
@@ -421,7 +431,10 @@ async fn test_redeclare_namespaces_cleanup() {
     })
     .await;
 
-    assert!(stale.is_err(), "should NOT receive /sensors data after re-declaring to /audio only");
+    assert!(
+        stale.is_err(),
+        "should NOT receive /sensors data after re-declaring to /audio only"
+    );
 
     handle.abort();
 }
@@ -469,7 +482,10 @@ async fn test_federation_peer_receives_declared_namespace_data() {
     })
     .await;
 
-    assert!(received.is_ok(), "federation peer should receive data for declared namespace");
+    assert!(
+        received.is_ok(),
+        "federation peer should receive data for declared namespace"
+    );
 
     handle.abort();
 }

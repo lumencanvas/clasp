@@ -121,13 +121,13 @@ async fn run_sustained_load_test(
         let interval_start = Instant::now();
         let start_received = received_count.load(Ordering::Relaxed);
         let mut interval_sent: u64 = 0;
-        let mut latencies: Vec<u64> = Vec::with_capacity(messages_per_second_target * 10);
+        let _latencies: Vec<u64> = Vec::with_capacity(messages_per_second_target * 10);
 
         // (tx, rx) for measuring roundtrip latency
         let (tx, mut rx) = mpsc::channel::<Instant>(1000);
 
         // Spawn receiver task to measure latency
-        let counter = received_count.clone();
+        let _counter = received_count.clone();
         let receiver_handle = tokio::spawn(async move {
             let mut lat = Vec::new();
             while let Ok(sent_at) = rx.try_recv() {

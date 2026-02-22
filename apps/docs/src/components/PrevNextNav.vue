@@ -9,21 +9,21 @@ const props = defineProps({
 // Build a flat ordered list following the sidebar structure
 const PAGE_ORDER = [
   'index',
-  'how-to/installation/cli',
-  'how-to/installation/javascript-library',
-  'how-to/installation/python-library',
-  'how-to/installation/rust-library',
-  'tutorials/first-connection',
+  'getting-started',
+  'getting-started/first-connection',
 ]
 
 const SECTION_ORDER = [
-  'tutorials',
-  'how-to',
-  'explanation',
+  'getting-started',
+  'sdk',
+  'core',
+  'transports',
+  'protocols',
+  'deployment',
+  'auth',
+  'server',
   'reference',
-  'use-cases',
-  'integrations',
-  'appendix',
+  'concepts',
 ]
 
 const orderedPages = computed(() => {

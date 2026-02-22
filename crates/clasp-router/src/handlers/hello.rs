@@ -7,8 +7,8 @@ use clasp_core::{codec, ErrorMessage, Message, SecurityMode, ValidationResult};
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
-use crate::session::Session;
 use super::{send_chunked_snapshot, HandlerContext, MessageResult};
+use crate::session::Session;
 
 pub(crate) async fn handle(
     hello: &clasp_core::HelloMessage,
@@ -113,15 +113,14 @@ pub(crate) async fn handle(
         }
     };
 
-    let mut new_session =
-        Session::new(ctx.sender.clone(), hello.name.clone(), hello.features.clone());
+    let mut new_session = Session::new(
+        ctx.sender.clone(),
+        hello.name.clone(),
+        hello.features.clone(),
+    );
 
     if authenticated {
-        new_session.set_authenticated(
-            hello.token.clone().unwrap_or_default(),
-            subject,
-            scopes,
-        );
+        new_session.set_authenticated(hello.token.clone().unwrap_or_default(), subject, scopes);
     }
 
     let new_session = Arc::new(new_session);
@@ -135,10 +134,7 @@ pub(crate) async fn handle(
 
     #[cfg(feature = "federation")]
     if new_session.is_federation_peer() {
-        info!(
-            "Federation peer detected: {} ({})",
-            hello.name, session_id
-        );
+        info!("Federation peer detected: {} ({})", hello.name, session_id);
     }
 
     let welcome = new_session.welcome_message(&ctx.config.name, &ctx.config.features);

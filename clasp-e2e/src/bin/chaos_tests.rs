@@ -9,8 +9,6 @@
 use clasp_client::Clasp;
 use clasp_core::Value;
 use clasp_test_utils::TestRouter;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
@@ -206,19 +204,16 @@ async fn test_connection_churn() -> bool {
     let mut success_count = 0;
 
     for i in 0..iterations {
-        match Clasp::connect_to(&router.url()).await {
-            Ok(client) => {
-                // Quick operation
-                if client
-                    .set("/churn/test", Value::Int(i as i64))
-                    .await
-                    .is_ok()
-                {
-                    success_count += 1;
-                }
-                // Drop client (disconnect)
+        if let Ok(client) = Clasp::connect_to(&router.url()).await {
+            // Quick operation
+            if client
+                .set("/churn/test", Value::Int(i as i64))
+                .await
+                .is_ok()
+            {
+                success_count += 1;
             }
-            Err(_) => {}
+            // Drop client (disconnect)
         }
     }
 
@@ -263,14 +258,11 @@ async fn test_rapid_subscribe_unsubscribe() -> bool {
 
     for i in 0..iterations {
         let pattern = format!("/rapid/sub/{}", i);
-        match client.subscribe(&pattern, |_, _| {}).await {
-            Ok(sub_id) => {
-                // Immediately unsubscribe
-                if client.unsubscribe(sub_id).await.is_ok() {
-                    success_count += 1;
-                }
+        if let Ok(sub_id) = client.subscribe(&pattern, |_, _| {}).await {
+            // Immediately unsubscribe
+            if client.unsubscribe(sub_id).await.is_ok() {
+                success_count += 1;
             }
-            Err(_) => {}
         }
     }
 

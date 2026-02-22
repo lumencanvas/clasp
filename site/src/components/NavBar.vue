@@ -34,6 +34,7 @@ function goHome() {
       <a @click="scrollTo('ecosystem')">Ecosystem</a>
       <a @click="scrollTo('downloads')">Downloads</a>
       <a @click="scrollTo('spec')">Spec</a>
+      <a href="https://docs.clasp.to" target="_blank">Docs</a>
       <router-link to="/playground" class="playground-link">Playground</router-link>
       <a href="https://github.com/lumencanvas/clasp" target="_blank" class="github-link">GitHub</a>
     </div>

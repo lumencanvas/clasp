@@ -196,8 +196,7 @@ pub fn is_p2p_signal_address(address: &str) -> bool {
 ///
 /// Returns None if the address is not a valid P2P signal address
 pub fn extract_target_session(address: &str) -> Option<&str> {
-    if address.starts_with(P2P_SIGNAL_PREFIX) {
-        let target = &address[P2P_SIGNAL_PREFIX.len()..];
+    if let Some(target) = address.strip_prefix(P2P_SIGNAL_PREFIX) {
         if !target.is_empty() && !target.contains('/') {
             return Some(target);
         }

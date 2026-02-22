@@ -20,23 +20,18 @@
 //!   cargo run --bin relay-stress-tests --release
 //!   cargo run --bin relay-stress-tests --release --features p2p
 
-use bytes::Bytes;
-use clasp_client::Clasp;
 use clasp_core::{
-    codec, BundleMessage, HelloMessage, Message, PublishMessage, SetMessage, SubscribeMessage,
-    UnsubscribeMessage, Value,
+    codec, BundleMessage, HelloMessage, Message, SetMessage, SubscribeMessage, Value,
 };
 use clasp_transport::{
     Transport, TransportEvent, TransportReceiver, TransportSender, WebSocketTransport,
 };
 use hdrhistogram::Histogram;
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, Semaphore};
 use tokio::time::timeout;
-use tracing::{debug, error, info, warn};
 
 #[cfg(feature = "p2p")]
 use {clasp_client::P2PEvent, clasp_core::P2PConfig};
@@ -102,6 +97,7 @@ struct TestResult {
 }
 
 impl TestResult {
+    #[allow(dead_code)]
     fn pass(name: &str, duration_ms: u128) -> Self {
         Self {
             name: name.to_string(),
@@ -526,7 +522,7 @@ async fn bench_fanout_throughput() -> TestResult {
             }
         }
 
-        let elapsed = publish_start.elapsed();
+        let _elapsed = publish_start.elapsed();
         let total_received: usize = received_counts.iter().sum();
         let expected = subscriber_count * message_count;
 
@@ -1358,9 +1354,9 @@ async fn test_sustained_load() -> TestResult {
                 sent.fetch_add(1, Ordering::Relaxed);
             }
 
-            while let Some(_) = client.recv_non_blocking().await {}
+            while (client.recv_non_blocking().await).is_some() {}
             i += 1;
-            if i % 10 == 0 {
+            if i.is_multiple_of(10) {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
         }

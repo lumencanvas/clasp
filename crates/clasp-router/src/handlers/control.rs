@@ -12,9 +12,7 @@ use tracing::warn;
 
 use super::{HandlerContext, MessageResult};
 
-pub(crate) async fn handle_ping(
-    _ctx: &HandlerContext<'_>,
-) -> Option<MessageResult> {
+pub(crate) async fn handle_ping(_ctx: &HandlerContext<'_>) -> Option<MessageResult> {
     let pong = Message::Pong;
     let bytes = codec::encode(&pong).ok()?;
     Some(MessageResult::Send(bytes))

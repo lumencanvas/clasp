@@ -9,7 +9,6 @@ mod tests {
     };
     use std::collections::HashMap;
     use std::time::Duration;
-    use tokio::time::timeout;
 
     /// Find an available port for testing
     async fn find_available_port() -> u16 {
@@ -319,7 +318,7 @@ mod tests {
 
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!("http://{}/api/v1/health", addr))
+            .get(format!("http://{}/api/v1/health", addr))
             .send()
             .await
             .unwrap();
@@ -348,7 +347,7 @@ mod tests {
 
         // Try to register with invalid JSON
         let response = client
-            .post(&format!("http://{}/api/v1/register", addr))
+            .post(format!("http://{}/api/v1/register", addr))
             .json(&serde_json::json!({ "invalid": "data" }))
             .send()
             .await
@@ -388,7 +387,7 @@ mod tests {
         // Discover with limit via query param
         let client_http = reqwest::Client::new();
         let response = client_http
-            .get(&format!("http://{}/api/v1/discover?limit=5", addr))
+            .get(format!("http://{}/api/v1/discover?limit=5", addr))
             .send()
             .await
             .unwrap();

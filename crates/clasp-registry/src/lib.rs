@@ -35,16 +35,16 @@
 
 pub mod entity;
 pub mod error;
-pub mod store;
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
+pub mod store;
 pub mod token;
 pub mod validator;
 
 pub use entity::{Entity, EntityId, EntityKeypair, EntityStatus, EntityType};
 pub use error::{RegistryError, Result};
-pub use store::{EntityStore, MemoryEntityStore};
 #[cfg(feature = "sqlite")]
 pub use sqlite::SqliteEntityStore;
+pub use store::{EntityStore, MemoryEntityStore};
 pub use token::{generate_token, parse_token, ENTITY_TOKEN_PREFIX};
 pub use validator::EntityValidator;

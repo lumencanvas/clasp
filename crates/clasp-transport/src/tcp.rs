@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 use crate::error::{Result, TransportError};
 use crate::traits::{TransportEvent, TransportReceiver, TransportSender, TransportServer};
@@ -78,7 +78,7 @@ impl TcpTransport {
         }
 
         let connected = Arc::new(Mutex::new(true));
-        let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<Bytes>(DEFAULT_CHANNEL_BUFFER_SIZE);
+        let (outgoing_tx, outgoing_rx) = mpsc::channel::<Bytes>(DEFAULT_CHANNEL_BUFFER_SIZE);
         let (incoming_tx, incoming_rx) =
             mpsc::channel::<TransportEvent>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
@@ -285,7 +285,7 @@ impl TransportServer for TcpServer {
         info!("TCP connection accepted from {}", peer_addr);
 
         let connected = Arc::new(Mutex::new(true));
-        let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<Bytes>(DEFAULT_CHANNEL_BUFFER_SIZE);
+        let (outgoing_tx, outgoing_rx) = mpsc::channel::<Bytes>(DEFAULT_CHANNEL_BUFFER_SIZE);
         let (incoming_tx, incoming_rx) =
             mpsc::channel::<TransportEvent>(DEFAULT_CHANNEL_BUFFER_SIZE);
 

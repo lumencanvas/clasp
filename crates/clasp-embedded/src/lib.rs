@@ -1192,6 +1192,12 @@ pub mod server {
         pub sub_count: u8,
     }
 
+    impl Default for Session {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl Session {
         pub const fn new() -> Self {
             Self {
@@ -1288,7 +1294,7 @@ pub mod server {
             let msg = decode_message(payload)?;
 
             match msg {
-                Message::Hello { name, .. } => {
+                Message::Hello { name: _, .. } => {
                     self.create_session(client_id);
                     Some(self.prepare_welcome(client_id))
                 }
@@ -1449,7 +1455,7 @@ mod tests {
         assert!((v.as_float().unwrap() - 1.25).abs() < 0.001);
 
         // Int
-        let n = encode_value(&mut buf, &Value::Int(-42));
+        let _n = encode_value(&mut buf, &Value::Int(-42));
         let (v, _) = decode_value(&buf).unwrap();
         assert_eq!(v.as_int(), Some(-42));
     }
@@ -1533,7 +1539,7 @@ mod tests {
     #[test]
     fn test_memory_size() {
         let client_size = core::mem::size_of::<Client>();
-        let cache_size = core::mem::size_of::<StateCache>();
+        let _cache_size = core::mem::size_of::<StateCache>();
 
         // Client should be under 4KB
         assert!(
@@ -1564,7 +1570,7 @@ mod tests {
     #[cfg(feature = "server")]
     #[test]
     fn test_mini_router_subscriptions() {
-        use server::{MiniRouter, Session, Subscription};
+        use server::{Session, Subscription};
 
         // Test subscription pattern matching
         let mut sub = Subscription::empty();

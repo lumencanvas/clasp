@@ -26,11 +26,13 @@ async fn test_artnet_dmx_packet_parsing() {
     dmx_data[1] = 128; // Channel 2 at half
     dmx_data[511] = 64; // Channel 512 at quarter
 
-    let mut output = Output::default();
-    output.subnet = 0;
-    output.data = dmx_data.to_vec().into();
-    output.length = 512;
-    output.sequence = 1;
+    let output = Output {
+        subnet: 0,
+        data: dmx_data.to_vec(),
+        length: 512,
+        sequence: 1,
+        ..Default::default()
+    };
 
     let command = ArtCommand::Output(output);
     let bytes = command
@@ -56,11 +58,13 @@ async fn test_artnet_dmx_packet_parsing() {
 async fn test_artnet_dmx_packet_generation() {
     let dmx_data: Vec<u8> = (0..512).map(|i| (i % 256) as u8).collect();
 
-    let mut output = Output::default();
-    output.subnet = 1;
-    output.data = dmx_data.clone().into();
-    output.length = 512;
-    output.sequence = 42;
+    let output = Output {
+        subnet: 1,
+        data: dmx_data.clone(),
+        length: 512,
+        sequence: 42,
+        ..Default::default()
+    };
 
     let command = ArtCommand::Output(output);
     let bytes = command
@@ -136,11 +140,13 @@ async fn test_artnet_multiple_universes() {
     for universe in 0u16..16 {
         let dmx_data = vec![universe as u8; 512];
 
-        let mut output = Output::default();
-        output.subnet = universe;
-        output.data = dmx_data.into();
-        output.length = 512;
-        output.sequence = universe as u8;
+        let output = Output {
+            subnet: universe,
+            data: dmx_data,
+            length: 512,
+            sequence: universe as u8,
+            ..Default::default()
+        };
 
         let command = ArtCommand::Output(output);
         let bytes = command
@@ -168,19 +174,21 @@ async fn test_artnet_multiple_universes() {
 async fn test_artnet_dmx_values() {
     // Test all 256 values
     let mut dmx_data = [0u8; 512];
-    for i in 0..256 {
-        dmx_data[i] = i as u8;
+    for (i, item) in dmx_data.iter_mut().enumerate().take(256) {
+        *item = i as u8;
     }
     // Fill rest with test pattern
-    for i in 256..512 {
-        dmx_data[i] = 255 - ((i - 256) as u8);
+    for (i, item) in dmx_data.iter_mut().enumerate().skip(256) {
+        *item = 255 - ((i - 256) as u8);
     }
 
-    let mut output = Output::default();
-    output.subnet = 0;
-    output.data = dmx_data.to_vec().into();
-    output.length = 512;
-    output.sequence = 1;
+    let output = Output {
+        subnet: 0,
+        data: dmx_data.to_vec(),
+        length: 512,
+        sequence: 1,
+        ..Default::default()
+    };
 
     let command = ArtCommand::Output(output);
     let bytes = command
@@ -192,14 +200,14 @@ async fn test_artnet_dmx_values() {
     match parsed {
         ArtCommand::Output(out) => {
             let data: &[u8] = &out.data;
-            for i in 0..256 {
+            for (i, &val) in data.iter().enumerate().take(256) {
                 assert_eq!(
-                    data[i],
+                    val,
                     i as u8,
                     "Channel {} mismatch: expected {}, got {}",
                     i + 1,
                     i,
-                    data[i]
+                    val
                 );
             }
         }
@@ -212,11 +220,13 @@ async fn test_artnet_dmx_values() {
 async fn test_artnet_sequence_numbers() {
     // Test sequence number rollover
     for seq in [0u8, 1, 127, 128, 254, 255] {
-        let mut output = Output::default();
-        output.subnet = 0;
-        output.data = vec![0u8; 512].into();
-        output.length = 512;
-        output.sequence = seq;
+        let output = Output {
+            subnet: 0,
+            data: vec![0u8; 512],
+            length: 512,
+            sequence: seq,
+            ..Default::default()
+        };
 
         let command = ArtCommand::Output(output);
         let bytes = command
@@ -256,11 +266,13 @@ async fn test_artnet_roundtrip() {
     dmx_data[255] = 128;
     dmx_data[511] = 64;
 
-    let mut output = Output::default();
-    output.subnet = 0;
-    output.data = dmx_data.to_vec().into();
-    output.length = 512;
-    output.sequence = 1;
+    let output = Output {
+        subnet: 0,
+        data: dmx_data.to_vec(),
+        length: 512,
+        sequence: 1,
+        ..Default::default()
+    };
 
     let command = ArtCommand::Output(output);
     let bytes = command

@@ -18,8 +18,8 @@ use clasp_transport::{
 };
 use std::time::Duration;
 use tokio::time::timeout;
-use tracing::{error, info, warn};
 
+#[allow(dead_code)]
 type TestError = Box<dyn std::error::Error + Send + Sync>;
 
 // ============================================================================
@@ -207,6 +207,7 @@ impl TestClient {
             .map_err(|e| format!("Send failed: {}", e))
     }
 
+    #[allow(dead_code)]
     async fn publish(&mut self, address: &str, value: Value) -> Result<(), String> {
         let publish = Message::Publish(PublishMessage {
             address: address.to_string(),

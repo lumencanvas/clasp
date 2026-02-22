@@ -161,11 +161,8 @@ async fn test_connection_error_invalid_url() {
     for url in invalid_urls {
         let connect_result = timeout(Duration::from_secs(2), Clasp::connect_to(url)).await;
 
-        match connect_result {
-            Ok(Ok(_)) => {
-                panic!("Should have failed for invalid URL: {}", url);
-            }
-            _ => {} // Expected: error or timeout
+        if let Ok(Ok(_)) = connect_result {
+            panic!("Should have failed for invalid URL: {}", url);
         }
     }
 }
@@ -454,7 +451,7 @@ async fn test_stream() {
         client
             .stream("/sensors/accel", Value::Float(i as f64 * 0.1))
             .await
-            .expect(&format!("Stream {} failed", i));
+            .unwrap_or_else(|_| panic!("Stream {} failed", i));
     }
 
     client.close().await;
@@ -586,7 +583,7 @@ async fn test_clock_sync() {
     let diff = (server_time as i64 - now_micros).abs();
     // Allow up to 1 hour difference for any sync offset
     assert!(
-        diff < 3600_000_000,
+        diff < 3_600_000_000,
         "Server time too far from local: diff={}",
         diff
     );
@@ -902,12 +899,12 @@ async fn test_concurrent_operations() {
     let mut success_count = 0;
     for (i, client) in clients.iter().enumerate() {
         for j in 0..5 {
-            match client
+            if client
                 .set(&format!("/concurrent/{}/{}", i, j), (i * 10 + j) as f64)
                 .await
+                .is_ok()
             {
-                Ok(()) => success_count += 1,
-                Err(_) => {}
+                success_count += 1;
             }
         }
     }

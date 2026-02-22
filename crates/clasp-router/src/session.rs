@@ -71,10 +71,18 @@ struct StubSender;
 
 #[async_trait::async_trait]
 impl TransportSender for StubSender {
-    async fn send(&self, _data: Bytes) -> clasp_transport::Result<()> { Ok(()) }
-    fn try_send(&self, _data: Bytes) -> clasp_transport::Result<()> { Ok(()) }
-    fn is_connected(&self) -> bool { false }
-    async fn close(&self) -> clasp_transport::Result<()> { Ok(()) }
+    async fn send(&self, _data: Bytes) -> clasp_transport::Result<()> {
+        Ok(())
+    }
+    fn try_send(&self, _data: Bytes) -> clasp_transport::Result<()> {
+        Ok(())
+    }
+    fn is_connected(&self) -> bool {
+        false
+    }
+    async fn close(&self) -> clasp_transport::Result<()> {
+        Ok(())
+    }
 }
 
 impl Session {
@@ -164,9 +172,9 @@ impl Session {
         if self.scopes.is_empty() && !self.authenticated {
             return true;
         }
-        self.scopes.iter().any(|scope| {
-            scope.action() == Action::Read && scope.allows(Action::Read, address)
-        })
+        self.scopes
+            .iter()
+            .any(|scope| scope.action() == Action::Read && scope.allows(Action::Read, address))
     }
 
     /// Get the scopes for this session

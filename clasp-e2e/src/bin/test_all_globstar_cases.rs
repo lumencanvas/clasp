@@ -1,4 +1,4 @@
-use clasp_core::{address::Pattern, SubscribeOptions};
+use clasp_core::SubscribeOptions;
 use clasp_router::subscription::{Subscription, SubscriptionManager};
 
 fn main() {
@@ -29,9 +29,9 @@ fn main() {
 
         let subscribers = manager.find_subscribers(address, None);
 
-        let status = if direct_match && subscribers.len() == 1 {
-            "PASS"
-        } else if !direct_match && subscribers.is_empty() {
+        let status = if (direct_match && subscribers.len() == 1)
+            || (!direct_match && subscribers.is_empty())
+        {
             "PASS"
         } else {
             "FAIL"

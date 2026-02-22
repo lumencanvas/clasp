@@ -10,7 +10,7 @@
 use clasp_client::Clasp;
 use clasp_core::SecurityMode;
 use clasp_router::{Router, RouterConfig};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[cfg(target_os = "linux")]
 fn get_process_memory_kb() -> Option<u64> {
@@ -85,7 +85,7 @@ async fn measure_memory_per_connection(
     // Measure memory after connections
     let after_connect = get_process_memory_kb()?;
     let memory_used = after_connect.saturating_sub(baseline);
-    let per_connection = if clients.len() > 0 {
+    let per_connection = if !clients.is_empty() {
         memory_used as f64 / clients.len() as f64
     } else {
         0.0

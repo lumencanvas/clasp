@@ -286,9 +286,7 @@ fn collect_filtered(
         }
 
         // Signal-type filter: empty types set means "match all"
-        if entry.types.is_empty()
-            || signal_type.map_or(true, |st| entry.types.contains(&st))
-        {
+        if entry.types.is_empty() || signal_type.is_none_or(|st| entry.types.contains(&st)) {
             results.insert(entry.session_id.clone());
         }
     }
@@ -322,8 +320,7 @@ impl SubscriptionManager {
 
     /// Add a subscription
     pub fn add(&self, sub: Subscription) {
-        let pattern_segments: Vec<String> =
-            sub.pattern.address().segments().to_vec();
+        let pattern_segments: Vec<String> = sub.pattern.address().segments().to_vec();
         let segments: Vec<&str> = pattern_segments.iter().map(|s| s.as_str()).collect();
 
         // Determine if any segment is a partial wildcard (contains `*` but
@@ -354,8 +351,7 @@ impl SubscriptionManager {
         let mut inner = self.inner.write();
         let key = (session_id.clone(), id);
         if let Some(sub) = inner.subscriptions.remove(&key) {
-            let pattern_segments: Vec<String> =
-                sub.pattern.address().segments().to_vec();
+            let pattern_segments: Vec<String> = sub.pattern.address().segments().to_vec();
             let segments: Vec<&str> = pattern_segments.iter().map(|s| s.as_str()).collect();
             inner.root.remove(&segments, session_id, id);
             Some(sub)
@@ -650,17 +646,18 @@ mod tests {
         );
 
         assert_eq!(
-            manager.find_subscribers("/chat/room/abc/messages", None).len(),
+            manager
+                .find_subscribers("/chat/room/abc/messages", None)
+                .len(),
             1
         );
         assert_eq!(
-            manager.find_subscribers("/chat/room/xyz/messages", None).len(),
+            manager
+                .find_subscribers("/chat/room/xyz/messages", None)
+                .len(),
             0
         );
-        assert_eq!(
-            manager.find_subscribers("/chat/room/abc", None).len(),
-            0
-        );
+        assert_eq!(manager.find_subscribers("/chat/room/abc", None).len(), 0);
     }
 
     #[test]
@@ -678,16 +675,22 @@ mod tests {
         );
 
         assert_eq!(
-            manager.find_subscribers("/chat/room/abc/messages", None).len(),
+            manager
+                .find_subscribers("/chat/room/abc/messages", None)
+                .len(),
             1
         );
         assert_eq!(
-            manager.find_subscribers("/chat/room/xyz/messages", None).len(),
+            manager
+                .find_subscribers("/chat/room/xyz/messages", None)
+                .len(),
             1
         );
         // * should not match multiple segments
         assert_eq!(
-            manager.find_subscribers("/chat/room/a/b/messages", None).len(),
+            manager
+                .find_subscribers("/chat/room/a/b/messages", None)
+                .len(),
             0
         );
     }
@@ -712,7 +715,9 @@ mod tests {
         assert_eq!(manager.find_subscribers("/chat/room", None).len(), 1);
         // ** matches many segments
         assert_eq!(
-            manager.find_subscribers("/chat/room/abc/messages", None).len(),
+            manager
+                .find_subscribers("/chat/room/abc/messages", None)
+                .len(),
             1
         );
     }

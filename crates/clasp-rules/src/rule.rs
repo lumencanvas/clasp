@@ -29,9 +29,7 @@ pub struct Rule {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Trigger {
     /// Fires when a parameter matching the pattern changes
-    OnChange {
-        pattern: String,
-    },
+    OnChange { pattern: String },
     /// Fires when a parameter crosses a threshold
     OnThreshold {
         address: String,
@@ -41,13 +39,9 @@ pub enum Trigger {
         below: Option<f64>,
     },
     /// Fires when an event matching the pattern is published
-    OnEvent {
-        pattern: String,
-    },
+    OnEvent { pattern: String },
     /// Fires periodically
-    OnInterval {
-        seconds: u64,
-    },
+    OnInterval { seconds: u64 },
 }
 
 /// A condition that must be true for a rule to fire
@@ -117,10 +111,7 @@ impl CompareOp {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RuleAction {
     /// Set a parameter to a specific value
-    Set {
-        address: String,
-        value: Value,
-    },
+    Set { address: String, value: Value },
     /// Publish an event
     Publish {
         address: String,
@@ -135,41 +126,23 @@ pub enum RuleAction {
         transform: Transform,
     },
     /// Delay before the next action in the sequence
-    Delay {
-        milliseconds: u64,
-    },
+    Delay { milliseconds: u64 },
 }
 
 /// Value transformations for SetFromTrigger
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub enum Transform {
     /// Pass through unchanged
+    #[default]
     Identity,
     /// Linear scale: output = input * scale + offset
-    Scale {
-        scale: f64,
-        offset: f64,
-    },
+    Scale { scale: f64, offset: f64 },
     /// Clamp to range
-    Clamp {
-        min: f64,
-        max: f64,
-    },
+    Clamp { min: f64, max: f64 },
     /// Convert to boolean: true if input > threshold
-    Threshold {
-        value: f64,
-    },
+    Threshold { value: f64 },
     /// Invert within range: output = max - (input - min)
-    Invert {
-        min: f64,
-        max: f64,
-    },
-}
-
-impl Default for Transform {
-    fn default() -> Self {
-        Transform::Identity
-    }
+    Invert { min: f64, max: f64 },
 }
 
 impl Transform {
@@ -219,9 +192,9 @@ impl Trigger {
                 signal_type == SignalType::Param
                     && clasp_core::address::glob_match(pattern, address)
             }
-            Trigger::OnThreshold {
-                address: addr, ..
-            } => signal_type == SignalType::Param && addr == address,
+            Trigger::OnThreshold { address: addr, .. } => {
+                signal_type == SignalType::Param && addr == address
+            }
             Trigger::OnEvent { pattern } => {
                 signal_type == SignalType::Event
                     && clasp_core::address::glob_match(pattern, address)
@@ -252,10 +225,7 @@ mod tests {
 
     #[test]
     fn test_transform_clamp() {
-        let t = Transform::Clamp {
-            min: 0.0,
-            max: 1.0,
-        };
+        let t = Transform::Clamp { min: 0.0, max: 1.0 };
         assert_eq!(t.apply(&Value::Float(1.5)), Value::Float(1.0));
         assert_eq!(t.apply(&Value::Float(-0.5)), Value::Float(0.0));
         assert_eq!(t.apply(&Value::Float(0.5)), Value::Float(0.5));
@@ -270,10 +240,7 @@ mod tests {
 
     #[test]
     fn test_transform_invert() {
-        let t = Transform::Invert {
-            min: 0.0,
-            max: 1.0,
-        };
+        let t = Transform::Invert { min: 0.0, max: 1.0 };
         assert_eq!(t.apply(&Value::Float(0.25)), Value::Float(0.75));
         assert_eq!(t.apply(&Value::Float(0.0)), Value::Float(1.0));
     }

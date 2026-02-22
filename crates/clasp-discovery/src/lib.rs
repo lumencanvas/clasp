@@ -24,6 +24,7 @@ pub use error::{DiscoveryError, Result};
 #[cfg(feature = "rendezvous")]
 pub use rendezvous::{DeviceRegistration, RendezvousClient, RendezvousConfig, RendezvousServer};
 
+#[cfg(feature = "rendezvous")]
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -32,7 +33,7 @@ use tokio::sync::mpsc;
 #[derive(Debug, Clone)]
 pub enum DiscoveryEvent {
     /// Device discovered
-    Found(Device),
+    Found(Box<Device>),
     /// Device removed/lost
     Lost(String), // Device ID
     /// Error during discovery
@@ -143,6 +144,7 @@ impl RendezvousKeepalive {
         }
     }
 
+    #[allow(dead_code)]
     async fn unregister(&self) -> Result<()> {
         let device_id: Option<String> = self.device_id.write().take();
         if let Some(ref id) = device_id {
@@ -306,6 +308,7 @@ impl Discovery {
                 event = rx.recv() => {
                     match event {
                         Some(DiscoveryEvent::Found(device)) => {
+                            let device = *device;
                             if seen_ids.insert(device.id.clone()) {
                                 self.devices.insert(device.id.clone(), device.clone());
                                 all_devices.push(device);
@@ -406,7 +409,7 @@ impl Discovery {
                                 discovered_at: now,
                                 last_seen: now,
                             };
-                            let _ = tx_clone.send(DiscoveryEvent::Found(device)).await;
+                            let _ = tx_clone.send(DiscoveryEvent::Found(Box::new(device))).await;
                         }
                     }
                     Err(e) => {

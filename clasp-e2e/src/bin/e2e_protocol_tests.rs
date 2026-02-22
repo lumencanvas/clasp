@@ -5,12 +5,9 @@
 //! - Multiple bridges working together
 //! - Full message flow verification
 
-use clasp_bridge::osc::OscBridge;
-use clasp_bridge::{Bridge, BridgeEvent};
 use clasp_client::Clasp;
 use clasp_core::{SecurityMode, Value};
 use clasp_router::{Router, RouterConfig};
-use rosc::{OscMessage, OscPacket, OscType};
 use std::net::UdpSocket;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -57,6 +54,7 @@ async fn find_available_port() -> u16 {
     listener.local_addr().unwrap().port()
 }
 
+#[allow(dead_code)]
 fn find_udp_port() -> u16 {
     let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
     socket.local_addr().unwrap().port()
@@ -323,10 +321,10 @@ async fn test_fanout_to_multiple_clients() -> TestResult {
     let mut receivers = vec![];
     let counters: Vec<Arc<AtomicU32>> = (0..3).map(|_| Arc::new(AtomicU32::new(0))).collect();
 
-    for i in 0..3 {
+    for (i, counter_ref) in counters.iter().enumerate().take(3) {
         match Clasp::connect_to(&router.url()).await {
             Ok(client) => {
-                let counter = counters[i].clone();
+                let counter = counter_ref.clone();
                 let _ = client
                     .subscribe("/fanout/**", move |_, _| {
                         counter.fetch_add(1, Ordering::SeqCst);

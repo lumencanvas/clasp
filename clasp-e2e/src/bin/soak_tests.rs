@@ -107,6 +107,7 @@ impl SoakStats {
         self.connections.fetch_add(1, Ordering::Relaxed);
     }
 
+    #[allow(dead_code)]
     fn record_reconnect(&self) {
         self.reconnections.fetch_add(1, Ordering::Relaxed);
     }

@@ -3,19 +3,19 @@
 //! Each CLASP message type has a dedicated handler module. The `handle_message()`
 //! function dispatches to the appropriate handler based on message type.
 
-pub mod hello;
-pub mod subscribe;
-pub mod set;
-pub mod get;
-pub mod publish;
 pub mod bundle;
 pub mod control;
 #[cfg(feature = "federation")]
 pub mod federation;
+pub mod get;
+pub mod hello;
+pub mod publish;
+pub mod set;
+pub mod subscribe;
 
 use bytes::Bytes;
 use clasp_core::{
-    codec, ErrorMessage, Frame, Message, SnapshotMessage, SecurityMode, TokenValidator,
+    codec, ErrorMessage, Frame, Message, SecurityMode, SnapshotMessage, TokenValidator,
 };
 #[cfg(feature = "rules")]
 use clasp_rules::RulesEngine;
@@ -26,16 +26,17 @@ use tracing::{debug, info, warn, Instrument};
 use crate::{
     gesture::GestureRegistry,
     p2p::P2PCapabilities,
+    router::{RouterConfig, SnapshotFilter, WriteValidator},
     session::{Session, SessionId},
     state::RouterState,
     subscription::SubscriptionManager,
-    router::{RouterConfig, WriteValidator, SnapshotFilter},
 };
 
 /// Result of handling a message
 pub(crate) enum MessageResult {
     NewSession(Arc<Session>),
     Send(Bytes),
+    #[allow(dead_code)]
     Broadcast(Bytes, SessionId),
     Disconnect,
     None,
@@ -155,7 +156,8 @@ pub(crate) async fn handle_message(
     #[cfg(feature = "metrics")]
     {
         let elapsed = start.elapsed().as_secs_f64();
-        metrics::histogram!("clasp_message_latency_seconds", "type" => metrics_label).record(elapsed);
+        metrics::histogram!("clasp_message_latency_seconds", "type" => metrics_label)
+            .record(elapsed);
     }
 
     result
@@ -179,7 +181,7 @@ pub(crate) async fn send_chunked_snapshot(
     }
 
     let chunks = snapshot.params.chunks(MAX_SNAPSHOT_CHUNK_SIZE);
-    let chunk_count = (param_count + MAX_SNAPSHOT_CHUNK_SIZE - 1) / MAX_SNAPSHOT_CHUNK_SIZE;
+    let chunk_count = param_count.div_ceil(MAX_SNAPSHOT_CHUNK_SIZE);
 
     debug!(
         "Chunking snapshot of {} params into {} chunks",
@@ -196,7 +198,9 @@ pub(crate) async fn send_chunked_snapshot(
                 if let Err(e) = sender.send(bytes).await {
                     warn!(
                         "Failed to send snapshot chunk {}/{}: {}",
-                        i + 1, chunk_count, e
+                        i + 1,
+                        chunk_count,
+                        e
                     );
                     break;
                 }
@@ -204,7 +208,9 @@ pub(crate) async fn send_chunked_snapshot(
             Err(e) => {
                 warn!(
                     "Failed to encode snapshot chunk {}/{}: {}",
-                    i + 1, chunk_count, e
+                    i + 1,
+                    chunk_count,
+                    e
                 );
             }
         }
@@ -314,7 +320,9 @@ pub(crate) fn broadcast_to_subscriber_list(
             None => true,
         })
         .filter_map(|id| {
-            sessions.get(id).map(|entry| (id.clone(), Arc::clone(entry.value())))
+            sessions
+                .get(id)
+                .map(|entry| (id.clone(), Arc::clone(entry.value())))
         })
         .collect();
 

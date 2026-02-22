@@ -161,14 +161,9 @@ async fn test_osc_high_frequency() {
     // Give UDP a moment to deliver
     std::thread::sleep(Duration::from_millis(100));
 
-    loop {
-        match receiver.recv_from(&mut buf) {
-            Ok((len, _)) => {
-                if parse_osc_message(&buf[..len]).is_some() {
-                    received += 1;
-                }
-            }
-            Err(_) => break,
+    while let Ok((len, _)) = receiver.recv_from(&mut buf) {
+        if parse_osc_message(&buf[..len]).is_some() {
+            received += 1;
         }
     }
 
@@ -193,7 +188,8 @@ async fn test_osc_address_patterns() {
 
     for addr in valid_addresses {
         let packet = create_osc_message(addr, vec![OscType::Float(0.0)]);
-        let parsed = parse_osc_message(&packet).expect(&format!("Should parse address: {}", addr));
+        let parsed =
+            parse_osc_message(&packet).unwrap_or_else(|| panic!("Should parse address: {}", addr));
         assert_eq!(parsed.addr, addr);
     }
 }

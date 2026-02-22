@@ -5,8 +5,8 @@
 //! normal client session on the peer router.
 
 use clasp_core::{
-    codec, FederationOp, FederationSyncMessage, HelloMessage, Message, QoS,
-    SetMessage, SubscribeMessage, Value, PROTOCOL_VERSION,
+    codec, FederationOp, FederationSyncMessage, HelloMessage, Message, QoS, SetMessage,
+    SubscribeMessage, Value, PROTOCOL_VERSION,
 };
 use clasp_transport::{TransportEvent, TransportReceiver, TransportSender};
 use std::collections::HashMap;
@@ -33,10 +33,7 @@ pub enum LinkEvent {
         origin: String,
     },
     /// Received a PUBLISH from the peer (should be broadcast locally)
-    RemotePublish {
-        message: Message,
-        origin: String,
-    },
+    RemotePublish { message: Message, origin: String },
     /// Peer sync complete
     SyncComplete {
         router_id: String,
@@ -49,9 +46,7 @@ pub enum LinkEvent {
         reason: Option<String>,
     },
     /// Peer connected and handshake complete
-    Connected {
-        router_id: String,
-    },
+    Connected { router_id: String },
 }
 
 /// A federation link to a single peer router.
@@ -97,10 +92,7 @@ impl FederationLink {
     ///
     /// This performs the handshake, initial sync, and then relays messages
     /// until the connection is closed. Runs as an async task.
-    pub async fn run(
-        mut self,
-        mut receiver: Box<dyn TransportReceiver>,
-    ) -> Result<()> {
+    pub async fn run(mut self, mut receiver: Box<dyn TransportReceiver>) -> Result<()> {
         // Step 1: Send HELLO with federation feature
         self.send_hello().await?;
         self.state = PeerState::Handshaking;
@@ -306,8 +298,7 @@ impl FederationLink {
 
                 // Track revision
                 if let Some(rev) = set_msg.revision {
-                    self.revision_vector
-                        .insert(set_msg.address.clone(), rev);
+                    self.revision_vector.insert(set_msg.address.clone(), rev);
                 }
 
                 let _ = self
@@ -365,7 +356,10 @@ impl FederationLink {
             }
 
             Message::Error(err) => {
-                warn!("Federation peer error: {} (code: {})", err.message, err.code);
+                warn!(
+                    "Federation peer error: {} (code: {})",
+                    err.message, err.code
+                );
             }
 
             Message::Ping => {
@@ -374,7 +368,10 @@ impl FederationLink {
             }
 
             _ => {
-                debug!("Federation link: ignoring message type {:?}", msg.type_code());
+                debug!(
+                    "Federation link: ignoring message type {:?}",
+                    msg.type_code()
+                );
             }
         }
 
@@ -391,10 +388,7 @@ impl FederationLink {
                     .or_else(|| self.peer.as_ref().map(|p| p.router_id.clone()))
                     .unwrap_or_default();
 
-                info!(
-                    "Peer {} declares namespaces: {:?}",
-                    router_id, msg.patterns
-                );
+                info!("Peer {} declares namespaces: {:?}", router_id, msg.patterns);
 
                 // Update peer info
                 if let Some(ref mut peer) = self.peer {

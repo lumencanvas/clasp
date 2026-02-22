@@ -625,9 +625,9 @@ fn test_timeline_with_start_time() {
         easing: EasingType::EaseInOut,
         bezier: None,
     }])
-    .with_start_time(1704067200_000_000);
+    .with_start_time(1_704_067_200_000_000);
 
-    assert_eq!(timeline.start_time, Some(1704067200_000_000));
+    assert_eq!(timeline.start_time, Some(1_704_067_200_000_000));
 }
 
 #[test]
@@ -653,7 +653,7 @@ fn test_encode_decode_timeline_publish() {
         },
     ])
     .with_loop(true)
-    .with_start_time(1704067200_000_000);
+    .with_start_time(1_704_067_200_000_000);
 
     let msg = Message::Publish(PublishMessage {
         address: "/lights/dimmer".to_string(),

@@ -7,9 +7,6 @@
 //! 4. Work with virtual MIDI ports (when available)
 //! 5. Handle high-rate MIDI streams
 
-#[cfg(feature = "midi")]
-use midir;
-
 /// MIDI message types (matching actual protocol)
 #[derive(Debug, Clone, PartialEq)]
 enum MidiMessage {
@@ -196,7 +193,8 @@ async fn test_midi_cc_parsing() {
     // Test all 16 channels
     for ch in 0..16u8 {
         let data = [0xB0 | ch, 1, 127];
-        let msg = parse_midi(&data).expect(&format!("Failed to parse CC on channel {}", ch));
+        let msg =
+            parse_midi(&data).unwrap_or_else(|_| panic!("Failed to parse CC on channel {}", ch));
         match msg {
             MidiMessage::ControlChange { channel, .. } => {
                 assert_eq!(channel, ch, "Channel {} mismatch", ch);
@@ -399,7 +397,8 @@ async fn test_midi_message_generation() {
 
     for original in messages {
         let bytes = generate_midi(&original);
-        let parsed = parse_midi(&bytes).expect(&format!("Failed to parse {:?}", original));
+        let parsed =
+            parse_midi(&bytes).unwrap_or_else(|_| panic!("Failed to parse {:?}", original));
 
         // Note: NoteOff with vel 0 might become NoteOn with vel 0
         // depending on implementation, so we compare types more loosely
@@ -444,7 +443,7 @@ async fn test_midi_virtual_ports() {
             }
 
             // Test passes - MIDI subsystem is functional
-            assert!(true, "MIDI subsystem is functional");
+            // MIDI subsystem is functional
         }
         (Err(e1), _) => {
             println!("MIDI input not available: {}. Skipping MIDI tests.", e1);
@@ -512,8 +511,8 @@ async fn test_midi_cc_to_clasp_address() {
         let value = 64u8;
 
         let midi_data = [0xB0 | channel, cc_num, value];
-        let msg =
-            parse_midi(&midi_data).expect(&format!("Should parse CC {} ({})", cc_num, description));
+        let msg = parse_midi(&midi_data)
+            .unwrap_or_else(|_| panic!("Should parse CC {} ({})", cc_num, description));
 
         match msg {
             MidiMessage::ControlChange {
@@ -551,8 +550,8 @@ async fn test_midi_pitch_bend_14bit_value() {
     ];
 
     for (midi_data, expected_value, description) in test_cases {
-        let msg =
-            parse_midi(&midi_data).expect(&format!("Should parse pitch bend ({})", description));
+        let msg = parse_midi(&midi_data)
+            .unwrap_or_else(|_| panic!("Should parse pitch bend ({})", description));
 
         match msg {
             MidiMessage::PitchBend { channel: ch, value } => {
@@ -577,8 +576,8 @@ async fn test_all_midi_channels() {
     for channel in 0..16u8 {
         // Note On on each channel
         let note_data = [0x90 | channel, 60, 100];
-        let msg =
-            parse_midi(&note_data).expect(&format!("Should parse Note On on channel {}", channel));
+        let msg = parse_midi(&note_data)
+            .unwrap_or_else(|_| panic!("Should parse Note On on channel {}", channel));
 
         match msg {
             MidiMessage::NoteOn { channel: ch, .. } => {
@@ -589,7 +588,8 @@ async fn test_all_midi_channels() {
 
         // CC on each channel
         let cc_data = [0xB0 | channel, 74, 64];
-        let msg = parse_midi(&cc_data).expect(&format!("Should parse CC on channel {}", channel));
+        let msg = parse_midi(&cc_data)
+            .unwrap_or_else(|_| panic!("Should parse CC on channel {}", channel));
 
         match msg {
             MidiMessage::ControlChange { channel: ch, .. } => {
@@ -641,7 +641,8 @@ async fn test_midi_encode_decode_roundtrip() {
 
     for original in test_messages {
         let encoded = generate_midi(&original);
-        let decoded = parse_midi(&encoded).expect(&format!("Should parse {:?}", original));
+        let decoded =
+            parse_midi(&encoded).unwrap_or_else(|_| panic!("Should parse {:?}", original));
         let re_encoded = generate_midi(&decoded);
 
         assert_eq!(

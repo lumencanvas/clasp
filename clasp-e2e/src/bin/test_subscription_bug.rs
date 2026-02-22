@@ -1,4 +1,4 @@
-use clasp_core::{SignalType, SubscribeOptions};
+use clasp_core::SubscribeOptions;
 use clasp_router::subscription::{Subscription, SubscriptionManager};
 
 fn main() {

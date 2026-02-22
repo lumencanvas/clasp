@@ -20,6 +20,7 @@ use {
 };
 
 /// Find an available port
+#[allow(dead_code)]
 async fn find_port() -> u16 {
     use tokio::net::TcpListener;
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();

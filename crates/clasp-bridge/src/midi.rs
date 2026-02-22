@@ -200,7 +200,7 @@ impl Bridge for MidiBridge {
                             let rt = tokio::runtime::Handle::try_current();
                             if let Ok(handle) = rt {
                                 handle.spawn(async move {
-                                    let _ = tx.send(BridgeEvent::ToClasp(msg)).await;
+                                    let _ = tx.send(BridgeEvent::ToClasp(Box::new(msg))).await;
                                 });
                             }
                         });

@@ -154,8 +154,8 @@ async fn benchmark_fanout(subscriber_count: usize) -> BenchmarkResult {
 
     // Create subscribers
     let mut subscribers = Vec::with_capacity(subscriber_count);
-    for i in 0..subscriber_count {
-        let counter = counters[i].clone();
+    for (i, counter_arc) in counters.iter().enumerate().take(subscriber_count) {
+        let counter = counter_arc.clone();
         match Clasp::connect_to(&router.url()).await {
             Ok(client) => {
                 let _ = client
@@ -250,7 +250,7 @@ async fn benchmark_address_scale(address_count: usize) -> BenchmarkResult {
     // Measure read back time (one at a time - simulates random access)
     let read_start = Instant::now();
     let mut read_count = 0usize;
-    for i in (0..address_count).step_by(address_count / 100.max(1)) {
+    for i in (0..address_count).step_by(address_count / 100) {
         if client.get(&format!("/addr/{}/value", i)).await.is_ok() {
             read_count += 1;
         }

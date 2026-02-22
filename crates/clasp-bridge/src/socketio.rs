@@ -247,7 +247,7 @@ impl Bridge for SocketIOBridge {
                     });
 
                     debug!("Socket.IO received event: {}", event_name);
-                    let _ = tx.send(BridgeEvent::ToClasp(msg)).await;
+                    let _ = tx.send(BridgeEvent::ToClasp(Box::new(msg))).await;
                 }
                 .boxed()
             });

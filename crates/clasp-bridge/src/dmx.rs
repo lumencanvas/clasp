@@ -3,7 +3,7 @@
 //! Supports common USB-DMX interfaces like ENTTEC DMX USB Pro
 
 use async_trait::async_trait;
-use clasp_core::{Message, SetMessage, Value};
+use clasp_core::Message;
 use parking_lot::Mutex;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -12,7 +12,7 @@ use tracing::{debug, error, info, warn};
 use crate::{Bridge, BridgeConfig, BridgeError, BridgeEvent, Result};
 
 /// DMX interface type
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DmxInterfaceType {
     /// ENTTEC DMX USB Pro
     EnttecPro,
@@ -21,13 +21,8 @@ pub enum DmxInterfaceType {
     /// Generic FTDI-based
     Ftdi,
     /// Virtual (for testing)
+    #[default]
     Virtual,
-}
-
-impl Default for DmxInterfaceType {
-    fn default() -> Self {
-        Self::Virtual
-    }
 }
 
 /// DMX bridge configuration
@@ -62,9 +57,10 @@ struct DmxSender {
     tx: std::sync::mpsc::Sender<DmxCommand>,
 }
 
+#[allow(dead_code)]
 enum DmxCommand {
     SetChannel(u16, u8),
-    SetFrame([u8; 512]),
+    SetFrame(Box<[u8; 512]>),
     Stop,
 }
 
@@ -165,7 +161,7 @@ impl DmxBridge {
         *self.dmx_state.lock() = *data;
 
         if let Some(sender) = &self.dmx_sender {
-            let _ = sender.tx.send(DmxCommand::SetFrame(*data));
+            let _ = sender.tx.send(DmxCommand::SetFrame(Box::new(*data)));
         }
     }
 
@@ -301,32 +297,29 @@ impl Bridge for DmxBridge {
     }
 
     async fn send(&self, message: Message) -> Result<()> {
-        match &message {
-            Message::Set(set) => {
-                // Parse address: /dmx/{universe}/{channel}
-                let parts: Vec<&str> = set.address.split('/').collect();
+        if let Message::Set(set) = &message {
+            // Parse address: /dmx/{universe}/{channel}
+            let parts: Vec<&str> = set.address.split('/').collect();
 
-                if parts.len() >= 4 {
-                    let universe: u16 = parts[2]
-                        .parse()
-                        .map_err(|_| BridgeError::Mapping("Invalid universe".to_string()))?;
+            if parts.len() >= 4 {
+                let universe: u16 = parts[2]
+                    .parse()
+                    .map_err(|_| BridgeError::Mapping("Invalid universe".to_string()))?;
 
-                    // Check if this is our universe
-                    if universe != self.dmx_config.universe {
-                        return Ok(());
-                    }
+                // Check if this is our universe
+                if universe != self.dmx_config.universe {
+                    return Ok(());
+                }
 
-                    let channel: u16 = parts[3]
-                        .parse()
-                        .map_err(|_| BridgeError::Mapping("Invalid channel".to_string()))?;
+                let channel: u16 = parts[3]
+                    .parse()
+                    .map_err(|_| BridgeError::Mapping("Invalid channel".to_string()))?;
 
-                    if channel > 0 && channel <= 512 {
-                        let value = set.value.as_i64().unwrap_or(0).clamp(0, 255) as u8;
-                        self.set_channel(channel, value);
-                    }
+                if channel > 0 && channel <= 512 {
+                    let value = set.value.as_i64().unwrap_or(0).clamp(0, 255) as u8;
+                    self.set_channel(channel, value);
                 }
             }
-            _ => {}
         }
 
         Ok(())

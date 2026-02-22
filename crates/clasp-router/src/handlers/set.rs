@@ -58,8 +58,7 @@ pub(crate) async fn handle(
     }
 
     if let Some(ref validator) = ctx.write_validator {
-        if let Err(reason) =
-            validator.validate_write(&set.address, &set.value, session, ctx.state)
+        if let Err(reason) = validator.validate_write(&set.address, &set.value, session, ctx.state)
         {
             warn!(
                 "Session {} denied SET to {} by write validator: {}",
@@ -78,8 +77,9 @@ pub(crate) async fn handle(
 
     match ctx.state.apply_set(set, &session.id) {
         Ok(revision) => {
-            let subscribers =
-                ctx.subscriptions.find_subscribers(&set.address, Some(SignalType::Param));
+            let subscribers = ctx
+                .subscriptions
+                .find_subscribers(&set.address, Some(SignalType::Param));
 
             #[cfg(feature = "metrics")]
             metrics::histogram!("clasp_broadcast_fanout").record(subscribers.len() as f64);
@@ -89,12 +89,7 @@ pub(crate) async fn handle(
             let broadcast_msg = Message::Set(updated_set);
 
             if let Ok(bytes) = codec::encode(&broadcast_msg) {
-                broadcast_to_subscriber_list(
-                    &bytes,
-                    &subscribers,
-                    ctx.sessions,
-                    None,
-                );
+                broadcast_to_subscriber_list(&bytes, &subscribers, ctx.sessions, None);
             }
 
             #[cfg(feature = "rules")]
@@ -108,7 +103,10 @@ pub(crate) async fn handle(
                 );
                 if !actions.is_empty() {
                     crate::router::execute_rule_actions(
-                        actions, ctx.state, ctx.sessions, ctx.subscriptions,
+                        actions,
+                        ctx.state,
+                        ctx.sessions,
+                        ctx.subscriptions,
                     );
                 }
             }

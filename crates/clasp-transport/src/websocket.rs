@@ -17,7 +17,6 @@ use tokio_tungstenite::{
         http::Request,
         protocol::Message as WsMessage,
     },
-    MaybeTlsStream, WebSocketStream,
 };
 use tracing::{debug, error, info, warn};
 
@@ -58,6 +57,7 @@ impl Default for WebSocketConfig {
 
 /// WebSocket transport
 pub struct WebSocketTransport {
+    #[allow(dead_code)]
     config: WebSocketConfig,
 }
 
@@ -427,9 +427,7 @@ impl TransportServer for WebSocketServer {
     }
 
     fn local_addr(&self) -> Result<SocketAddr> {
-        self.listener
-            .local_addr()
-            .map_err(|e| TransportError::Io(e))
+        self.listener.local_addr().map_err(TransportError::Io)
     }
 
     async fn close(&self) -> Result<()> {

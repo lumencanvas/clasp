@@ -158,10 +158,8 @@ impl ParamState {
         }
 
         // Handle lock release
-        if release_lock {
-            if self.lock_holder.as_deref() == Some(writer) {
-                self.lock_holder = None;
-            }
+        if release_lock && self.lock_holder.as_deref() == Some(writer) {
+            self.lock_holder = None;
         }
 
         // Apply conflict resolution

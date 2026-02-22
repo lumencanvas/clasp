@@ -168,7 +168,7 @@ async fn test_ack_message(config: &ConformanceConfig, report: &mut ConformanceRe
     }
 }
 
-async fn test_error_message(config: &ConformanceConfig, report: &mut ConformanceReport) {
+async fn test_error_message(_config: &ConformanceConfig, report: &mut ConformanceReport) {
     let start = Instant::now();
     let test_name = "ERROR message";
 

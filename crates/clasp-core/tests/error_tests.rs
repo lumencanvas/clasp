@@ -18,8 +18,7 @@
 
 use bytes::Bytes;
 use clasp_core::{
-    codec, ErrorMessage, HelloMessage, Message, SetMessage, SubscribeMessage, Value,
-    PROTOCOL_VERSION,
+    codec, HelloMessage, Message, SetMessage, SubscribeMessage, Value, PROTOCOL_VERSION,
 };
 use clasp_test_utils::TestRouter;
 use clasp_transport::{

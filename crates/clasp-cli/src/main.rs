@@ -879,7 +879,10 @@ fn load_signing_key(path: &std::path::Path) -> Result<SigningKey> {
     let hex_str = std::fs::read_to_string(path)
         .with_context(|| format!("Failed to read key file: {}", path.display()))?;
     let hex_str = hex_str.trim();
-    anyhow::ensure!(hex_str.len() == 64, "Key file must contain 64 hex characters (32-byte Ed25519 signing key)");
+    anyhow::ensure!(
+        hex_str.len() == 64,
+        "Key file must contain 64 hex characters (32-byte Ed25519 signing key)"
+    );
     let bytes = hex_decode(hex_str)?;
     let key_bytes: [u8; 32] = bytes
         .try_into()
@@ -892,7 +895,7 @@ fn hex_encode(bytes: &[u8]) -> String {
 }
 
 fn hex_decode(s: &str) -> Result<Vec<u8>> {
-    anyhow::ensure!(s.len() % 2 == 0, "Odd-length hex string");
+    anyhow::ensure!(s.len().is_multiple_of(2), "Odd-length hex string");
     (0..s.len())
         .step_by(2)
         .map(|i| u8::from_str_radix(&s[i..i + 2], 16).context("Invalid hex character"))
@@ -969,8 +972,8 @@ fn handle_key_command(action: KeyAction) -> Result<()> {
 
 #[cfg(feature = "caps")]
 fn parse_expiry_to_timestamp(expires: &str) -> Result<u64> {
-    let duration = clasp_core::security::parse_duration(expires)
-        .context("Failed to parse expiration")?;
+    let duration =
+        clasp_core::security::parse_duration(expires).context("Failed to parse expiration")?;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
@@ -983,7 +986,12 @@ fn handle_cap_command(action: CapAction) -> Result<()> {
     use clasp_caps::CapabilityToken;
 
     match action {
-        CapAction::Create { key, scopes, expires, audience } => {
+        CapAction::Create {
+            key,
+            scopes,
+            expires,
+            audience,
+        } => {
             let signing_key = load_signing_key(&key)?;
             let scope_list: Vec<String> = scopes.split(',').map(|s| s.trim().to_string()).collect();
             let expires_at = parse_expiry_to_timestamp(&expires)?;
@@ -994,24 +1002,30 @@ fn handle_cap_command(action: CapAction) -> Result<()> {
                 None
             };
 
-            let token = CapabilityToken::create_root(
-                &signing_key,
-                scope_list,
-                expires_at,
-                audience_bytes,
-            )?;
+            let token =
+                CapabilityToken::create_root(&signing_key, scope_list, expires_at, audience_bytes)?;
 
             let encoded = token.encode()?;
             println!("{}", encoded);
             eprintln!("{} Root capability token created", "OK".green().bold());
             eprintln!("  {}: {}", "Issuer".cyan(), hex_encode(&token.issuer));
             eprintln!("  {}: {}", "Scopes".cyan(), token.scopes.join(", "));
-            eprintln!("  {}: {}", "Expires".cyan(), format_timestamp(token.expires_at));
+            eprintln!(
+                "  {}: {}",
+                "Expires".cyan(),
+                format_timestamp(token.expires_at)
+            );
         }
 
-        CapAction::Delegate { parent, key, scopes, expires, audience } => {
-            let parent_token = CapabilityToken::decode(&parent)
-                .context("Failed to decode parent token")?;
+        CapAction::Delegate {
+            parent,
+            key,
+            scopes,
+            expires,
+            audience,
+        } => {
+            let parent_token =
+                CapabilityToken::decode(&parent).context("Failed to decode parent token")?;
 
             let child_key = load_signing_key(&key)?;
             let scope_list: Vec<String> = scopes.split(',').map(|s| s.trim().to_string()).collect();
@@ -1023,12 +1037,8 @@ fn handle_cap_command(action: CapAction) -> Result<()> {
                 None
             };
 
-            let child = parent_token.delegate(
-                &child_key,
-                scope_list,
-                expires_at,
-                audience_bytes,
-            )?;
+            let child =
+                parent_token.delegate(&child_key, scope_list, expires_at, audience_bytes)?;
 
             let encoded = child.encode()?;
             println!("{}", encoded);
@@ -1036,12 +1046,15 @@ fn handle_cap_command(action: CapAction) -> Result<()> {
             eprintln!("  {}: {}", "Issuer".cyan(), hex_encode(&child.issuer));
             eprintln!("  {}: {}", "Chain depth".cyan(), child.chain_depth());
             eprintln!("  {}: {}", "Scopes".cyan(), child.scopes.join(", "));
-            eprintln!("  {}: {}", "Expires".cyan(), format_timestamp(child.expires_at));
+            eprintln!(
+                "  {}: {}",
+                "Expires".cyan(),
+                format_timestamp(child.expires_at)
+            );
         }
 
         CapAction::Inspect { token } => {
-            let cap = CapabilityToken::decode(&token)
-                .context("Failed to decode token")?;
+            let cap = CapabilityToken::decode(&token).context("Failed to decode token")?;
 
             println!("{}: v{}", "Version".cyan(), cap.version);
             println!("{}: {}", "Issuer".cyan(), hex_encode(&cap.issuer));
@@ -1049,7 +1062,12 @@ fn handle_cap_command(action: CapAction) -> Result<()> {
                 println!("{}: {}", "Audience".cyan(), hex_encode(aud));
             }
             println!("{}: {}", "Scopes".cyan(), cap.scopes.join(", "));
-            println!("{}: {} ({})", "Expires".cyan(), cap.expires_at, format_timestamp(cap.expires_at));
+            println!(
+                "{}: {} ({})",
+                "Expires".cyan(),
+                cap.expires_at,
+                format_timestamp(cap.expires_at)
+            );
             println!("{}: {}", "Nonce".cyan(), cap.nonce);
             println!("{}: {}", "Chain depth".cyan(), cap.chain_depth());
 
@@ -1072,7 +1090,11 @@ fn handle_cap_command(action: CapAction) -> Result<()> {
             }
         }
 
-        CapAction::Verify { token, trust_anchor, max_depth } => {
+        CapAction::Verify {
+            token,
+            trust_anchor,
+            max_depth,
+        } => {
             use clasp_caps::CapabilityValidator;
             use clasp_core::security::TokenValidator;
 
@@ -1089,8 +1111,14 @@ fn handle_cap_command(action: CapAction) -> Result<()> {
             match validator.validate(&token) {
                 clasp_core::security::ValidationResult::Valid(info) => {
                     println!("{} Token is valid", "OK".green().bold());
-                    println!("  {}: {:?}", "Scopes".cyan(),
-                        info.scopes.iter().map(|s| s.as_str().to_string()).collect::<Vec<_>>());
+                    println!(
+                        "  {}: {:?}",
+                        "Scopes".cyan(),
+                        info.scopes
+                            .iter()
+                            .map(|s| s.as_str().to_string())
+                            .collect::<Vec<_>>()
+                    );
                     if let Some(ref subject) = info.subject {
                         println!("  {}: {}", "Subject".cyan(), subject);
                     }
@@ -1107,7 +1135,10 @@ fn handle_cap_command(action: CapAction) -> Result<()> {
                     std::process::exit(1);
                 }
                 clasp_core::security::ValidationResult::NotMyToken => {
-                    println!("{} Not a capability token (missing cap_ prefix)", "FAIL".red().bold());
+                    println!(
+                        "{} Not a capability token (missing cap_ prefix)",
+                        "FAIL".red().bold()
+                    );
                     std::process::exit(1);
                 }
             }
@@ -1126,7 +1157,11 @@ fn handle_entity_command(action: EntityAction) -> Result<()> {
     use clasp_registry::EntityKeypair;
 
     match action {
-        EntityAction::Keygen { out, name, entity_type } => {
+        EntityAction::Keygen {
+            out,
+            name,
+            entity_type,
+        } => {
             let keypair = EntityKeypair::generate()
                 .map_err(|e| anyhow::anyhow!("Failed to generate keypair: {}", e))?;
 
@@ -1138,7 +1173,11 @@ fn handle_entity_command(action: EntityAction) -> Result<()> {
                 write_secret_file(path, hex_key.as_bytes())
                     .with_context(|| format!("Failed to write key file: {}", path.display()))?;
 
-                eprintln!("{} Entity keypair saved to: {}", "OK".green().bold(), path.display());
+                eprintln!(
+                    "{} Entity keypair saved to: {}",
+                    "OK".green().bold(),
+                    path.display()
+                );
             } else {
                 println!("{}", hex_key);
             }

@@ -3,18 +3,17 @@
 //! Tests for the protocol server adapters that allow the router to accept
 //! connections from MQTT and OSC clients directly.
 
-use clasp_router::Router;
-use std::time::Duration;
 use tokio::net::TcpListener;
-use tokio::time::timeout;
 
 /// Find an available TCP port for testing
+#[allow(dead_code)]
 async fn find_available_port() -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     listener.local_addr().unwrap().port()
 }
 
 /// Find an available UDP port for testing
+#[allow(dead_code)]
 fn find_available_udp_port() -> u16 {
     let socket = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
     socket.local_addr().unwrap().port()

@@ -9,8 +9,6 @@
 
 use clasp_core::Value;
 use clasp_test_utils::{TestRouter, ValueCollector};
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -172,7 +170,7 @@ async fn test_lock_blocks_concurrent_writes() {
         .expect("Intruder should connect");
 
     // Intruder's write should fail or be ignored
-    let result = intruder.set("/concurrent/value", Value::Int(999)).await;
+    let _result = intruder.set("/concurrent/value", Value::Int(999)).await;
 
     // Give time for any propagation
     sleep(Duration::from_millis(200)).await;
@@ -331,7 +329,7 @@ async fn test_lock_prevents_modification_by_others() {
         .await
         .expect("Intruder should connect");
 
-    let initial_count = collector.count();
+    let _initial_count = collector.count();
 
     for i in 0..5 {
         // These should all fail or be ignored
@@ -350,15 +348,13 @@ async fn test_lock_prevents_modification_by_others() {
     let values = collector.values();
     for (addr, val) in values.iter() {
         if addr.starts_with("/lock_test/param") {
-            match val {
-                Value::Int(v) => {
-                    assert!(
-                        *v < 100,
-                        "Intruder should NOT be able to modify locked values. Address {} has value {}",
-                        addr, v
-                    );
-                }
-                _ => {}
+            if let Value::Int(v) = val {
+                assert!(
+                    *v < 100,
+                    "Intruder should NOT be able to modify locked values. Address {} has value {}",
+                    addr,
+                    v
+                );
             }
         }
     }

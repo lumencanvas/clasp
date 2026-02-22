@@ -27,8 +27,7 @@
 //! ```
 
 use clasp_core::{
-    codec, CpskValidator, ErrorMessage, Message,
-    SecurityMode, SignalType, TokenValidator,
+    codec, CpskValidator, ErrorMessage, Message, SecurityMode, SignalType, TokenValidator,
 };
 #[cfg(feature = "rules")]
 use clasp_core::{PublishMessage, SetMessage};
@@ -913,6 +912,7 @@ impl Router {
     }
 
     /// Get shared state references for use by adapters
+    #[allow(clippy::type_complexity)]
     pub fn shared_state(
         &self,
     ) -> (
@@ -975,217 +975,226 @@ impl Router {
         #[cfg(feature = "rules")]
         let rules_engine = self.rules_engine.clone();
 
-        let conn_span = tracing::info_span!("connection", session_id = tracing::field::Empty, remote = %addr);
+        let conn_span =
+            tracing::info_span!("connection", session_id = tracing::field::Empty, remote = %addr);
 
-        tokio::spawn(async move {
-            let mut session: Option<Arc<Session>> = None;
-            let mut handshake_complete = false;
+        tokio::spawn(
+            async move {
+                let mut session: Option<Arc<Session>> = None;
+                let mut handshake_complete = false;
 
-            // Phase 1: Wait for Hello message with timeout
-            let handshake_result = tokio::time::timeout(HANDSHAKE_TIMEOUT, async {
-                loop {
-                    match receiver.recv().await {
-                        Some(TransportEvent::Data(data)) => {
-                            // Decode and check if it's a Hello message
-                            match codec::decode(&data) {
-                                Ok((msg, _)) => {
-                                    if matches!(msg, Message::Hello(_)) {
-                                        return Some(data);
-                                    } else {
-                                        // Non-Hello message before handshake
-                                        warn!(
+                // Phase 1: Wait for Hello message with timeout
+                let handshake_result = tokio::time::timeout(HANDSHAKE_TIMEOUT, async {
+                    loop {
+                        match receiver.recv().await {
+                            Some(TransportEvent::Data(data)) => {
+                                // Decode and check if it's a Hello message
+                                match codec::decode(&data) {
+                                    Ok((msg, _)) => {
+                                        if matches!(msg, Message::Hello(_)) {
+                                            return Some(data);
+                                        } else {
+                                            // Non-Hello message before handshake
+                                            warn!(
                                             "Received non-Hello message before handshake from {}",
                                             addr
                                         );
+                                            return None;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        warn!("Decode error during handshake from {}: {}", addr, e);
                                         return None;
                                     }
                                 }
-                                Err(e) => {
-                                    warn!("Decode error during handshake from {}: {}", addr, e);
-                                    return None;
-                                }
                             }
+                            Some(TransportEvent::Disconnected { .. }) | None => {
+                                return None;
+                            }
+                            Some(TransportEvent::Error(e)) => {
+                                error!("Transport error during handshake from {}: {}", addr, e);
+                                return None;
+                            }
+                            _ => {}
                         }
-                        Some(TransportEvent::Disconnected { .. }) | None => {
-                            return None;
-                        }
-                        Some(TransportEvent::Error(e)) => {
-                            error!("Transport error during handshake from {}: {}", addr, e);
-                            return None;
-                        }
-                        _ => {}
                     }
-                }
-            })
-            .await;
+                })
+                .await;
 
-            // Check handshake result
-            let hello_data = match handshake_result {
-                Ok(Some(data)) => data,
-                Ok(None) => {
-                    debug!("Handshake failed for {}", addr);
-                    return;
-                }
-                Err(_) => {
-                    warn!(
-                        "Handshake timeout for {} after {:?}",
-                        addr, HANDSHAKE_TIMEOUT
-                    );
-                    return;
-                }
-            };
-
-            // Process the Hello message
-            if let Ok((msg, frame)) = codec::decode(&hello_data) {
-                let ctx = handlers::HandlerContext {
-                    session: &session,
-                    sender: &sender,
-                    sessions: &sessions,
-                    subscriptions: &subscriptions,
-                    state: &state,
-                    config: &config,
-                    security_mode,
-                    token_validator: &token_validator,
-                    p2p_capabilities: &p2p_capabilities,
-                    gesture_registry: &gesture_registry,
-                    write_validator: &write_validator,
-                    snapshot_filter: &snapshot_filter,
-                    #[cfg(feature = "rules")]
-                    rules_engine: &rules_engine,
+                // Check handshake result
+                let hello_data = match handshake_result {
+                    Ok(Some(data)) => data,
+                    Ok(None) => {
+                        debug!("Handshake failed for {}", addr);
+                        return;
+                    }
+                    Err(_) => {
+                        warn!(
+                            "Handshake timeout for {} after {:?}",
+                            addr, HANDSHAKE_TIMEOUT
+                        );
+                        return;
+                    }
                 };
-                if let Some(response) = handlers::handle_message(&msg, &frame, &ctx).await {
-                    match response {
-                        handlers::MessageResult::NewSession(s) => {
-                            tracing::Span::current().record("session_id", &tracing::field::display(&s.id));
-                            session = Some(s);
-                            handshake_complete = true;
+
+                // Process the Hello message
+                if let Ok((msg, frame)) = codec::decode(&hello_data) {
+                    let ctx = handlers::HandlerContext {
+                        session: &session,
+                        sender: &sender,
+                        sessions: &sessions,
+                        subscriptions: &subscriptions,
+                        state: &state,
+                        config: &config,
+                        security_mode,
+                        token_validator: &token_validator,
+                        p2p_capabilities: &p2p_capabilities,
+                        gesture_registry: &gesture_registry,
+                        write_validator: &write_validator,
+                        snapshot_filter: &snapshot_filter,
+                        #[cfg(feature = "rules")]
+                        rules_engine: &rules_engine,
+                    };
+                    if let Some(response) = handlers::handle_message(&msg, &frame, &ctx).await {
+                        match response {
+                            handlers::MessageResult::NewSession(s) => {
+                                tracing::Span::current()
+                                    .record("session_id", tracing::field::display(&s.id));
+                                session = Some(s);
+                                handshake_complete = true;
+                            }
+                            handlers::MessageResult::Send(bytes) => {
+                                let _ = sender.send(bytes).await;
+                            }
+                            handlers::MessageResult::Disconnect => {
+                                info!(
+                                    "Disconnecting client {} due to auth failure during handshake",
+                                    addr
+                                );
+                                return;
+                            }
+                            _ => {}
                         }
-                        handlers::MessageResult::Send(bytes) => {
-                            let _ = sender.send(bytes).await;
-                        }
-                        handlers::MessageResult::Disconnect => {
-                            info!(
-                                "Disconnecting client {} due to auth failure during handshake",
-                                addr
-                            );
-                            return;
-                        }
-                        _ => {}
                     }
                 }
-            }
 
-            if !handshake_complete {
-                debug!("Handshake incomplete for {}", addr);
-                return;
-            }
+                if !handshake_complete {
+                    debug!("Handshake incomplete for {}", addr);
+                    return;
+                }
 
-            // Phase 2: Main message loop (after successful handshake)
-            while *running.read() {
-                match receiver.recv().await {
-                    Some(TransportEvent::Data(data)) => {
-                        // Check rate limit before processing
-                        if config.rate_limiting_enabled {
-                            if let Some(ref s) = session {
-                                if !s.check_rate_limit(config.max_messages_per_second) {
-                                    warn!(
-                                        "Rate limit exceeded for session {} ({} msgs/sec > {})",
-                                        s.id,
-                                        s.messages_per_second(),
-                                        config.max_messages_per_second
-                                    );
-                                    // Send error and continue (don't disconnect for rate limiting)
-                                    let error = Message::Error(ErrorMessage {
-                                        code: 429, // Too Many Requests
-                                        message: format!(
-                                            "Rate limit exceeded: {} messages/second",
+                // Phase 2: Main message loop (after successful handshake)
+                while *running.read() {
+                    match receiver.recv().await {
+                        Some(TransportEvent::Data(data)) => {
+                            // Check rate limit before processing
+                            if config.rate_limiting_enabled {
+                                if let Some(ref s) = session {
+                                    if !s.check_rate_limit(config.max_messages_per_second) {
+                                        warn!(
+                                            "Rate limit exceeded for session {} ({} msgs/sec > {})",
+                                            s.id,
+                                            s.messages_per_second(),
                                             config.max_messages_per_second
-                                        ),
-                                        address: None,
-                                        correlation_id: None,
-                                    });
-                                    if let Ok(bytes) = codec::encode(&error) {
-                                        let _ = sender.send(bytes).await;
+                                        );
+                                        // Send error and continue (don't disconnect for rate limiting)
+                                        let error = Message::Error(ErrorMessage {
+                                            code: 429, // Too Many Requests
+                                            message: format!(
+                                                "Rate limit exceeded: {} messages/second",
+                                                config.max_messages_per_second
+                                            ),
+                                            address: None,
+                                            correlation_id: None,
+                                        });
+                                        if let Ok(bytes) = codec::encode(&error) {
+                                            let _ = sender.send(bytes).await;
+                                        }
+                                        continue;
                                     }
-                                    continue;
                                 }
                             }
-                        }
 
-                        // Decode message
-                        match codec::decode(&data) {
-                            Ok((msg, frame)) => {
-                                let ctx = handlers::HandlerContext {
-                                    session: &session,
-                                    sender: &sender,
-                                    sessions: &sessions,
-                                    subscriptions: &subscriptions,
-                                    state: &state,
-                                    config: &config,
-                                    security_mode,
-                                    token_validator: &token_validator,
-                                    p2p_capabilities: &p2p_capabilities,
-                                    gesture_registry: &gesture_registry,
-                                    write_validator: &write_validator,
-                                    snapshot_filter: &snapshot_filter,
-                                    #[cfg(feature = "rules")]
-                                    rules_engine: &rules_engine,
-                                };
-                                if let Some(response) = handlers::handle_message(&msg, &frame, &ctx).await {
-                                    match response {
-                                        handlers::MessageResult::NewSession(s) => {
-                                            session = Some(s);
-                                        }
-                                        handlers::MessageResult::Send(bytes) => {
-                                            if let Err(e) = sender.send(bytes).await {
-                                                error!("Send error: {}", e);
+                            // Decode message
+                            match codec::decode(&data) {
+                                Ok((msg, frame)) => {
+                                    let ctx = handlers::HandlerContext {
+                                        session: &session,
+                                        sender: &sender,
+                                        sessions: &sessions,
+                                        subscriptions: &subscriptions,
+                                        state: &state,
+                                        config: &config,
+                                        security_mode,
+                                        token_validator: &token_validator,
+                                        p2p_capabilities: &p2p_capabilities,
+                                        gesture_registry: &gesture_registry,
+                                        write_validator: &write_validator,
+                                        snapshot_filter: &snapshot_filter,
+                                        #[cfg(feature = "rules")]
+                                        rules_engine: &rules_engine,
+                                    };
+                                    if let Some(response) =
+                                        handlers::handle_message(&msg, &frame, &ctx).await
+                                    {
+                                        match response {
+                                            handlers::MessageResult::NewSession(s) => {
+                                                session = Some(s);
+                                            }
+                                            handlers::MessageResult::Send(bytes) => {
+                                                if let Err(e) = sender.send(bytes).await {
+                                                    error!("Send error: {}", e);
+                                                    break;
+                                                }
+                                            }
+                                            handlers::MessageResult::Broadcast(bytes, exclude) => {
+                                                handlers::broadcast_to_subscribers(
+                                                    &bytes, &sessions, &exclude,
+                                                );
+                                            }
+                                            handlers::MessageResult::Disconnect => {
+                                                info!(
+                                                    "Disconnecting client {} due to auth failure",
+                                                    addr
+                                                );
                                                 break;
                                             }
+                                            handlers::MessageResult::None => {}
                                         }
-                                        handlers::MessageResult::Broadcast(bytes, exclude) => {
-                                            handlers::broadcast_to_subscribers(&bytes, &sessions, &exclude);
-                                        }
-                                        handlers::MessageResult::Disconnect => {
-                                            info!(
-                                                "Disconnecting client {} due to auth failure",
-                                                addr
-                                            );
-                                            break;
-                                        }
-                                        handlers::MessageResult::None => {}
                                     }
                                 }
-                            }
-                            Err(e) => {
-                                warn!("Decode error from {}: {}", addr, e);
+                                Err(e) => {
+                                    warn!("Decode error from {}: {}", addr, e);
+                                }
                             }
                         }
+                        Some(TransportEvent::Disconnected { reason }) => {
+                            info!("Client {} disconnected: {:?}", addr, reason);
+                            break;
+                        }
+                        Some(TransportEvent::Error(e)) => {
+                            error!("Transport error from {}: {}", addr, e);
+                            break;
+                        }
+                        None => {
+                            break;
+                        }
+                        _ => {}
                     }
-                    Some(TransportEvent::Disconnected { reason }) => {
-                        info!("Client {} disconnected: {:?}", addr, reason);
-                        break;
-                    }
-                    Some(TransportEvent::Error(e)) => {
-                        error!("Transport error from {}: {}", addr, e);
-                        break;
-                    }
-                    None => {
-                        break;
-                    }
-                    _ => {}
+                }
+
+                // Cleanup session
+                if let Some(s) = session {
+                    info!("Removing session {}", s.id);
+                    sessions.remove(&s.id);
+                    subscriptions.remove_session(&s.id);
+                    p2p_capabilities.unregister(&s.id);
+                    #[cfg(feature = "metrics")]
+                    metrics::gauge!("clasp_sessions_active").decrement(1.0);
                 }
             }
-
-            // Cleanup session
-            if let Some(s) = session {
-                info!("Removing session {}", s.id);
-                sessions.remove(&s.id);
-                subscriptions.remove_session(&s.id);
-                p2p_capabilities.unregister(&s.id);
-                #[cfg(feature = "metrics")]
-                metrics::gauge!("clasp_sessions_active").decrement(1.0);
-            }
-        }.instrument(conn_span));
+            .instrument(conn_span),
+        );
     }
 
     /// Stop the router
@@ -1293,7 +1302,14 @@ pub fn execute_rule_actions(
             clasp_rules::RuleAction::SetFromTrigger { address, transform } => {
                 if let Some(current) = state.get(&address) {
                     let transformed = transform.apply(&current);
-                    match state.set(&address, transformed.clone(), &action.origin, None, false, false) {
+                    match state.set(
+                        &address,
+                        transformed.clone(),
+                        &action.origin,
+                        None,
+                        false,
+                        false,
+                    ) {
                         Ok(revision) => {
                             let subscribers =
                                 subscriptions.find_subscribers(&address, Some(SignalType::Param));
@@ -1315,10 +1331,16 @@ pub fn execute_rule_actions(
                                     }
                                 }
                             }
-                            debug!("Rule {} applied SetFromTrigger to {}", action.rule_id, address);
+                            debug!(
+                                "Rule {} applied SetFromTrigger to {}",
+                                action.rule_id, address
+                            );
                         }
                         Err(e) => {
-                            warn!("Rule {} SetFromTrigger to {} failed: {:?}", action.rule_id, address, e);
+                            warn!(
+                                "Rule {} SetFromTrigger to {} failed: {:?}",
+                                action.rule_id, address, e
+                            );
                         }
                     }
                 }
@@ -1421,19 +1443,34 @@ mod federation_tests {
 
     #[test]
     fn test_exact_match() {
-        assert!(federation_pattern_covered_by("/sensors/temp", "/sensors/temp"));
+        assert!(federation_pattern_covered_by(
+            "/sensors/temp",
+            "/sensors/temp"
+        ));
     }
 
     #[test]
     fn test_concrete_within_globstar() {
-        assert!(federation_pattern_covered_by("/sensors/temp/1", "/sensors/**"));
-        assert!(federation_pattern_covered_by("/sensors/temp", "/sensors/**"));
+        assert!(federation_pattern_covered_by(
+            "/sensors/temp/1",
+            "/sensors/**"
+        ));
+        assert!(federation_pattern_covered_by(
+            "/sensors/temp",
+            "/sensors/**"
+        ));
     }
 
     #[test]
     fn test_sub_pattern_within_globstar() {
-        assert!(federation_pattern_covered_by("/sensors/temp/**", "/sensors/**"));
-        assert!(federation_pattern_covered_by("/sensors/temp/*", "/sensors/**"));
+        assert!(federation_pattern_covered_by(
+            "/sensors/temp/**",
+            "/sensors/**"
+        ));
+        assert!(federation_pattern_covered_by(
+            "/sensors/temp/*",
+            "/sensors/**"
+        ));
     }
 
     #[test]
@@ -1445,7 +1482,10 @@ mod federation_tests {
     #[test]
     fn test_disjoint_namespaces_rejected() {
         assert!(!federation_pattern_covered_by("/audio/**", "/sensors/**"));
-        assert!(!federation_pattern_covered_by("/audio/mixer", "/sensors/**"));
+        assert!(!federation_pattern_covered_by(
+            "/audio/mixer",
+            "/sensors/**"
+        ));
     }
 
     #[test]
@@ -1457,7 +1497,10 @@ mod federation_tests {
     #[test]
     fn test_wildcard_in_request_wider_than_literal() {
         // /sensors/* is wider than /sensors/temp (declared)
-        assert!(!federation_pattern_covered_by("/sensors/*", "/sensors/temp"));
+        assert!(!federation_pattern_covered_by(
+            "/sensors/*",
+            "/sensors/temp"
+        ));
     }
 
     #[test]
@@ -1482,10 +1525,8 @@ mod federation_tests {
         let session = Session::stub_federation("peer");
         assert!(session.federation_namespaces().is_empty());
 
-        session.set_federation_namespaces(vec![
-            "/sensors/**".to_string(),
-            "/lights/**".to_string(),
-        ]);
+        session
+            .set_federation_namespaces(vec!["/sensors/**".to_string(), "/lights/**".to_string()]);
         let ns = session.federation_namespaces();
         assert_eq!(ns.len(), 2);
         assert!(ns.contains(&"/sensors/**".to_string()));
@@ -1513,7 +1554,7 @@ mod federation_tests {
         // User subscriptions typically use small sequential IDs
         // Verify the ranges don't overlap with typical usage
         let session = Session::stub_federation("peer");
-        session.add_subscription(1);   // user sub
+        session.add_subscription(1); // user sub
         session.add_subscription(50000); // federation sub
         session.add_subscription(50001); // federation sub
 
@@ -1564,13 +1605,19 @@ mod federation_tests {
     fn test_trailing_slash() {
         // Trailing slash creates an empty segment that gets filtered
         assert!(federation_pattern_covered_by("/sensors/", "/sensors/**"));
-        assert!(federation_pattern_covered_by("/sensors/temp/", "/sensors/**"));
+        assert!(federation_pattern_covered_by(
+            "/sensors/temp/",
+            "/sensors/**"
+        ));
     }
 
     #[test]
     fn test_double_slashes() {
         // Double slashes create empty segments that get filtered
-        assert!(federation_pattern_covered_by("//sensors//temp", "/sensors/**"));
+        assert!(federation_pattern_covered_by(
+            "//sensors//temp",
+            "/sensors/**"
+        ));
     }
 
     #[test]
@@ -1627,7 +1674,10 @@ mod federation_tests {
     #[test]
     fn test_path_traversal_segments() {
         // ".." is just a literal segment in CLASP, not filesystem traversal
-        assert!(!federation_pattern_covered_by("/../sensors/temp", "/sensors/**"));
+        assert!(!federation_pattern_covered_by(
+            "/../sensors/temp",
+            "/sensors/**"
+        ));
         assert!(federation_pattern_covered_by("/../sensors/temp", "/**"));
     }
 

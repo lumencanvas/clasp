@@ -5,7 +5,7 @@
 
 use crate::{Bridge, BridgeConfig, BridgeError, BridgeEvent, Result};
 use async_trait::async_trait;
-use clasp_core::{Message, PublishMessage, SetMessage, SignalType, Value};
+use clasp_core::{Message, SetMessage, Value};
 use parking_lot::Mutex;
 use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS as MqttQoS};
 use serde::{Deserialize, Serialize};
@@ -98,8 +98,9 @@ impl MqttBridge {
     }
 
     /// Convert MQTT topic to CLASP address
+    #[allow(dead_code)]
     fn topic_to_address(&self, topic: &str) -> String {
-        format!("{}/{}", self.mqtt_config.namespace, topic.replace('/', "/"))
+        format!("{}/{}", self.mqtt_config.namespace, topic)
     }
 
     /// Convert CLASP address to MQTT topic
@@ -260,7 +261,7 @@ impl Bridge for MqttBridge {
                             unlock: false,
                         });
 
-                        if tx.send(BridgeEvent::ToClasp(msg)).await.is_err() {
+                        if tx.send(BridgeEvent::ToClasp(Box::new(msg))).await.is_err() {
                             break;
                         }
                     }

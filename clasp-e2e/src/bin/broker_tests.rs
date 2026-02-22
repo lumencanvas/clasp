@@ -12,7 +12,6 @@
 //! - CLASP_REDIS_HOST=localhost:6379    Redis address (future)
 //! - CLASP_TEST_BROKERS=1               Enable broker tests
 
-use bytes::Bytes;
 use std::env;
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -139,6 +138,7 @@ fn mqtt_connect(client_id: &str) -> Result<TcpStream, String> {
     }
 }
 
+#[allow(clippy::vec_init_then_push)]
 fn mqtt_publish(stream: &mut TcpStream, topic: &str, payload: &[u8]) -> Result<(), String> {
     let topic_bytes = topic.as_bytes();
     let remaining_length = 2 + topic_bytes.len() + payload.len();
@@ -162,6 +162,7 @@ fn mqtt_publish(stream: &mut TcpStream, topic: &str, payload: &[u8]) -> Result<(
         .map_err(|e| format!("Publish failed: {}", e))
 }
 
+#[allow(clippy::vec_init_then_push)]
 fn mqtt_subscribe(stream: &mut TcpStream, topic: &str, packet_id: u16) -> Result<(), String> {
     let topic_bytes = topic.as_bytes();
     let remaining_length = 2 + 2 + topic_bytes.len() + 1;
@@ -424,7 +425,7 @@ fn test_mqtt_rapid_publish() -> TestResult {
     if success == message_count {
         let elapsed = start.elapsed().as_millis();
         let rate = (message_count as f64 / elapsed as f64) * 1000.0;
-        TestResult::pass(name, format!("{} msg/s", rate as u32), elapsed as u128)
+        TestResult::pass(name, format!("{} msg/s", rate as u32), elapsed)
     } else {
         TestResult::fail(
             name,
@@ -439,7 +440,7 @@ fn test_mqtt_rapid_publish() -> TestResult {
 // ============================================================================
 
 fn test_http_bridge_get() -> TestResult {
-    let start = Instant::now();
+    let _start = Instant::now();
     let name = "http_bridge_get";
 
     // This would test the HTTP bridge endpoint
@@ -448,7 +449,7 @@ fn test_http_bridge_get() -> TestResult {
 }
 
 fn test_http_bridge_post() -> TestResult {
-    let start = Instant::now();
+    let _start = Instant::now();
     let name = "http_bridge_post";
 
     TestResult::skip(name, "Requires HTTP bridge running")
@@ -459,7 +460,7 @@ fn test_http_bridge_post() -> TestResult {
 // ============================================================================
 
 fn test_ws_bridge_connect() -> TestResult {
-    let start = Instant::now();
+    let _start = Instant::now();
     let name = "ws_bridge_connect";
 
     TestResult::skip(name, "Requires WebSocket bridge running")

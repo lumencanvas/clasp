@@ -139,13 +139,10 @@ impl TestRouter {
 
         // Additional check: try to connect to verify the port is listening
         let _ = wait_for(
-            || {
-                let port = port;
-                async move {
-                    tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port))
-                        .await
-                        .is_ok()
-                }
+            || async move {
+                tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port))
+                    .await
+                    .is_ok()
             },
             Duration::from_millis(10),
             Duration::from_secs(5),

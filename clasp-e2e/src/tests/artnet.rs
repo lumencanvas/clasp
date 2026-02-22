@@ -140,10 +140,12 @@ async fn test_artnet_poll_reply() -> TestResult {
         Duration::from_secs(5),
         || async {
             // Create a default PollReply
-            let mut reply = PollReply::default();
-            reply.address = [192, 168, 1, 100].into();
-            reply.port = 0x1936;
-            reply.version = [0, 14];
+            let reply = PollReply {
+                address: [192, 168, 1, 100].into(),
+                port: 0x1936,
+                version: [0, 14],
+                ..Default::default()
+            };
 
             let command = ArtCommand::PollReply(Box::new(reply));
             let bytes = command
@@ -222,12 +224,12 @@ async fn test_artnet_dmx_values() -> TestResult {
         || async {
             // Test all 256 values
             let mut dmx_data = [0u8; 512];
-            for i in 0..256 {
-                dmx_data[i] = i as u8;
+            for (i, val) in dmx_data[..256].iter_mut().enumerate() {
+                *val = i as u8;
             }
             // Fill rest with test pattern
-            for i in 256..512 {
-                dmx_data[i] = 255 - ((i - 256) as u8);
+            for (i, val) in dmx_data[256..512].iter_mut().enumerate() {
+                *val = 255 - (i as u8);
             }
 
             let output = Output {

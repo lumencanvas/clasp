@@ -92,12 +92,9 @@ pub(crate) async fn handle(
                         .as_ref()
                         .cloned()
                         .unwrap_or(clasp_core::Value::Null);
-                    if let Err(reason) = validator.validate_write(
-                        &pub_msg.address,
-                        &pub_value,
-                        session,
-                        ctx.state,
-                    ) {
+                    if let Err(reason) =
+                        validator.validate_write(&pub_msg.address, &pub_value, session, ctx.state)
+                    {
                         warn!(
                             "Session {} denied bundled PUBLISH to {} by write validator - rejecting entire bundle: {}",
                             session.id, pub_msg.address, reason
@@ -129,20 +126,16 @@ pub(crate) async fn handle(
             Ok(revision) => {
                 applied_revisions.push((set.address.clone(), revision));
 
-                let subscribers =
-                    ctx.subscriptions.find_subscribers(&set.address, Some(SignalType::Param));
+                let subscribers = ctx
+                    .subscriptions
+                    .find_subscribers(&set.address, Some(SignalType::Param));
 
                 let mut updated_set: SetMessage = (*set).clone();
                 updated_set.revision = Some(revision);
                 let broadcast_msg = Message::Set(updated_set);
 
                 if let Ok(bytes) = codec::encode(&broadcast_msg) {
-                    broadcast_to_subscriber_list(
-                        &bytes,
-                        &subscribers,
-                        ctx.sessions,
-                        None,
-                    );
+                    broadcast_to_subscriber_list(&bytes, &subscribers, ctx.sessions, None);
                 }
             }
             Err(e) => {
@@ -152,16 +145,13 @@ pub(crate) async fn handle(
     }
 
     for pub_msg in &validated_pubs {
-        let subscribers = ctx.subscriptions.find_subscribers(&pub_msg.address, pub_msg.signal);
+        let subscribers = ctx
+            .subscriptions
+            .find_subscribers(&pub_msg.address, pub_msg.signal);
 
         let inner_msg = Message::Publish((*pub_msg).clone());
         if let Ok(bytes) = codec::encode(&inner_msg) {
-            broadcast_to_subscriber_list(
-                &bytes,
-                &subscribers,
-                ctx.sessions,
-                Some(&session.id),
-            );
+            broadcast_to_subscriber_list(&bytes, &subscribers, ctx.sessions, Some(&session.id));
         }
     }
 

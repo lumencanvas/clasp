@@ -47,7 +47,9 @@ impl RulesEngine {
             return Err(RulesError::InvalidRule("rule ID cannot be empty".into()));
         }
         if rule.actions.is_empty() {
-            return Err(RulesError::InvalidRule("rule must have at least one action".into()));
+            return Err(RulesError::InvalidRule(
+                "rule must have at least one action".into(),
+            ));
         }
         self.rules.insert(rule.id.clone(), rule);
         Ok(())
@@ -123,9 +125,7 @@ impl RulesEngine {
         let matching_ids: Vec<String> = self
             .rules
             .values()
-            .filter(|rule| {
-                rule.enabled && rule.trigger.matches(address, signal_type)
-            })
+            .filter(|rule| rule.enabled && rule.trigger.matches(address, signal_type))
             .map(|rule| rule.id.clone())
             .collect();
 
@@ -221,11 +221,7 @@ impl RulesEngine {
     /// Unlike `evaluate()`, this doesn't match on address/signal_type — it fires
     /// the rule directly (checking enabled, cooldown, and conditions).
     /// Returns actions that should be executed by the router.
-    pub fn evaluate_interval<F>(
-        &mut self,
-        rule_id: &str,
-        state_lookup: F,
-    ) -> Vec<PendingAction>
+    pub fn evaluate_interval<F>(&mut self, rule_id: &str, state_lookup: F) -> Vec<PendingAction>
     where
         F: Fn(&str) -> Option<Value>,
     {
@@ -364,12 +360,7 @@ mod tests {
     fn test_pattern_matching() {
         let mut engine = RulesEngine::new();
         engine
-            .add_rule(make_rule(
-                "r1",
-                "/sensor/**",
-                "/output",
-                Value::Bool(true),
-            ))
+            .add_rule(make_rule("r1", "/sensor/**", "/output", Value::Bool(true)))
             .unwrap();
 
         // Should match
@@ -542,12 +533,7 @@ mod tests {
     fn test_loop_prevention() {
         let mut engine = RulesEngine::new();
         engine
-            .add_rule(make_rule(
-                "r1",
-                "/sensor/**",
-                "/output",
-                Value::Bool(true),
-            ))
+            .add_rule(make_rule("r1", "/sensor/**", "/output", Value::Bool(true)))
             .unwrap();
 
         // Origin from a rule should be skipped
@@ -733,7 +719,7 @@ mod tests {
     #[test]
     fn test_evaluate_interval_disabled() {
         let mut engine = RulesEngine::new();
-        let mut rule = Rule {
+        let rule = Rule {
             id: "disabled_interval".to_string(),
             name: "Disabled".to_string(),
             enabled: false,

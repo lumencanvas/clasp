@@ -62,7 +62,7 @@ async fn test_registration_throughput() {
 
     sleep(Duration::from_millis(100)).await;
 
-    let client = RendezvousClient::new(&format!("http://{}", addr));
+    let _client = RendezvousClient::new(&format!("http://{}", addr));
 
     // Register 1000 devices and measure throughput
     let start = Instant::now();
@@ -264,7 +264,7 @@ async fn test_ttl_expiration_accuracy() {
     let client = RendezvousClient::new(&format!("http://{}", addr));
 
     // Register device
-    let response = client
+    let _response = client
         .register(DeviceRegistration {
             name: "TTLTest".to_string(),
             ..Default::default()
@@ -301,7 +301,7 @@ async fn test_ttl_expiration_accuracy() {
 
     // Note: TTL expiration is not immediate - it happens during cleanup cycles
     // This is by design for efficiency (batch cleanup)
-    if devices.len() == 0 {
+    if devices.is_empty() {
         println!("  ✅ TTL expiration working correctly");
     } else {
         println!("  ⚠️  Device still present (cleanup may not have run yet)");
@@ -370,7 +370,6 @@ async fn test_real_world_scale() {
         ttl: 300,                      // 5 minutes
         cleanup_interval: 60,          // Clean up every minute
         max_devices_per_source: 10000, // Allow many devices from same source
-        ..Default::default()
     };
 
     let port = find_port().await;
@@ -436,7 +435,7 @@ async fn test_real_world_scale() {
     // Also test discovery with higher limit to get all devices
     let client_http = reqwest::Client::new();
     let all_studio_response = client_http
-        .get(&format!(
+        .get(format!(
             "http://{}/api/v1/discover?tag=studio&limit=1000",
             addr
         ))

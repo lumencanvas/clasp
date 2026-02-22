@@ -252,7 +252,7 @@ mod tests {
 
     #[test]
     fn test_wildcard_mapping() {
-        let mapping = AddressMapping::new("/midi/*/cc/*", "/midi/*/*/*");
+        let _mapping = AddressMapping::new("/midi/*/cc/*", "/midi/*/*/*");
         // This is a simplified test - real implementation would be more sophisticated
     }
 

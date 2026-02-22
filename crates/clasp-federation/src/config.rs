@@ -4,9 +4,10 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 /// Federation operating mode
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub enum FederationMode {
     /// Hub mode: accepts leaf connections, central point of star
+    #[default]
     Hub,
     /// Leaf mode: connects to a single hub router
     Leaf {
@@ -18,12 +19,6 @@ pub enum FederationMode {
         /// Peer endpoint URLs
         peers: Vec<String>,
     },
-}
-
-impl Default for FederationMode {
-    fn default() -> Self {
-        FederationMode::Hub
-    }
 }
 
 /// Configuration for a federation link

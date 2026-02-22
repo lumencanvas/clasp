@@ -99,7 +99,8 @@ impl SqliteEntityStore {
         let scopes = serde_json::from_str(&scopes_json).unwrap_or_default();
 
         Ok(Entity {
-            id: EntityId::parse(&id_str).unwrap_or_else(|_| EntityId::parse("clasp:invalid").unwrap()),
+            id: EntityId::parse(&id_str)
+                .unwrap_or_else(|_| EntityId::parse("clasp:invalid").unwrap()),
             entity_type,
             name,
             public_key,
@@ -114,7 +115,9 @@ impl SqliteEntityStore {
 }
 
 fn system_time_to_secs(t: SystemTime) -> u64 {
-    t.duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+    t.duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 #[async_trait]
@@ -188,7 +191,7 @@ impl EntityStore for SqliteEntityStore {
 
     async fn find_by_tag(&self, tag: &str) -> Result<Vec<Entity>> {
         let conn = self.conn.lock().unwrap();
-        let pattern = format!("%\"{}\"%" , tag);
+        let pattern = format!("%\"{}\"%", tag);
         let mut stmt = conn
             .prepare("SELECT id, entity_type, name, public_key, created_at, metadata, tags, namespaces, scopes, status FROM entities WHERE tags LIKE ?1")
             .map_err(|e| RegistryError::StorageError(e.to_string()))?;
@@ -206,7 +209,7 @@ impl EntityStore for SqliteEntityStore {
 
     async fn find_by_namespace(&self, namespace: &str) -> Result<Vec<Entity>> {
         let conn = self.conn.lock().unwrap();
-        let pattern = format!("%\"{}\"%" , namespace);
+        let pattern = format!("%\"{}\"%", namespace);
         let mut stmt = conn
             .prepare("SELECT id, entity_type, name, public_key, created_at, metadata, tags, namespaces, scopes, status FROM entities WHERE namespaces LIKE ?1")
             .map_err(|e| RegistryError::StorageError(e.to_string()))?;
@@ -388,7 +391,10 @@ mod tests {
         let id = entity.id.clone();
 
         store.create(&entity).await.unwrap();
-        store.update_status(&id, EntityStatus::Revoked).await.unwrap();
+        store
+            .update_status(&id, EntityStatus::Revoked)
+            .await
+            .unwrap();
 
         let found = store.get(&id).await.unwrap().unwrap();
         assert_eq!(found.status, EntityStatus::Revoked);

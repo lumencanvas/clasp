@@ -14,18 +14,17 @@ const inputRef = ref(null)
 let miniSearch = null
 
 const SECTION_LABELS = {
-  'tutorials': 'Tutorials',
-  'how-to': 'Guides',
-  'explanation': 'Concepts',
-  'reference': 'Reference',
-  'use-cases': 'Use Cases',
-  'integrations': 'Integrations',
-  'appendix': 'Appendix',
-  'api': 'API',
-  'guides': 'Guides',
   'getting-started': 'Getting Started',
-  'security': 'Security',
-  'protocols': 'Protocols',
+  'sdk': 'Client SDKs',
+  'core': 'Core Concepts',
+  'transports': 'Transports',
+  'protocols': 'Protocol Bridges',
+  'deployment': 'Deployment',
+  'auth': 'Auth & Security',
+  'server': 'Server Features',
+  'reference': 'Reference',
+  'concepts': 'Deep Dives',
+  'tools': 'Tools',
 }
 
 function stripHtml(html) {

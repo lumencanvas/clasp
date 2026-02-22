@@ -99,7 +99,9 @@ fn estimate_message_size(msg: &Message) -> usize {
         Message::Subscribe(m) => 6 + m.pattern.len() + 16,
         Message::Bundle(m) => 12 + m.messages.len() * 48,
         Message::Replay(m) => 4 + m.pattern.len() + 20,
-        Message::FederationSync(m) => 4 + m.patterns.iter().map(|p| 2 + p.len()).sum::<usize>() + m.revisions.len() * 12 + 16,
+        Message::FederationSync(m) => {
+            4 + m.patterns.iter().map(|p| 2 + p.len()).sum::<usize>() + m.revisions.len() * 12 + 16
+        }
         Message::Ping | Message::Pong => 5, // Just frame header
         _ => 64,                            // Default for less common messages
     }
@@ -248,14 +250,8 @@ fn encode_set(buf: &mut BytesMut, msg: &SetMessage) -> Result<()> {
 fn encode_publish(buf: &mut BytesMut, msg: &PublishMessage) -> Result<()> {
     buf.put_u8(msg::PUBLISH);
 
-    let sig_code = msg
-        .signal
-        .map(|s| signal_type_code(s))
-        .unwrap_or(sig::EVENT);
-    let phase_code = msg
-        .phase
-        .map(|p| gesture_phase_code(p))
-        .unwrap_or(phase::START);
+    let sig_code = msg.signal.map(signal_type_code).unwrap_or(sig::EVENT);
+    let phase_code = msg.phase.map(gesture_phase_code).unwrap_or(phase::START);
 
     let mut flags: u8 = (sig_code & 0x07) << 5;
     if msg.timestamp.is_some() {

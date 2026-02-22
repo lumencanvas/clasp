@@ -162,7 +162,7 @@ async fn test_osc_loopback_multiple_args() {
             Some(rosc::OscType::Float(r)),
             Some(rosc::OscType::Float(g)),
             Some(rosc::OscType::Float(b)),
-        ) = (m.args.get(0), m.args.get(1), m.args.get(2))
+        ) = (m.args.first(), m.args.get(1), m.args.get(2))
         {
             assert!((*r - 1.0).abs() < 0.001, "R value mismatch");
             assert!((*g - 0.5).abs() < 0.001, "G value mismatch");

@@ -4,9 +4,7 @@
 //! exchange between federated CLASP routers. Only sessions with the `federation`
 //! feature flag may use these operations.
 
-use clasp_core::{
-    codec, AckMessage, Action, ErrorMessage, Message, SecurityMode, SnapshotMessage,
-};
+use clasp_core::{codec, AckMessage, Action, ErrorMessage, Message, SecurityMode, SnapshotMessage};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
@@ -44,9 +42,7 @@ pub(crate) async fn handle(
         clasp_core::FederationOp::DeclareNamespaces => {
             handle_declare_namespaces(fed_msg, session, ctx).await
         }
-        clasp_core::FederationOp::RequestSync => {
-            handle_request_sync(fed_msg, session, ctx).await
-        }
+        clasp_core::FederationOp::RequestSync => handle_request_sync(fed_msg, session, ctx).await,
         clasp_core::FederationOp::RevisionVector => {
             handle_revision_vector(fed_msg, session, ctx).await
         }
@@ -68,13 +64,16 @@ async fn handle_declare_namespaces(
     if fed_msg.patterns.len() > MAX_FEDERATION_PATTERNS {
         warn!(
             "Federation peer {} declared {} namespaces (limit {})",
-            session.id, fed_msg.patterns.len(), MAX_FEDERATION_PATTERNS
+            session.id,
+            fed_msg.patterns.len(),
+            MAX_FEDERATION_PATTERNS
         );
         let error = Message::Error(ErrorMessage {
             code: 400,
             message: format!(
                 "too many namespace patterns: {} (max {})",
-                fed_msg.patterns.len(), MAX_FEDERATION_PATTERNS
+                fed_msg.patterns.len(),
+                MAX_FEDERATION_PATTERNS
             ),
             address: None,
             correlation_id: None,
@@ -97,9 +96,7 @@ async fn handle_declare_namespaces(
                 );
                 let error = Message::Error(ErrorMessage {
                     code: 403,
-                    message: format!(
-                        "insufficient scope for namespace: {}", pattern
-                    ),
+                    message: format!("insufficient scope for namespace: {}", pattern),
                     address: None,
                     correlation_id: None,
                 });
@@ -125,7 +122,8 @@ async fn handle_declare_namespaces(
         }
         debug!(
             "Federation: cleaned up {} old subscriptions for peer {}",
-            old_namespaces.len(), router_id
+            old_namespaces.len(),
+            router_id
         );
     }
 
@@ -177,13 +175,15 @@ async fn handle_request_sync(
     if fed_msg.patterns.len() > MAX_FEDERATION_PATTERNS {
         warn!(
             "Federation RequestSync with {} patterns (limit {})",
-            fed_msg.patterns.len(), MAX_FEDERATION_PATTERNS
+            fed_msg.patterns.len(),
+            MAX_FEDERATION_PATTERNS
         );
         let error = Message::Error(ErrorMessage {
             code: 400,
             message: format!(
                 "too many sync patterns: {} (max {})",
-                fed_msg.patterns.len(), MAX_FEDERATION_PATTERNS
+                fed_msg.patterns.len(),
+                MAX_FEDERATION_PATTERNS
             ),
             address: None,
             correlation_id: None,
@@ -195,9 +195,9 @@ async fn handle_request_sync(
     // See pentest FED-05: Unauthorized Sync Request, FED-07: Pattern Coverage Bypass
     let declared = session.federation_namespaces();
     for pattern in &fed_msg.patterns {
-        let covered = declared.iter().any(|ns| {
-            crate::router::federation_pattern_covered_by(pattern, ns)
-        });
+        let covered = declared
+            .iter()
+            .any(|ns| crate::router::federation_pattern_covered_by(pattern, ns));
         if !covered {
             warn!(
                 "Federation RequestSync pattern {} not covered by declared namespaces {:?}",
@@ -205,9 +205,7 @@ async fn handle_request_sync(
             );
             let error = Message::Error(ErrorMessage {
                 code: 403,
-                message: format!(
-                    "pattern '{}' not covered by declared namespaces", pattern
-                ),
+                message: format!("pattern '{}' not covered by declared namespaces", pattern),
                 address: None,
                 correlation_id: None,
             });
@@ -224,9 +222,7 @@ async fn handle_request_sync(
             );
             let error = Message::Error(ErrorMessage {
                 code: 403,
-                message: format!(
-                    "insufficient scope for pattern: {}", pattern
-                ),
+                message: format!("insufficient scope for pattern: {}", pattern),
                 address: None,
                 correlation_id: None,
             });
@@ -243,8 +239,7 @@ async fn handle_request_sync(
         }
 
         if let Some(ref filter) = ctx.snapshot_filter {
-            snapshot.params =
-                filter.filter_snapshot(snapshot.params, session, ctx.state);
+            snapshot.params = filter.filter_snapshot(snapshot.params, session, ctx.state);
         }
 
         send_chunked_snapshot(ctx.sender, snapshot).await;
@@ -269,13 +264,15 @@ async fn handle_revision_vector(
     if fed_msg.revisions.len() > MAX_REVISION_ENTRIES {
         warn!(
             "Federation RevisionVector with {} entries (limit {})",
-            fed_msg.revisions.len(), MAX_REVISION_ENTRIES
+            fed_msg.revisions.len(),
+            MAX_REVISION_ENTRIES
         );
         let error = Message::Error(ErrorMessage {
             code: 400,
             message: format!(
                 "too many revision entries: {} (max {})",
-                fed_msg.revisions.len(), MAX_REVISION_ENTRIES
+                fed_msg.revisions.len(),
+                MAX_REVISION_ENTRIES
             ),
             address: None,
             correlation_id: None,
@@ -294,9 +291,9 @@ async fn handle_revision_vector(
 
     let mut delta_params = Vec::new();
     for (addr, peer_rev) in &fed_msg.revisions {
-        let covered = declared.iter().any(|ns| {
-            clasp_core::address::glob_match(ns, addr)
-        });
+        let covered = declared
+            .iter()
+            .any(|ns| clasp_core::address::glob_match(ns, addr));
         if !covered {
             debug!(
                 "Federation: skipping revision for {} (not in declared namespaces)",

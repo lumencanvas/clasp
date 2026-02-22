@@ -5,7 +5,7 @@ use clasp_core::{codec, HelloMessage, Message, PROTOCOL_VERSION};
 use clasp_transport::UdpTransport;
 use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Discover Clasp devices via UDP broadcast
 pub async fn discover(port: u16, tx: mpsc::Sender<DiscoveryEvent>) -> Result<()> {
@@ -77,7 +77,11 @@ pub async fn discover(port: u16, tx: mpsc::Sender<DiscoveryEvent>) -> Result<()>
                                     device.name, from
                                 );
 
-                                if tx.send(DiscoveryEvent::Found(device)).await.is_err() {
+                                if tx
+                                    .send(DiscoveryEvent::Found(Box::new(device)))
+                                    .await
+                                    .is_err()
+                                {
                                     break;
                                 }
                             }

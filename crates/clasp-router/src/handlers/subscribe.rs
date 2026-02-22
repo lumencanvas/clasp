@@ -6,8 +6,8 @@
 use clasp_core::{codec, ErrorMessage, Message, SecurityMode};
 use tracing::{debug, warn};
 
-use crate::subscription::Subscription;
 use super::{send_chunked_snapshot, HandlerContext, MessageResult};
+use crate::subscription::Subscription;
 
 pub(crate) async fn handle_subscribe(
     sub: &clasp_core::SubscribeMessage,

@@ -272,7 +272,7 @@ impl SacnBridge {
                                             value,
                                         );
 
-                                        if let Err(e) = event_tx.send(BridgeEvent::ToClasp(msg)).await {
+                                        if let Err(e) = event_tx.send(BridgeEvent::ToClasp(Box::new(msg))).await {
                                             debug!("Failed to send sACN data to CLASP: {}", e);
                                         }
                                     }

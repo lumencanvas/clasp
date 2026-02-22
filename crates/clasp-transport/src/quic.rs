@@ -23,9 +23,7 @@ use crate::error::{Result, TransportError};
 use crate::traits::{TransportEvent, TransportReceiver, TransportSender};
 
 #[cfg(feature = "quic")]
-use quinn::{
-    ClientConfig, Connection, Endpoint, RecvStream, SendStream, ServerConfig, TransportConfig,
-};
+use quinn::{ClientConfig, Connection, Endpoint, SendStream, ServerConfig, TransportConfig};
 #[cfg(feature = "quic")]
 use std::net::SocketAddr;
 
@@ -104,6 +102,7 @@ impl QuicConfig {
 /// QUIC transport for CLASP
 #[cfg(feature = "quic")]
 pub struct QuicTransport {
+    #[allow(dead_code)]
     config: QuicConfig,
     endpoint: Endpoint,
 }

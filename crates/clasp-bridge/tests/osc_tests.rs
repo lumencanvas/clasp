@@ -265,10 +265,10 @@ async fn test_osc_roundtrip() {
 
     for original in messages {
         let packet = OscPacket::Message(original.clone());
-        let encoded =
-            encoder::encode(&packet).expect(&format!("Failed to encode {}", original.addr));
-        let decoded =
-            decoder::decode_udp(&encoded).expect(&format!("Failed to decode {}", original.addr));
+        let encoded = encoder::encode(&packet)
+            .unwrap_or_else(|_| panic!("Failed to encode {}", original.addr));
+        let decoded = decoder::decode_udp(&encoded)
+            .unwrap_or_else(|_| panic!("Failed to decode {}", original.addr));
 
         match decoded.1 {
             OscPacket::Message(m) => {
@@ -302,14 +302,15 @@ async fn test_osc_high_rate() {
             args: vec![OscType::Float(i as f32 / count as f32)],
         };
         let packet = OscPacket::Message(msg);
-        let encoded = encoder::encode(&packet).expect(&format!("Failed to encode message {}", i));
+        let encoded =
+            encoder::encode(&packet).unwrap_or_else(|_| panic!("Failed to encode message {}", i));
         encoded_messages.push(encoded);
     }
 
     // Decode all messages
     for (i, encoded) in encoded_messages.iter().enumerate() {
-        let decoded =
-            decoder::decode_udp(encoded).expect(&format!("Failed to decode message {}", i));
+        let decoded = decoder::decode_udp(encoded)
+            .unwrap_or_else(|_| panic!("Failed to decode message {}", i));
 
         match decoded.1 {
             OscPacket::Message(m) => {

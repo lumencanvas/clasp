@@ -53,6 +53,7 @@ function init() {
   // Suppress individual toasts during SNAPSHOT — show a single summary after.
   let isInitialLoad = true
   let initialRequestCount = 0
+  pendingRequests.value = []
 
   unsubRequests = subscribe(`${ADDR.REQUESTS}/${userId.value}/*`, (data, address) => {
     const fromId = address.split('/').pop()
@@ -81,6 +82,13 @@ function init() {
 
     // Don't add duplicate requests
     if (pendingRequests.value.some(r => r.fromId === fromId)) return
+
+    // Don't show requests from people we're already friends with
+    if (friends.value.has(fromId)) {
+      set(`${ADDR.REQUESTS}/${userId.value}/${fromId}`, null)
+      return
+    }
+
     pendingRequests.value = [...pendingRequests.value, { ...data, fromId }]
 
     if (isInitialLoad) {

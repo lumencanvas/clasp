@@ -56,7 +56,11 @@ pub fn generate_token(keypair: &EntityKeypair) -> Result<String> {
     let encoded = rmp_serde::to_vec(&payload)
         .map_err(|e| RegistryError::TokenError(format!("failed to encode token: {}", e)))?;
 
-    Ok(format!("{}{}", ENTITY_TOKEN_PREFIX, URL_SAFE_NO_PAD.encode(&encoded)))
+    Ok(format!(
+        "{}{}",
+        ENTITY_TOKEN_PREFIX,
+        URL_SAFE_NO_PAD.encode(&encoded)
+    ))
 }
 
 /// Parse and verify an entity token
@@ -83,7 +87,9 @@ pub fn parse_token(token: &str) -> Result<EntityTokenPayload> {
 /// Verify the signature on a token payload using the entity's public key
 pub fn verify_token_signature(payload: &EntityTokenPayload, public_key: &[u8]) -> Result<()> {
     if public_key.len() != 32 {
-        return Err(RegistryError::InvalidKey("public key must be 32 bytes".to_string()));
+        return Err(RegistryError::InvalidKey(
+            "public key must be 32 bytes".to_string(),
+        ));
     }
 
     let key_bytes: [u8; 32] = public_key
@@ -113,7 +119,7 @@ pub fn verify_token_signature(payload: &EntityTokenPayload, public_key: &[u8]) -
 mod serde_bytes {
     use serde::{self, Deserialize, Deserializer, Serializer};
 
-    pub fn serialize<S>(bytes: &Vec<u8>, serializer: S) -> Result<S::Ok, S::Error>
+    pub fn serialize<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -188,7 +194,7 @@ mod tests {
     fn test_parse_truncated_payload() {
         use base64::engine::general_purpose::URL_SAFE_NO_PAD;
         use base64::Engine;
-        let truncated = URL_SAFE_NO_PAD.encode(&[0x92, 0x01]);
+        let truncated = URL_SAFE_NO_PAD.encode([0x92, 0x01]);
         assert!(parse_token(&format!("ent_{}", truncated)).is_err());
     }
 

@@ -7,11 +7,11 @@ use parking_lot::RwLock;
 use std::time::{Duration, Instant};
 
 #[cfg(feature = "journal")]
-use std::sync::Arc;
-#[cfg(feature = "journal")]
 use clasp_core::SignalType;
 #[cfg(feature = "journal")]
 use clasp_journal::{Journal, JournalEntry};
+#[cfg(feature = "journal")]
+use std::sync::Arc;
 
 use crate::SessionId;
 
@@ -58,12 +58,15 @@ impl RouterStateConfig {
     }
 }
 
+/// Listener callback type
+type ListenerFn = Box<dyn Fn(&str, &Value) + Send + Sync>;
+
 /// Global router state
 pub struct RouterState {
     /// Parameter state store
     params: RwLock<StateStore>,
     /// Change listeners (for reactive updates)
-    listeners: DashMap<String, Vec<Box<dyn Fn(&str, &Value) + Send + Sync>>>,
+    listeners: DashMap<String, Vec<ListenerFn>>,
     /// Signal registry (announced signals from clients) with timestamps
     signals: DashMap<String, SignalEntry>,
     /// Configuration

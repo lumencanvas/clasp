@@ -76,10 +76,7 @@ impl TokenValidator for EntityValidator {
         }) {
             Ok(Some(e)) => e,
             Ok(None) => {
-                return ValidationResult::Invalid(format!(
-                    "entity not found: {}",
-                    entity_id_str
-                ))
+                return ValidationResult::Invalid(format!("entity not found: {}", entity_id_str))
             }
             Err(e) => return ValidationResult::Invalid(format!("store error: {}", e)),
         };
@@ -284,7 +281,11 @@ mod tests {
         // Bad base64 after prefix
         match validator.validate("ent_!!!invalid!!!") {
             ValidationResult::Invalid(msg) => {
-                assert!(msg.contains("malformed"), "expected malformed error, got: {}", msg);
+                assert!(
+                    msg.contains("malformed"),
+                    "expected malformed error, got: {}",
+                    msg
+                );
             }
             other => panic!("expected Invalid, got {:?}", other),
         }
@@ -303,7 +304,11 @@ mod tests {
 
         match validator.validate(&token) {
             ValidationResult::Invalid(msg) => {
-                assert!(msg.contains("revoked"), "expected revoked error, got: {}", msg);
+                assert!(
+                    msg.contains("revoked"),
+                    "expected revoked error, got: {}",
+                    msg
+                );
             }
             other => panic!("expected Invalid, got {:?}", other),
         }
@@ -360,7 +365,11 @@ mod tests {
 
         match validator.validate(&token) {
             ValidationResult::Invalid(msg) => {
-                assert!(msg.contains("not found"), "expected not found error, got: {}", msg);
+                assert!(
+                    msg.contains("not found"),
+                    "expected not found error, got: {}",
+                    msg
+                );
             }
             other => panic!("expected Invalid, got {:?}", other),
         }

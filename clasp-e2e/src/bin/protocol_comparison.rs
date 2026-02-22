@@ -93,7 +93,7 @@ async fn benchmark_clasp(port: u16, size: MessageSize, count: usize) -> Benchmar
     let url = format!("ws://127.0.0.1:{}", port);
 
     // Create payload of specified size
-    let payload = "x".repeat(size.payload_size());
+    let _payload = "x".repeat(size.payload_size());
 
     // Cold start - create fresh connection
     let client = Clasp::connect_to(&url).await.expect("CLASP connect failed");
@@ -136,7 +136,7 @@ async fn benchmark_clasp_pubsub(port: u16, size: MessageSize, count: usize) -> B
         .await
         .expect("Subscriber connect failed");
 
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<Instant>(count);
+    let (_tx, _rx) = tokio::sync::mpsc::channel::<Instant>(count);
 
     subscriber
         .subscribe("/pubsub/**", move |_, _| {
@@ -171,7 +171,7 @@ async fn benchmark_clasp_pubsub(port: u16, size: MessageSize, count: usize) -> B
 }
 
 /// Placeholder for MQTT benchmark (requires external broker)
-async fn benchmark_mqtt(_size: MessageSize, count: usize) -> Option<BenchmarkResult> {
+async fn benchmark_mqtt(_size: MessageSize, _count: usize) -> Option<BenchmarkResult> {
     let mqtt_url = std::env::var("MQTT_BROKER_URL").ok()?;
 
     // MQTT benchmarking would require paho-mqtt or rumqttc
@@ -187,7 +187,7 @@ async fn benchmark_mqtt(_size: MessageSize, count: usize) -> Option<BenchmarkRes
 }
 
 /// Placeholder for OSC benchmark
-async fn benchmark_osc(_size: MessageSize, count: usize) -> Option<BenchmarkResult> {
+async fn benchmark_osc(_size: MessageSize, _count: usize) -> Option<BenchmarkResult> {
     let osc_port: u16 = std::env::var("OSC_SERVER_PORT")
         .ok()
         .and_then(|s| s.parse().ok())

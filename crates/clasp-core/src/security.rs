@@ -489,14 +489,14 @@ pub fn parse_duration(s: &str) -> Result<Duration> {
         return Err(Error::InvalidPattern("empty duration".to_string()));
     }
 
-    let (num_str, unit) = if s.ends_with('d') {
-        (&s[..s.len() - 1], "d")
-    } else if s.ends_with('h') {
-        (&s[..s.len() - 1], "h")
-    } else if s.ends_with('m') {
-        (&s[..s.len() - 1], "m")
-    } else if s.ends_with('s') {
-        (&s[..s.len() - 1], "s")
+    let (num_str, unit) = if let Some(n) = s.strip_suffix('d') {
+        (n, "d")
+    } else if let Some(n) = s.strip_suffix('h') {
+        (n, "h")
+    } else if let Some(n) = s.strip_suffix('m') {
+        (n, "m")
+    } else if let Some(n) = s.strip_suffix('s') {
+        (n, "s")
     } else {
         // Default to seconds
         (s, "s")

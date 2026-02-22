@@ -56,9 +56,11 @@ async fn test_websocket_text_to_clasp_set() {
 
     while Instant::now() < deadline {
         if let Some(event) = rx.recv().await {
-            if let BridgeEvent::ToClasp(Message::Set(set)) = event {
-                received_set = Some(set);
-                break;
+            if let BridgeEvent::ToClasp(msg) = event {
+                if let Message::Set(set) = *msg {
+                    received_set = Some(set);
+                    break;
+                }
             }
         } else {
             break;
@@ -133,12 +135,9 @@ async fn test_clasp_set_to_websocket_json() {
 
     while Instant::now() < deadline {
         if let Some(msg) = ws_stream.next().await {
-            match msg.expect("WebSocket receive error") {
-                WsMessage::Text(text) => {
-                    received_text = Some(text);
-                    break;
-                }
-                _ => {}
+            if let WsMessage::Text(text) = msg.expect("WebSocket receive error") {
+                received_text = Some(text);
+                break;
             }
         } else {
             break;

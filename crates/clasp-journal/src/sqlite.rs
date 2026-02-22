@@ -3,13 +3,13 @@
 use async_trait::async_trait;
 use clasp_core::SignalType;
 #[cfg(feature = "integrity")]
+use hex;
+#[cfg(feature = "integrity")]
 use hmac::{Hmac, Mac};
 use parking_lot::Mutex;
 use rusqlite::{params, Connection};
 #[cfg(feature = "integrity")]
 use sha2::Sha256;
-#[cfg(feature = "integrity")]
-use hex;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
@@ -47,8 +47,7 @@ pub struct SqliteJournal {
 impl SqliteJournal {
     /// Create a new SQLite journal at the given path.
     pub fn new(path: &str) -> Result<Self> {
-        let conn =
-            Connection::open(path).map_err(|e| JournalError::StorageError(e.to_string()))?;
+        let conn = Connection::open(path).map_err(|e| JournalError::StorageError(e.to_string()))?;
         let journal = Self {
             conn: Mutex::new(conn),
             #[cfg(feature = "integrity")]
@@ -65,8 +64,7 @@ impl SqliteJournal {
     /// Entries written without HMAC (NULL hmac column) are accepted without verification.
     #[cfg(feature = "integrity")]
     pub fn with_hmac(path: &str, key: [u8; 32]) -> Result<Self> {
-        let conn =
-            Connection::open(path).map_err(|e| JournalError::StorageError(e.to_string()))?;
+        let conn = Connection::open(path).map_err(|e| JournalError::StorageError(e.to_string()))?;
         let journal = Self {
             conn: Mutex::new(conn),
             hmac_key: Some(key),
@@ -77,8 +75,8 @@ impl SqliteJournal {
 
     /// Create an in-memory SQLite journal (for testing).
     pub fn in_memory() -> Result<Self> {
-        let conn = Connection::open_in_memory()
-            .map_err(|e| JournalError::StorageError(e.to_string()))?;
+        let conn =
+            Connection::open_in_memory().map_err(|e| JournalError::StorageError(e.to_string()))?;
         let journal = Self {
             conn: Mutex::new(conn),
             #[cfg(feature = "integrity")]
@@ -91,8 +89,8 @@ impl SqliteJournal {
     /// Create an in-memory journal with HMAC integrity verification (for testing).
     #[cfg(feature = "integrity")]
     pub fn in_memory_with_hmac(key: [u8; 32]) -> Result<Self> {
-        let conn = Connection::open_in_memory()
-            .map_err(|e| JournalError::StorageError(e.to_string()))?;
+        let conn =
+            Connection::open_in_memory().map_err(|e| JournalError::StorageError(e.to_string()))?;
         let journal = Self {
             conn: Mutex::new(conn),
             hmac_key: Some(key),
@@ -212,8 +210,7 @@ impl SqliteJournal {
     /// See pentest JNL-01: Journal Tampering
     #[cfg(feature = "integrity")]
     fn compute_hmac(key: &[u8; 32], address: &str, value_json: &str, timestamp: u64) -> String {
-        let mut mac =
-            HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
+        let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
         mac.update(address.as_bytes());
         mac.update(value_json.as_bytes());
         mac.update(&timestamp.to_le_bytes());
@@ -231,8 +228,7 @@ impl SqliteJournal {
     ) -> bool {
         let computed = Self::compute_hmac(key, address, value_json, timestamp);
         // Constant-time comparison via the hmac crate
-        let mut mac =
-            HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
+        let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
         mac.update(address.as_bytes());
         mac.update(value_json.as_bytes());
         mac.update(&timestamp.to_le_bytes());
@@ -325,17 +321,11 @@ impl Journal for SqliteJournal {
         };
 
         if let Some(from) = from {
-            sql.push_str(&format!(
-                " AND timestamp >= ?{}",
-                sql_params.len() + 1
-            ));
+            sql.push_str(&format!(" AND timestamp >= ?{}", sql_params.len() + 1));
             sql_params.push(Box::new(from as i64));
         }
         if let Some(to) = to {
-            sql.push_str(&format!(
-                " AND timestamp <= ?{}",
-                sql_params.len() + 1
-            ));
+            sql.push_str(&format!(" AND timestamp <= ?{}", sql_params.len() + 1));
             sql_params.push(Box::new(to as i64));
         }
         if !types.is_empty() {
@@ -343,23 +333,18 @@ impl Journal for SqliteJournal {
                 .iter()
                 .map(|t| format!("'{}'", Self::signal_type_to_str(t)))
                 .collect();
-            sql.push_str(&format!(
-                " AND signal_type IN ({})",
-                type_strs.join(",")
-            ));
+            sql.push_str(&format!(" AND signal_type IN ({})", type_strs.join(",")));
         }
 
         sql.push_str(" ORDER BY seq ASC");
 
         if let Some(limit) = limit {
-            sql.push_str(&format!(
-                " LIMIT ?{}",
-                sql_params.len() + 1
-            ));
+            sql.push_str(&format!(" LIMIT ?{}", sql_params.len() + 1));
             sql_params.push(Box::new(limit as i64));
         }
 
-        let param_refs: Vec<&dyn rusqlite::types::ToSql> = sql_params.iter().map(|p| p.as_ref()).collect();
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+            sql_params.iter().map(|p| p.as_ref()).collect();
         let mut stmt = conn
             .prepare(&sql)
             .map_err(|e| JournalError::StorageError(e.to_string()))?;
@@ -397,7 +382,13 @@ impl Journal for SqliteJournal {
             #[cfg(feature = "integrity")]
             if let Some(ref key) = self.hmac_key {
                 if let Some(ref expected_hmac) = stored_hmac {
-                    if !Self::verify_hmac(key, &entry.address, &_value_json, entry.timestamp, expected_hmac) {
+                    if !Self::verify_hmac(
+                        key,
+                        &entry.address,
+                        &_value_json,
+                        entry.timestamp,
+                        expected_hmac,
+                    ) {
                         return Err(JournalError::IntegrityViolation {
                             seq: entry.seq,
                             reason: "HMAC mismatch".to_string(),
@@ -473,7 +464,13 @@ impl Journal for SqliteJournal {
             #[cfg(feature = "integrity")]
             if let Some(ref key) = self.hmac_key {
                 if let Some(ref expected_hmac) = stored_hmac {
-                    if !Self::verify_hmac(key, &entry.address, &_value_json, entry.timestamp, expected_hmac) {
+                    if !Self::verify_hmac(
+                        key,
+                        &entry.address,
+                        &_value_json,
+                        entry.timestamp,
+                        expected_hmac,
+                    ) {
                         return Err(JournalError::IntegrityViolation {
                             seq: entry.seq,
                             reason: "HMAC mismatch".to_string(),
@@ -562,9 +559,7 @@ impl Journal for SqliteJournal {
     async fn len(&self) -> Result<usize> {
         let conn = self.conn.lock();
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM journal_entries", [], |row| {
-                row.get(0)
-            })
+            .query_row("SELECT COUNT(*) FROM journal_entries", [], |row| row.get(0))
             .map_err(|e| JournalError::StorageError(e.to_string()))?;
         Ok(count as usize)
     }
@@ -618,7 +613,8 @@ impl BatchingSqliteJournal {
         batch_timeout_ms: u64,
     ) {
         let timeout = std::time::Duration::from_millis(batch_timeout_ms);
-        let mut batch: Vec<(JournalEntry, oneshot::Sender<Result<u64>>)> = Vec::with_capacity(batch_size);
+        let mut batch: Vec<(JournalEntry, oneshot::Sender<Result<u64>>)> =
+            Vec::with_capacity(batch_size);
 
         loop {
             // Wait for the first message
@@ -683,9 +679,9 @@ impl BatchingSqliteJournal {
             };
 
             #[cfg(feature = "integrity")]
-            let hmac_value: Option<String> = inner
-                .hmac_key
-                .map(|key| SqliteJournal::compute_hmac(&key, &entry.address, &value_json, entry.timestamp));
+            let hmac_value: Option<String> = inner.hmac_key.map(|key| {
+                SqliteJournal::compute_hmac(&key, &entry.address, &value_json, entry.timestamp)
+            });
             #[cfg(not(feature = "integrity"))]
             let hmac_value: Option<String> = None;
 
@@ -922,10 +918,7 @@ mod tests {
         assert_eq!(results.len(), 2); // temp, humidity (not temp/room1, temp/room2)
 
         // Match all — /**
-        let results = journal
-            .query("/**", None, None, None, &[])
-            .await
-            .unwrap();
+        let results = journal.query("/**", None, None, None, &[]).await.unwrap();
         assert_eq!(results.len(), 5);
 
         // Exact miss

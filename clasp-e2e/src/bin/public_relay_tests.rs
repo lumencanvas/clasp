@@ -1045,9 +1045,10 @@ async fn main() {
 
             println!("{:<40} {:>8} {:>8}ms", test.name, status, test.duration_ms);
 
-            if !test.passed && !test.message.starts_with("SKIP") {
-                println!("  └─ {}", test.message);
-            } else if test.message.starts_with("SKIP") || test.message.starts_with("WARN") {
+            if (!test.passed && !test.message.starts_with("SKIP"))
+                || test.message.starts_with("SKIP")
+                || test.message.starts_with("WARN")
+            {
                 println!("  └─ {}", test.message);
             }
 

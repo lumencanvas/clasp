@@ -200,12 +200,9 @@ async fn test_roundtrip_via_server() {
         .expect("Handshake failed");
 
     // Drain any initial messages (like SNAPSHOT)
-    loop {
-        match timeout(Duration::from_millis(100), receiver.recv()).await {
-            Ok(Some(TransportEvent::Data(_))) => continue,
-            _ => break,
-        }
-    }
+    while let Ok(Some(TransportEvent::Data(_))) =
+        timeout(Duration::from_millis(100), receiver.recv()).await
+    {}
 
     // Send a SET and expect it back (self-echo from subscription)
     // First subscribe
@@ -325,11 +322,8 @@ async fn test_connect_invalid_url() {
         let connect_result =
             timeout(Duration::from_secs(2), WebSocketTransport::connect(url)).await;
 
-        match connect_result {
-            Ok(Ok(_)) => {
-                panic!("Should have failed for invalid URL: {}", url);
-            }
-            _ => {}
+        if let Ok(Ok(_)) = connect_result {
+            panic!("Should have failed for invalid URL: {}", url);
         }
     }
 }
@@ -371,12 +365,9 @@ async fn test_large_message() {
         .expect("Handshake failed");
 
     // Drain initial messages
-    loop {
-        match timeout(Duration::from_millis(100), receiver.recv()).await {
-            Ok(Some(TransportEvent::Data(_))) => continue,
-            _ => break,
-        }
-    }
+    while let Ok(Some(TransportEvent::Data(_))) =
+        timeout(Duration::from_millis(100), receiver.recv()).await
+    {}
 
     // Send large message (50KB of data)
     let large_data = vec![0x42u8; 50_000];
@@ -434,11 +425,11 @@ async fn test_message_size_boundaries() {
             lock: false,
             unlock: false,
         });
-        let encoded = codec::encode(&set).expect(&format!("Encode size {} failed", size));
+        let encoded = codec::encode(&set).unwrap_or_else(|_| panic!("Encode size {} failed", size));
         sender
             .send(encoded)
             .await
-            .expect(&format!("Send size {} failed", size));
+            .unwrap_or_else(|_| panic!("Send size {} failed", size));
     }
 
     sender.close().await.expect("Close failed");
@@ -454,12 +445,9 @@ async fn test_rapid_connect_disconnect() {
     let mut success = 0;
 
     for _ in 0..20 {
-        match WebSocketTransport::connect(&router.url()).await {
-            Ok((sender, _)) => {
-                let _ = sender.close().await;
-                success += 1;
-            }
-            Err(_) => {}
+        if let Ok((sender, _)) = WebSocketTransport::connect(&router.url()).await {
+            let _ = sender.close().await;
+            success += 1;
         }
     }
 
@@ -614,8 +602,9 @@ async fn test_value_roundtrip_all_types() {
             unlock: false,
         });
 
-        let encoded = codec::encode(&msg).expect(&format!("Encode {} failed", name));
-        let (decoded, _) = codec::decode(&encoded).expect(&format!("Decode {} failed", name));
+        let encoded = codec::encode(&msg).unwrap_or_else(|_| panic!("Encode {} failed", name));
+        let (decoded, _) =
+            codec::decode(&encoded).unwrap_or_else(|_| panic!("Decode {} failed", name));
 
         if let Message::Set(_set) = decoded {
             // Values should match

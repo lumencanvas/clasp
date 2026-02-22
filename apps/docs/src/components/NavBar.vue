@@ -24,8 +24,8 @@ function openSearch() {
     <a class="brand" @click="goHome">CLASP <span class="brand-docs">DOCS</span></a>
     <div class="navlinks">
       <router-link to="/">Home</router-link>
-      <router-link to="/tutorials/first-connection">Tutorials</router-link>
-      <router-link to="/reference/protocol/overview">Reference</router-link>
+      <router-link to="/getting-started/first-connection">Tutorials</router-link>
+      <router-link to="/reference">Reference</router-link>
       <router-link to="/tools/relay-configurator">Tools</router-link>
       <button class="search-trigger" @click="openSearch">
         <span class="search-trigger-icon">&#x2315;</span>

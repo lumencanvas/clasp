@@ -1,7 +1,7 @@
 //! OSC (Open Sound Control) bridge
 
 use async_trait::async_trait;
-use clasp_core::{Message, PublishMessage, QoS, SetMessage, SignalType, Value};
+use clasp_core::{Message, QoS, SetMessage, Value};
 use parking_lot::Mutex;
 use rosc::{OscMessage, OscPacket, OscType};
 use std::net::SocketAddr;
@@ -59,6 +59,7 @@ impl OscBridge {
     }
 
     /// Convert OSC message to Clasp message
+    #[allow(dead_code)]
     fn osc_to_clasp(&self, msg: &OscMessage) -> Option<Message> {
         let address = format!("{}{}", self.osc_config.namespace, msg.addr);
 
@@ -162,7 +163,11 @@ impl Bridge for OscBridge {
                             Ok((_, packet)) => {
                                 if let Some(messages) = packet_to_messages(&packet, &namespace) {
                                     for msg in messages {
-                                        if tx.send(BridgeEvent::ToClasp(msg)).await.is_err() {
+                                        if tx
+                                            .send(BridgeEvent::ToClasp(Box::new(msg)))
+                                            .await
+                                            .is_err()
+                                        {
                                             break;
                                         }
                                     }

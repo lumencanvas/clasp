@@ -357,7 +357,7 @@ impl RendezvousServer {
         let router = self.router();
         let listener = tokio::net::TcpListener::bind(addr)
             .await
-            .map_err(|e| crate::error::DiscoveryError::Io(e))?;
+            .map_err(crate::error::DiscoveryError::Io)?;
 
         axum::serve(listener, router)
             .await

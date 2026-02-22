@@ -5,7 +5,7 @@
 
 use crate::{Bridge, BridgeConfig, BridgeError, BridgeEvent, Result};
 use async_trait::async_trait;
-use clasp_core::{Message, PublishMessage, SetMessage, SignalType, Value};
+use clasp_core::{Message, SetMessage, Value};
 use futures::{SinkExt, StreamExt};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -108,12 +108,15 @@ impl Default for WebSocketBridgeConfig {
 }
 
 /// WebSocket client connection
+#[allow(dead_code)]
 type WsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 /// WebSocket server connection (raw TCP)
+#[allow(dead_code)]
 type WsServerStream = WebSocketStream<TcpStream>;
 
 /// Type alias for split sink
+#[allow(dead_code)]
 type WsSink = futures::stream::SplitSink<WsServerStream, WsMessage>;
 
 /// WebSocket Bridge implementation
@@ -316,6 +319,7 @@ impl WebSocketBridge {
     }
 
     /// Run client mode
+    #[allow(clippy::too_many_arguments)]
     async fn run_client(
         url: String,
         format: WsMessageFormat,
@@ -368,7 +372,7 @@ impl WebSocketBridge {
                                             }
                                             _ => {
                                                 if let Some(clasp_msg) = Self::parse_message(&ws_msg, format, &namespace) {
-                                                    let _ = event_tx.send(BridgeEvent::ToClasp(clasp_msg)).await;
+                                                    let _ = event_tx.send(BridgeEvent::ToClasp(Box::new(clasp_msg))).await;
                                                 }
                                             }
                                         }
@@ -448,6 +452,7 @@ impl WebSocketBridge {
     }
 
     /// Run server mode
+    #[allow(clippy::too_many_arguments)]
     async fn run_server(
         addr: SocketAddr,
         format: WsMessageFormat,
@@ -489,7 +494,6 @@ impl WebSocketBridge {
                             let client_id = next_client_id.fetch_add(1, Ordering::SeqCst);
                             info!("WebSocket client {} connected: {}", client_id, peer_addr);
 
-                            let format = format;
                             let namespace = namespace.clone();
                             let event_tx = event_tx.clone();
                             let clients = clients.clone();
@@ -531,7 +535,7 @@ impl WebSocketBridge {
                                                             }
                                                             _ => {
                                                                 if let Some(clasp_msg) = Self::parse_message(&ws_msg, format, &namespace) {
-                                                                    let _ = event_tx.send(BridgeEvent::ToClasp(clasp_msg)).await;
+                                                                    let _ = event_tx.send(BridgeEvent::ToClasp(Box::new(clasp_msg))).await;
                                                                 }
                                                             }
                                                         }

@@ -15,8 +15,6 @@
 use clasp_client::Clasp;
 use clasp_core::Value;
 use clasp_test_utils::TestRouter;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 

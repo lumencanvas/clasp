@@ -180,19 +180,16 @@ async fn test_connection_storm() -> TestResult {
     let mut success_count = 0;
 
     for i in 0..client_count {
-        match Clasp::builder(&url)
+        if let Ok(client) = Clasp::builder(&url)
             .name(&format!("storm-client-{}", i))
             .connect()
             .await
         {
-            Ok(client) => {
-                // Send a message
-                if client.set(&format!("/storm/{}", i), i as f64).await.is_ok() {
-                    success_count += 1;
-                }
-                // Don't close - let them accumulate
+            // Send a message
+            if client.set(&format!("/storm/{}", i), i as f64).await.is_ok() {
+                success_count += 1;
             }
-            Err(_) => {}
+            // Don't close - let them accumulate
         }
     }
 

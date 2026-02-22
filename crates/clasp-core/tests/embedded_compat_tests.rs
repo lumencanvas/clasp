@@ -57,7 +57,7 @@ fn test_core_set_to_embedded_decode() {
     let encoded = frame.encode().unwrap();
 
     // Decode using embedded
-    let (flags, payload_len) = embedded::decode_header(&encoded).expect("Failed to decode header");
+    let (_flags, payload_len) = embedded::decode_header(&encoded).expect("Failed to decode header");
     assert!(payload_len > 0);
 
     let payload = &encoded[embedded::HEADER_SIZE..embedded::HEADER_SIZE + payload_len];
@@ -94,8 +94,8 @@ fn test_value_types_roundtrip() {
         assert!(len > 0, "Failed to encode {}", address);
 
         // Decode with core
-        let (msg, _) =
-            codec::decode(&buf[..len]).expect(&format!("Core failed to decode {}", address));
+        let (msg, _) = codec::decode(&buf[..len])
+            .unwrap_or_else(|_| panic!("Core failed to decode {}", address));
 
         // Verify the message
         match msg {

@@ -52,6 +52,7 @@ impl TokenRecord {
     }
 
     /// Set expiration as Unix timestamp
+    #[allow(dead_code)]
     pub fn with_expires_at(mut self, expires_at: u64) -> Self {
         self.expires_at = Some(expires_at);
         self
@@ -82,6 +83,7 @@ impl TokenRecord {
     }
 
     /// Convert to TokenInfo for use with CpskValidator
+    #[allow(dead_code)]
     pub fn to_token_info(&self) -> Result<TokenInfo> {
         let scopes: Vec<Scope> = self
             .scopes
@@ -176,6 +178,7 @@ impl TokenStore {
     }
 
     /// Get a token by its string
+    #[allow(dead_code)]
     pub fn get(&self, token: &str) -> Option<&TokenRecord> {
         self.tokens.get(token)
     }
@@ -186,6 +189,7 @@ impl TokenStore {
     }
 
     /// Get the number of tokens
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.tokens.len()
     }
@@ -196,6 +200,7 @@ impl TokenStore {
     }
 
     /// Create a CpskValidator populated with all valid (non-expired) tokens
+    #[allow(dead_code)]
     pub fn to_validator(&self) -> Result<CpskValidator> {
         let validator = CpskValidator::new();
 

@@ -35,11 +35,11 @@ async fn test_session_unique_id() {
             .name(&format!("Client{}", i))
             .connect()
             .await
-            .expect(&format!("Client {} connect failed", i));
+            .unwrap_or_else(|_| panic!("Client {} connect failed", i));
 
         let session_id = client
             .session_id()
-            .expect(&format!("Client {} has no session ID", i));
+            .unwrap_or_else(|| panic!("Client {} has no session ID", i));
 
         // Verify this session ID is unique
         assert!(
@@ -163,11 +163,11 @@ async fn test_session_multiple_reconnects() {
     for i in 0..5 {
         let client = Clasp::connect_to(&router.url())
             .await
-            .expect(&format!("Connect {} failed", i));
+            .unwrap_or_else(|_| panic!("Connect {} failed", i));
 
         let session_id = client
             .session_id()
-            .expect(&format!("No session ID on connect {}", i));
+            .unwrap_or_else(|| panic!("No session ID on connect {}", i));
 
         // Verify unique
         assert!(
@@ -633,12 +633,11 @@ async fn test_rapid_connect_disconnect() {
     let mut success = 0;
 
     for _ in 0..20 {
-        match timeout(Duration::from_secs(2), Clasp::connect_to(&router.url())).await {
-            Ok(Ok(client)) => {
-                client.close().await;
-                success += 1;
-            }
-            _ => {}
+        if let Ok(Ok(client)) =
+            timeout(Duration::from_secs(2), Clasp::connect_to(&router.url())).await
+        {
+            client.close().await;
+            success += 1;
         }
     }
 
@@ -667,13 +666,10 @@ async fn test_session_after_server_restart() {
 
     // Wait for router to be ready
     let _ = wait_for(
-        || {
-            let port = port;
-            async move {
-                tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port))
-                    .await
-                    .is_ok()
-            }
+        || async move {
+            tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port))
+                .await
+                .is_ok()
         },
         Duration::from_millis(10),
         Duration::from_secs(5),
@@ -700,13 +696,10 @@ async fn test_session_after_server_restart() {
 
     // Wait for router to be ready
     let _ = wait_for(
-        || {
-            let port = port;
-            async move {
-                tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port))
-                    .await
-                    .is_ok()
-            }
+        || async move {
+            tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port))
+                .await
+                .is_ok()
         },
         Duration::from_millis(10),
         Duration::from_secs(5),

@@ -133,9 +133,7 @@ fn match_segments(addr: &[String], pattern: &[String]) -> bool {
                 ai += 1;
             }
             return false;
-        } else if ai >= addr.len() {
-            return false;
-        } else if !match_single(&addr[ai], pat) {
+        } else if ai >= addr.len() || !match_single(&addr[ai], pat) {
             return false;
         }
 
@@ -159,7 +157,7 @@ fn match_single(segment: &str, pattern: &str) -> bool {
 #[derive(Debug, Clone)]
 pub struct Pattern {
     address: Address,
-    regex: Option<regex_lite::Regex>,
+    _regex: Option<regex_lite::Regex>,
 }
 
 impl Pattern {
@@ -187,7 +185,10 @@ impl Pattern {
             None
         };
 
-        Ok(Self { address, regex })
+        Ok(Self {
+            address,
+            _regex: regex,
+        })
     }
 
     /// Check if an address matches this pattern

@@ -500,7 +500,7 @@ fn test_artnet_chase_effect() -> TestResult {
             } else {
                 ((60 - phase) * 8) as u8
             };
-            art_dmx.push(value.min(255));
+            art_dmx.push(value);
         }
 
         if let Err(e) = socket.send_to(&art_dmx, &target_addr) {

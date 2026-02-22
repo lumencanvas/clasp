@@ -363,13 +363,8 @@ mod tests {
 
         assert_eq!(journal.latest_seq().await.unwrap(), 0);
 
-        let entry = JournalEntry::from_set(
-            "/test".to_string(),
-            Value::Null,
-            1,
-            "s1".to_string(),
-            0,
-        );
+        let entry =
+            JournalEntry::from_set("/test".to_string(), Value::Null, 1, "s1".to_string(), 0);
         journal.append(entry).await.unwrap();
 
         assert_eq!(journal.latest_seq().await.unwrap(), 1);

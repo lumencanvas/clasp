@@ -270,7 +270,7 @@ async fn test_discovery_overwrite_device() {
 #[tokio::test]
 async fn test_discovery_event_found() {
     let device = Device::new("found-1".to_string(), "Found Device".to_string());
-    let event = DiscoveryEvent::Found(device);
+    let event = DiscoveryEvent::Found(Box::new(device));
 
     match event {
         DiscoveryEvent::Found(d) => {

@@ -23,6 +23,12 @@ vi.mock('../useIdentity.js', () => ({
   }),
 }))
 
+vi.mock('../useFriends.js', () => ({
+  useFriends: () => ({
+    isFriend: () => true,
+  }),
+}))
+
 // Mock localStorage
 const localStorageMock = (() => {
   let store = {}
