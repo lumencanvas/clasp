@@ -22,7 +22,7 @@ members = [
 ]
 
 [workspace.package]
-version = "3.5.0"
+version = "4.0.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/lumencanvas/clasp"
@@ -90,20 +90,20 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 serde_bytes = "0.11"
 
 # Internal crates
-clasp-core = { version = "3.0", path = "crates/clasp-core" }
-clasp-transport = { version = "3.0", path = "crates/clasp-transport" }
-clasp-discovery = { version = "3.0", path = "crates/clasp-discovery" }
-clasp-bridge = { version = "3.0", path = "crates/clasp-bridge" }
-clasp-router = { version = "3.0", path = "crates/clasp-router" }
-clasp-client = { version = "3.0", path = "crates/clasp-client" }
-clasp-embedded = { version = "3.0", path = "crates/clasp-embedded" }
-clasp-cli = { version = "3.0", path = "crates/clasp-cli" }
-clasp-test-utils = { version = "3.0", path = "crates/clasp-test-utils" }
-clasp-registry = { version = "3.0", path = "crates/clasp-registry" }
-clasp-journal = { version = "3.0", path = "crates/clasp-journal" }
-clasp-federation = { version = "3.0", path = "crates/clasp-federation" }
-clasp-caps = { version = "3.0", path = "crates/clasp-caps" }
-clasp-rules = { version = "3.0", path = "crates/clasp-rules" }
+clasp-core = { version = "4.0", path = "crates/clasp-core" }
+clasp-transport = { version = "4.0", path = "crates/clasp-transport" }
+clasp-discovery = { version = "4.0", path = "crates/clasp-discovery" }
+clasp-bridge = { version = "4.0", path = "crates/clasp-bridge" }
+clasp-router = { version = "4.0", path = "crates/clasp-router" }
+clasp-client = { version = "4.0", path = "crates/clasp-client" }
+clasp-embedded = { version = "4.0", path = "crates/clasp-embedded" }
+clasp-cli = { version = "4.0", path = "crates/clasp-cli" }
+clasp-test-utils = { version = "4.0", path = "crates/clasp-test-utils" }
+clasp-registry = { version = "4.0", path = "crates/clasp-registry" }
+clasp-journal = { version = "4.0", path = "crates/clasp-journal" }
+clasp-federation = { version = "4.0", path = "crates/clasp-federation" }
+clasp-caps = { version = "4.0", path = "crates/clasp-caps" }
+clasp-rules = { version = "4.0", path = "crates/clasp-rules" }
 
 [profile.release]
 lto = true

@@ -6,7 +6,7 @@ order: 8
 
 # JavaScript API
 
-Complete API reference for the `@clasp-to/core` package (v3.4.0+). This covers the `ClaspBuilder` and `Clasp` classes, all method signatures, and type definitions. For usage patterns and examples, see the [JavaScript SDK guide](../sdk/javascript.md).
+Complete API reference for the `@clasp-to/core` package (v4.0.0+). This covers the `ClaspBuilder` and `Clasp` classes, all method signatures, and type definitions. For usage patterns and examples, see the [JavaScript SDK guide](../sdk/javascript.md).
 
 ## Installation
 

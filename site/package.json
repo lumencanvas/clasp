@@ -1,6 +1,6 @@
 {
   "name": "clasp-site",
-  "version": "1.0.0",
+  "version": "4.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,7 +13,7 @@
     "vue": "^3.5.26"
   },
   "dependencies": {
-    "@clasp-to/core": "^3.4.0",
+    "@clasp-to/core": "^4.0.0",
     "highlight.js": "^11.11.1",
     "vue-router": "^4.6.4"
   }
