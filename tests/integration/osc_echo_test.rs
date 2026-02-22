@@ -40,7 +40,7 @@ async fn test_osc_to_clasp() {
     // Receive converted CLASP message
     match tokio::time::timeout(Duration::from_secs(1), rx.recv()).await {
         Ok(Some(BridgeEvent::ToClasp(msg))) => {
-            if let Message::Set(set) = msg {
+            if let Message::Set(set) = *msg {
                 assert_eq!(set.address, "/osc/test/param");
                 // Value should be the float converted
             } else {
@@ -143,7 +143,7 @@ async fn test_osc_echo_roundtrip() {
         tokio::time::timeout(Duration::from_secs(1), rx.recv()).await
     {
         // Echo it back through the bridge
-        bridge.send(msg).await.expect("Failed to echo");
+        bridge.send(*msg).await.expect("Failed to echo");
 
         // Check if we get OSC back
         let mut buf = [0u8; 1024];

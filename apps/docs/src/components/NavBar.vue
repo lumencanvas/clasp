@@ -1,6 +1,7 @@
 <script setup>
 import { useRouter, useRoute } from 'vue-router'
 import ThemeToggle from './ThemeToggle.vue'
+import ClaspLogo from './ClaspLogo.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -21,7 +22,11 @@ function openSearch() {
 
 <template>
   <nav class="topnav">
-    <a class="brand" @click="goHome">CLASP <span class="brand-docs">DOCS</span></a>
+    <a class="brand" @click="goHome">
+      <ClaspLogo :size="24" />
+      <span class="brand-text">CLASP</span>
+      <span class="brand-docs">DOCS</span>
+    </a>
     <div class="navlinks">
       <router-link to="/">Home</router-link>
       <router-link to="/getting-started/first-connection">Tutorials</router-link>
@@ -40,11 +45,20 @@ function openSearch() {
 </template>
 
 <style scoped>
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.brand-text {
+  letter-spacing: 0.28em;
+}
+
 .brand-docs {
   opacity: 0.5;
   font-size: 0.75rem;
   letter-spacing: 0.22em;
-  margin-left: 0.3rem;
 }
 
 .site-link {
