@@ -331,19 +331,36 @@ impl TransportServer for WebSocketServer {
             // Load balancers, health checkers, and platform routers may probe
             // the WS port with plain HTTP — not a WebSocket upgrade. Without
             // this intercept, tungstenite rejects them as bad handshakes.
-            let mut peek_buf = [0u8; 512];
+            //
+            // Use a 4 KiB buffer so that the Upgrade header is visible even
+            // when reverse proxies (e.g. Caddy) forward many browser headers.
+            let mut peek_buf = [0u8; 4096];
             match stream.peek(&mut peek_buf).await {
                 Ok(n) if n > 0 => {
                     if let Ok(text) = std::str::from_utf8(&peek_buf[..n]) {
                         let lower = text.to_ascii_lowercase();
-                        let is_http = text.starts_with("GET ")
-                            || text.starts_with("HEAD ")
+                        // Only non-GET methods are definitely not WebSocket.
+                        // GET requests without "upgrade: websocket" are plain
+                        // HTTP only if the header block is complete (contains
+                        // the blank line terminator "\r\n\r\n").  If the peek
+                        // didn't capture the full headers we must assume it
+                        // could still be a WebSocket upgrade and let
+                        // tungstenite handle it.
+                        let is_definitely_not_ws = if text.starts_with("HEAD ")
                             || text.starts_with("POST ")
-                            || text.starts_with("OPTIONS ");
-                        let is_ws_upgrade = lower.contains("upgrade: websocket");
+                            || text.starts_with("OPTIONS ")
+                        {
+                            true
+                        } else if text.starts_with("GET ") {
+                            let has_upgrade = lower.contains("upgrade: websocket");
+                            let headers_complete = lower.contains("\r\n\r\n");
+                            !has_upgrade && headers_complete
+                        } else {
+                            false
+                        };
 
-                        if is_http && !is_ws_upgrade {
-                            debug!("Plain HTTP probe from {}, responding 200", addr);
+                        if is_definitely_not_ws {
+                            info!("Plain HTTP probe from {}, responding 200", addr);
                             let resp = "HTTP/1.1 200 OK\r\n\
                                         Content-Type: text/plain\r\n\
                                         Content-Length: 3\r\n\
@@ -356,11 +373,13 @@ impl TransportServer for WebSocketServer {
                 }
                 Ok(_) => {
                     // Empty peek — TCP probe, just close
-                    debug!("Empty TCP probe from {}", addr);
+                    info!("Empty TCP probe from {}", addr);
                     let _ = stream.shutdown().await;
                     continue;
                 }
-                Err(_) => {
+                Err(e) => {
+                    warn!("Peek error from {}: {}", addr, e);
+                    let _ = stream.shutdown().await;
                     continue;
                 }
             }
@@ -442,6 +461,12 @@ impl TransportServer for WebSocketServer {
                                 .send(TransportEvent::Disconnected { reason })
                                 .await;
                             break;
+                        }
+                        WsMessage::Ping(_) | WsMessage::Pong(_) => {
+                            // tungstenite auto-responds to Ping with Pong
+                        }
+                        WsMessage::Text(_) => {
+                            debug!("Ignoring unexpected text WebSocket frame");
                         }
                         _ => {}
                     },

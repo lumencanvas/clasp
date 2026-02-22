@@ -478,7 +478,7 @@ impl Router {
                     self.handle_connection(Arc::new(sender), receiver, addr);
                 }
                 Err(e) => {
-                    debug!("Accept error: {}", e);
+                    warn!("Accept error: {}", e);
                 }
             }
         }
@@ -1025,7 +1025,7 @@ impl Router {
                 let hello_data = match handshake_result {
                     Ok(Some(data)) => data,
                     Ok(None) => {
-                        debug!("Handshake failed for {}", addr);
+                        info!("Handshake failed for {}", addr);
                         return;
                     }
                     Err(_) => {
