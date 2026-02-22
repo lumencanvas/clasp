@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "clasp-to"
-version = "4.0.0"
+version = "4.0.1"
 description = "CLASP client for Python - Creative Low-Latency Application Streaming Protocol"
 readme = "README.md"
 license = {text = "MIT"}
