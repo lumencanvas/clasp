@@ -26,8 +26,8 @@ COPY src ./src
 # Strip [patch.crates-io] section (only used for local dev, not Docker builds)
 RUN sed -i '/^\[patch\.crates-io\]/,$d' Cargo.toml
 
-# Build the relay binary
-RUN cargo build --release
+# Build the relay binary with all protocol support
+RUN cargo build --release --features full
 
 # Runtime image
 FROM debian:bookworm-slim
@@ -55,11 +55,14 @@ USER clasp
 EXPOSE 7330
 # Rendezvous API port
 EXPOSE 7340
+# MQTT port
+EXPOSE 1883
+# OSC port (UDP)
+EXPOSE 8000/udp
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -sf http://localhost:7360/healthz || exit 1
 
 ENTRYPOINT ["clasp-relay"]
-CMD ["--ws-port", "7330", "--auth-port", "7350", "--health-port", "7360", \
-     "--app-config", "/etc/clasp/chat.json", "--name", "relay.clasp.to"]
+CMD ["--ws-port", "7330", "--health-port", "7360", "--name", "relay.clasp.to"]

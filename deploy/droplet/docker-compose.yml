@@ -17,6 +17,11 @@ services:
 
   relay:
     image: ghcr.io/lumencanvas/clasp-relay:latest
+    ports:
+      # MQTT: exposed directly (Caddy doesn't proxy raw TCP)
+      - "1883:1883"
+      # OSC: exposed directly (UDP, no proxy possible)
+      - "8000:8000/udp"
     environment:
       RUST_LOG: info
     command:
@@ -28,6 +33,10 @@ services:
       - "/data/chat-auth.db"
       - "--health-port"
       - "7360"
+      - "--mqtt-port"
+      - "1883"
+      - "--osc-port"
+      - "8000"
       - "--persist"
       - "/data/state.json"
       - "--app-config"

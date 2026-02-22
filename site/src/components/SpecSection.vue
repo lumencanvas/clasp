@@ -17,7 +17,11 @@ const specSections = ref([
   { id: 'timing', title: '9. Clock Sync', open: false },
   { id: 'discovery', title: '10. Discovery', open: false },
   { id: 'security', title: '11. Security', open: false },
-  { id: 'benchmarks', title: '12. Benchmarks', open: false }
+  { id: 'federation', title: '12. Federation', open: false },
+  { id: 'rules', title: '13. Rules Engine', open: false },
+  { id: 'caps', title: '14. Capability Tokens', open: false },
+  { id: 'journal', title: '15. Journal & Persistence', open: false },
+  { id: 'benchmarks', title: '16. Benchmarks', open: false }
 ])
 
 function toggleSection(section) {
@@ -74,7 +78,7 @@ const handshakeFlow = `Client                           Server
 const helloMsg = `// HELLO - sent by client after WebSocket connects
 {
   "type": "HELLO",
-  "version": 3,
+  "version": 4,
   "name": "My Controller App",
   "features": ["param", "event", "stream"],
   "token": "cpsk_7kX9mP2nQ4rT6vW8xZ0aB3cD5eF1gH"  // optional CPSK token
@@ -83,11 +87,11 @@ const helloMsg = `// HELLO - sent by client after WebSocket connects
 const welcomeMsg = `// WELCOME - server response with session info
 {
   "type": "WELCOME",
-  "version": 3,
+  "version": 4,
   "session": "sess_a1b2c3",      // unique session ID
   "name": "CLASP Router",
   "time": 1704067200000000,      // server time in microseconds
-  "features": ["param", "event", "stream", "gesture", "timeline"]
+  "features": ["param", "event", "stream", "gesture", "timeline", "federation"]
 }`
 
 // Address patterns
@@ -296,7 +300,170 @@ const securityCode = `## Security Modes
    - write:/lights/* - Control lights namespace
    - admin:/**       - Full access
 
-   Optional: External PASETO/JWT tokens for federated auth`
+   Optional: External PASETO/JWT tokens for federated auth
+
+### 4. CAPABILITY TOKENS (advanced)
+   Ed25519 delegatable tokens with scope attenuation.
+   See section 14 for full specification.`
+
+// Federation
+const federationCode = `## Federation
+
+Hub/leaf topology for multi-site state sync.
+
+### Topology Modes
+  Hub:   Central aggregator, receives from all leaves
+  Leaf:  Owns a namespace, syncs to hub
+  Mesh:  Peer-to-peer (experimental)
+
+### Namespace Ownership
+  Each site owns a namespace prefix:
+    Site A owns /site-a/**
+    Site B owns /site-b/**
+  Only the owner can write to its namespace.
+
+### Sync Flow
+  1. Initial: Full snapshot of owned namespace
+  2. Steady-state: Forward SET/PUBLISH to peers
+  3. Loop prevention: Origin tracking per message
+  4. Reconnect: Exponential backoff + re-snapshot
+
+### Configuration
+  {
+    "mode": "leaf",
+    "hub_url": "wss://hub.example.com:7330",
+    "owned_namespaces": ["/venue-a/**"],
+    "auth_token": "cpsk_..."
+  }`
+
+// Rules engine
+const rulesCode = `## Rules Engine
+
+Server-side reactive automation. Define rules that
+trigger actions when conditions are met.
+
+### Triggers
+  OnChange(pattern)       - Value at pattern changed
+  OnThreshold(pattern, v) - Value crosses threshold
+  OnEvent(pattern)        - Event published to pattern
+  OnInterval(duration)    - Periodic timer
+
+### Conditions
+  Eq, Ne, Gt, Lt, Gte, Lte, And, Or, Not
+
+### Actions
+  Set(address, value)     - Write a param
+  Publish(address, event) - Emit an event
+  SetFromTrigger(addr)    - Copy trigger value
+  Delay(duration, action) - Deferred execution
+
+### Transforms
+  Scale(min, max)    - Linear remap
+  Clamp(min, max)    - Constrain range
+  Threshold(v)       - Boolean gate
+  Invert             - Flip value (1 - x)
+
+### Example
+  // Turn on house lights when stage brightness < 0.1
+  {
+    "trigger": { "OnThreshold": ["/stage/brightness", 0.1, "below"] },
+    "condition": { "Eq": ["/show/mode", "live"] },
+    "action": { "Set": ["/house/lights", 1.0] }
+  }
+
+### Safety
+  - Origin tagging prevents feedback loops
+  - Cooldown period between re-triggers
+  - Max chain depth limit (default: 8)`
+
+// Capability tokens
+const capsCode = `## Capability Tokens
+
+UCAN-inspired Ed25519 delegatable authorization tokens.
+
+### Structure
+  Issuer:     Ed25519 public key of token creator
+  Audience:   Public key of intended recipient (or bearer)
+  Scopes:     List of action:pattern permissions
+  Expiration: Unix timestamp (microseconds)
+  Delegation: Parent token reference (for chains)
+
+### Scope Attenuation
+  Parent: admin:/**
+  Child:  write:/lights/**     (valid, narrower)
+  Child:  admin:/**            (invalid, not narrower)
+
+### Action Hierarchy
+  admin > write > read
+  - admin: full control (create tokens, manage rules)
+  - write: set params, publish events
+  - read:  subscribe, get values
+
+### Delegation Chains
+  Root (server keypair)
+    -> Admin token (admin:/**)
+      -> Operator token (write:/lights/**)
+        -> Guest token (read:/lights/**)
+
+  Chain depth limit: configurable (default: 5)
+  Expiration clamping: child cannot outlive parent
+
+### Wire Format
+  cap_<base64url(msgpack({
+    iss, aud, scopes, exp, nbf, nonce, proof
+  }))>
+
+### Verification
+  1. Decode and validate signature
+  2. Check expiration (exp) and not-before (nbf)
+  3. Walk delegation chain to trusted root
+  4. Verify scope attenuation at each link
+  5. Confirm audience matches (if not bearer)`
+
+// Journal & persistence
+const journalCode = `## Journal & Persistence
+
+Append-only event log for crash recovery and audit.
+
+### Operations
+  Append:   Write event to log
+  Query:    Pattern + time-range lookups
+  Snapshot: Point-in-time state capture
+  Compact:  Reclaim storage (keep latest per address)
+
+### Query API
+  {
+    "type": "JOURNAL_QUERY",
+    "pattern": "/lights/**",
+    "from": 1704067200000000,
+    "to":   1704153600000000,
+    "limit": 100
+  }
+
+### Snapshots
+  Periodic full-state snapshots for fast recovery.
+  On startup: load latest snapshot, then replay
+  journal entries since snapshot timestamp.
+
+### Compaction
+  Removes superseded entries (older SET values
+  for the same address). Keeps:
+    - Latest value per address
+    - All events (non-compactable)
+    - Snapshot markers
+
+### Backends
+  InMemory:  Ring buffer, fixed capacity, fastest
+  SQLite:    Persistent, queryable, recommended
+
+### Configuration
+  {
+    "backend": "sqlite",
+    "path": "./clasp-journal.db",
+    "snapshot_interval": 300,
+    "compaction_interval": 3600,
+    "max_entries": 1000000
+  }`
 
 // Message catalog
 const messages = [
@@ -678,13 +845,97 @@ const benchmarks = {
           </div>
         </section>
 
-        <!-- 12. Benchmarks -->
+        <!-- 12. Federation -->
         <section
-          :id="`spec-benchmarks`"
+          :id="`spec-federation`"
           class="spec-section"
           :class="{ open: specSections[12].open }"
         >
-          <h3 @click="toggleSection(specSections[12])">12. Benchmarks</h3>
+          <h3 @click="toggleSection(specSections[12])">12. Federation</h3>
+          <div class="spec-content">
+            <p>Multi-site state synchronization using hub/leaf topology:</p>
+            <CodeBlock :code="federationCode" language="plaintext" />
+
+            <p style="margin-top: 1rem;"><b>Key properties:</b></p>
+            <ul>
+              <li>Namespace ownership prevents write conflicts between sites</li>
+              <li>Initial sync via full snapshots, steady-state via message forwarding</li>
+              <li>Loop prevention through origin tracking on every message</li>
+              <li>Automatic reconnect with exponential backoff</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- 13. Rules Engine -->
+        <section
+          :id="`spec-rules`"
+          class="spec-section"
+          :class="{ open: specSections[13].open }"
+        >
+          <h3 @click="toggleSection(specSections[13])">13. Rules Engine</h3>
+          <div class="spec-content">
+            <p>Server-side reactive automation with triggers, conditions, and actions:</p>
+            <CodeBlock :code="rulesCode" language="plaintext" />
+
+            <p style="margin-top: 1rem;"><b>Safety guarantees:</b></p>
+            <ul>
+              <li>Origin tagging prevents feedback loops between rules</li>
+              <li>Configurable cooldown between re-triggers</li>
+              <li>Max chain depth limit prevents runaway cascades</li>
+              <li>Transform pipeline for value remapping before actions</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- 14. Capability Tokens -->
+        <section
+          :id="`spec-caps`"
+          class="spec-section"
+          :class="{ open: specSections[14].open }"
+        >
+          <h3 @click="toggleSection(specSections[14])">14. Capability Tokens</h3>
+          <div class="spec-content">
+            <p>UCAN-inspired Ed25519 delegatable authorization tokens:</p>
+            <CodeBlock :code="capsCode" language="plaintext" />
+
+            <p style="margin-top: 1rem;"><b>Key properties:</b></p>
+            <ul>
+              <li>Delegation chains: parent can issue child tokens with narrower scope</li>
+              <li>Scope attenuation: child can only restrict, never expand permissions</li>
+              <li>Expiration clamping: child tokens cannot outlive their parent</li>
+              <li>Bearer or audience-restricted modes</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- 15. Journal & Persistence -->
+        <section
+          :id="`spec-journal`"
+          class="spec-section"
+          :class="{ open: specSections[15].open }"
+        >
+          <h3 @click="toggleSection(specSections[15])">15. Journal & Persistence</h3>
+          <div class="spec-content">
+            <p>Append-only event log for crash recovery, audit trails, and state replay:</p>
+            <CodeBlock :code="journalCode" language="plaintext" />
+
+            <p style="margin-top: 1rem;"><b>Recovery flow:</b></p>
+            <ul>
+              <li>Load latest snapshot for fast startup</li>
+              <li>Replay journal entries since snapshot timestamp</li>
+              <li>Periodic compaction reclaims storage from superseded values</li>
+              <li>Pattern and time-range queries for audit and debugging</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- 16. Benchmarks -->
+        <section
+          :id="`spec-benchmarks`"
+          class="spec-section"
+          :class="{ open: specSections[16].open }"
+        >
+          <h3 @click="toggleSection(specSections[16])">16. Benchmarks</h3>
           <div class="spec-content">
             <p class="bench-intro"><b>Why CLASP when MQTT and OSC are faster?</b> Because raw serialization speed isn't everything. CLASP trades some encoding speed for features that matter in real-time creative applications:</p>
 

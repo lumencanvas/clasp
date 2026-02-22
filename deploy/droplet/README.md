@@ -11,11 +11,13 @@ Deploys the CLASP relay server on a DigitalOcean Droplet with:
 | Container | Purpose |
 |-----------|---------|
 | `caddy` | Reverse proxy, auto HTTPS termination |
-| `relay` | CLASP WebSocket relay + HTTP auth API (uses `chat.json` for app-specific rules) |
+| `relay` | CLASP multi-protocol relay + HTTP auth API (uses `chat.json` for app-specific rules) |
 
-The relay exposes two internal ports:
-- **7330** — WebSocket (CLASP protocol)
-- **7350** — HTTP auth API (`/auth/register`, `/auth/login`)
+The relay exposes these ports:
+- **7330** — WebSocket (CLASP protocol, proxied through Caddy with TLS)
+- **7350** — HTTP auth API (`/auth/register`, `/auth/login`, proxied through Caddy)
+- **1883** — MQTT (exposed directly, raw TCP)
+- **8000** — OSC (exposed directly, UDP)
 
 Caddy routes both through a single HTTPS domain.
 
@@ -143,6 +145,8 @@ docker compose up -d --build
 
 If using the DO cloud firewall, allow:
 - **80/tcp** — HTTP (needed for Let's Encrypt ACME challenge)
-- **443/tcp** — HTTPS
+- **443/tcp** — HTTPS (WebSocket + auth API)
 - **443/udp** — HTTP/3 (optional)
+- **1883/tcp** — MQTT (bridge protocol)
+- **8000/udp** — OSC (bridge protocol, unicast only over WAN)
 - **22/tcp** — SSH

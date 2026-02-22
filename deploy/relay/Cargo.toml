@@ -8,7 +8,7 @@
 
 [package]
 name = "clasp-relay"
-version = "4.0.0"
+version = "4.0.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "CLASP multi-protocol relay server"

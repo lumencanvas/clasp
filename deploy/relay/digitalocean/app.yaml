@@ -31,10 +31,10 @@ services:
       - key: RUST_LOG
         value: info
 
-    # Health check - WebSocket accepts HTTP upgrade
+    # Health check - WS server responds to plain GET /healthz with 200
     health_check:
-      http_path: /
-      initial_delay_seconds: 30  # Rust compile takes time
+      http_path: /healthz
+      initial_delay_seconds: 30
       period_seconds: 30
       timeout_seconds: 5
       success_threshold: 1

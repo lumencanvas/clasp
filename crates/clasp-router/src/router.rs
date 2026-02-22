@@ -478,7 +478,7 @@ impl Router {
                     self.handle_connection(Arc::new(sender), receiver, addr);
                 }
                 Err(e) => {
-                    error!("Accept error: {}", e);
+                    debug!("Accept error: {}", e);
                 }
             }
         }

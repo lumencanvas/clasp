@@ -7,6 +7,7 @@ use parking_lot::Mutex;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use tokio::io::AsyncWriteExt;
 use tokio_tungstenite::{
     connect_async,
     tungstenite::{
@@ -319,11 +320,42 @@ impl TransportServer for WebSocketServer {
     type Receiver = WebSocketReceiver;
 
     async fn accept(&mut self) -> Result<(Self::Sender, Self::Receiver, SocketAddr)> {
-        let (stream, addr) = self
-            .listener
-            .accept()
-            .await
-            .map_err(|e| TransportError::ConnectionFailed(e.to_string()))?;
+        let (stream, addr) = loop {
+            let (mut stream, addr) = self
+                .listener
+                .accept()
+                .await
+                .map_err(|e| TransportError::ConnectionFailed(e.to_string()))?;
+
+            // Peek at incoming bytes to detect plain HTTP health checks.
+            // App Platform (and other load balancers) send GET /healthz as a
+            // plain HTTP request — not a WebSocket upgrade. Without this
+            // intercept, tungstenite rejects them as bad handshakes.
+            let mut peek_buf = [0u8; 512];
+            match stream.peek(&mut peek_buf).await {
+                Ok(n) if n > 0 => {
+                    if let Ok(text) = std::str::from_utf8(&peek_buf[..n]) {
+                        let is_health = text.starts_with("GET /healthz");
+                        let is_ws_upgrade = text
+                            .to_ascii_lowercase()
+                            .contains("upgrade: websocket");
+                        if is_health && !is_ws_upgrade {
+                            debug!("Health check from {}, responding 200", addr);
+                            let resp = "HTTP/1.1 200 OK\r\n\
+                                        Content-Type: text/plain\r\n\
+                                        Content-Length: 3\r\n\
+                                        Connection: close\r\n\r\nok\n";
+                            let _ = stream.try_write(resp.as_bytes());
+                            let _ = stream.shutdown().await;
+                            continue;
+                        }
+                    }
+                }
+                _ => {}
+            }
+
+            break (stream, addr);
+        };
 
         debug!("Accepted TCP connection from {}", addr);
 
