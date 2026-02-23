@@ -19,6 +19,7 @@ const { userId } = useIdentity()
 const {
   discoveredNamespaces,
   subscribedNamespaces,
+  unlockedNamespaces,
   namespaceTree,
   discoverTopLevelNamespaces,
   discoverChildNamespaces,
@@ -205,8 +206,35 @@ function isNsPinned(nsPath) {
   return subscribedNamespaces.value.has(nsPath)
 }
 
-function handlePinNs(nsPath) {
-  pinNamespace(nsPath)
+async function handlePinNs(nsPath) {
+  // Already unlocked this session — pin directly
+  if (unlockedNamespaces.value.has(nsPath)) {
+    pinNamespace(nsPath)
+    return
+  }
+
+  // Look up namespace to check for password
+  const meta = await lookupNamespace(nsPath)
+  if (!meta) {
+    // Couldn't fetch meta — pin anyway (public namespace without meta record)
+    pinNamespace(nsPath)
+    return
+  }
+
+  // Creator bypass — no password prompt needed
+  if (meta.createdBy === userId.value) {
+    pinNamespace(nsPath)
+    return
+  }
+
+  if (meta.hasPassword) {
+    // Show password prompt
+    nsPasswordPrompt.value = { path: nsPath, ...meta }
+    nsPasswordInput.value = ''
+    nsPasswordError.value = ''
+  } else {
+    pinNamespace(nsPath)
+  }
 }
 
 function handleUnpinNs(nsPath) {

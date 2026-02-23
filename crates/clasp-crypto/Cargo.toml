@@ -1,0 +1,42 @@
+[package]
+name = "clasp-crypto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+description = "E2E encryption add-on for CLASP protocol - AES-256-GCM, ECDH P-256, ECDSA, TOFU"
+keywords = ["clasp", "encryption", "e2e", "aes-gcm", "ecdh"]
+categories = ["cryptography", "network-programming"]
+
+[features]
+default = []
+client = ["dep:clasp-client", "dep:clasp-core"]
+
+[dependencies]
+# Crypto primitives (RustCrypto)
+aes-gcm = "0.10"
+p256 = { version = "0.13", features = ["ecdh", "ecdsa"] }
+hkdf = "0.12"
+sha2 = "0.10"
+ecdsa = { version = "0.16", features = ["signing", "verifying"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+base64 = { workspace = true }
+
+# Utils
+rand = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+zeroize = { version = "1", features = ["derive"] }
+
+# Optional: CLASP client integration
+clasp-client = { workspace = true, optional = true }
+clasp-core = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }

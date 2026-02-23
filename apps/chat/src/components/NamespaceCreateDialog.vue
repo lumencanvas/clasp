@@ -3,17 +3,25 @@ import { ref, computed } from 'vue'
 
 const emit = defineEmits(['create', 'close'])
 
-const name = ref('')
+const address = ref('')
 const description = ref('')
 const icon = ref('')
-const parentNamespace = ref('')
 const isPrivate = ref(false)
 const password = ref('')
 
 const fullPath = computed(() => {
-  const base = name.value.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '')
-  if (!base) return ''
-  return parentNamespace.value ? `${parentNamespace.value}/${base}` : base
+  // Sanitize each segment: lowercase, replace spaces with dashes, strip invalid chars
+  return address.value
+    .trim()
+    .split('/')
+    .map(s => s.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, ''))
+    .filter(Boolean)
+    .join('/')
+})
+
+const pathSegments = computed(() => {
+  if (!fullPath.value) return []
+  return fullPath.value.split('/')
 })
 
 function handleCreate() {
@@ -39,20 +47,22 @@ function handleCreate() {
       </div>
 
       <form class="ns-create-form" @submit.prevent="handleCreate">
-        <p class="ns-create-explainer">A group organizes related channels together, like folders for your rooms.</p>
+        <p class="ns-create-explainer">Groups organize related channels together. Use <code>/</code> to create nested groups.</p>
         <div class="field">
-          <label>Group Name</label>
-          <input v-model="name" type="text" placeholder="e.g. gaming, design, book-club" autocomplete="off" autofocus />
+          <label>Group Address</label>
+          <input v-model="address" type="text" placeholder="gaming/rust" autocomplete="off" autofocus />
+          <span class="hint">Use <code>/</code> to nest groups: <code>dev/rust</code> creates "rust" inside "dev"</span>
         </div>
 
-        <div class="field">
-          <label>Parent Group (optional)</label>
-          <input v-model="parentNamespace" type="text" placeholder="Nest inside another group, e.g. gaming" autocomplete="off" />
+        <div v-if="pathSegments.length > 1" class="path-breakdown">
+          <span
+            v-for="(seg, i) in pathSegments"
+            :key="i"
+            class="path-segment"
+          ><span v-if="i > 0" class="path-sep"> &rsaquo; </span><span :class="{ 'path-leaf': i === pathSegments.length - 1 }">{{ seg }}</span></span>
         </div>
-
-        <div v-if="fullPath" class="field path-preview">
-          <label>Group Path</label>
-          <code>{{ fullPath }}</code>
+        <div v-else-if="fullPath" class="path-breakdown">
+          <span class="path-segment path-leaf">{{ fullPath }}</span>
         </div>
 
         <div class="field">
@@ -171,13 +181,39 @@ function handleCreate() {
   border-color: var(--accent);
 }
 
-.path-preview code {
-  font-family: var(--font-code);
+.path-breakdown {
   font-size: 0.8rem;
-  color: var(--accent);
+  color: var(--text-secondary);
   background: var(--bg-active);
-  padding: 0.35rem 0.5rem;
+  padding: 0.45rem 0.6rem;
   border-radius: 4px;
+  font-family: var(--font-code);
+}
+
+.path-sep {
+  color: var(--text-muted);
+  margin: 0 0.1rem;
+}
+
+.path-leaf {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.hint code {
+  font-family: var(--font-code);
+  font-size: 0.7rem;
+  background: var(--bg-active);
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+}
+
+.ns-create-explainer code {
+  font-family: var(--font-code);
+  font-size: 0.75rem;
+  background: var(--bg-active);
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
 }
 
 .segmented-control {

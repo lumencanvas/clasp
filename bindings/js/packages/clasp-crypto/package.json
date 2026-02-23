@@ -1,0 +1,54 @@
+{
+  "name": "@clasp-to/crypto",
+  "version": "4.0.3",
+  "description": "E2E encryption add-on for CLASP protocol clients - AES-256-GCM, ECDH P-256, ECDSA signing, TOFU verification",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "test": "vitest",
+    "lint": "eslint src"
+  },
+  "peerDependencies": {
+    "@clasp-to/core": "^4.0.0"
+  },
+  "devDependencies": {
+    "@clasp-to/core": "^4.0.3",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "license": "MIT",
+  "author": "LumenCanvas",
+  "homepage": "https://clasp.to",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lumencanvas/clasp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lumencanvas/clasp/issues"
+  },
+  "keywords": [
+    "clasp",
+    "clasp-to",
+    "e2e",
+    "encryption",
+    "crypto",
+    "aes-gcm",
+    "ecdh",
+    "ecdsa",
+    "tofu",
+    "protocol"
+  ]
+}

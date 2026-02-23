@@ -138,12 +138,12 @@ function handleCreate() {
         <!-- Namespace picker -->
         <div class="field">
           <label>Group <span class="optional">(optional)</span></label>
-          <span class="field-hint">Organize this channel under a group so related channels appear together.</span>
+          <span class="field-hint">Use <code>/</code> to nest: <code>dev/rust</code> places this channel under dev &rsaquo; rust</span>
           <div class="ns-input-wrap">
             <input
               v-model="namespace"
               type="text"
-              placeholder="e.g. gaming, dev/rust"
+              placeholder="gaming, dev/rust, music/jazz"
               autocomplete="off"
               @input="handleNsInput"
               @focus="showNsDropdown = true"
@@ -422,6 +422,14 @@ function handleCreate() {
   font-size: 0.7rem;
   color: var(--text-muted);
   margin-top: -0.25rem;
+}
+
+.field-hint code {
+  font-family: var(--font-code);
+  font-size: 0.7rem;
+  background: var(--bg-active);
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
 }
 
 .ns-new-hint {
