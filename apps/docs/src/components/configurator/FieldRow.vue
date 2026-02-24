@@ -39,9 +39,9 @@ function onInput(e) {
 <style scoped>
 .field-row {
   display: grid;
-  grid-template-columns: 160px 1fr auto;
+  grid-template-columns: 1fr;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.25rem;
   padding: 0.35rem 0;
 }
 
@@ -78,19 +78,21 @@ function onInput(e) {
 }
 
 .field-hint {
+  display: none;
   font-size: 0.7rem;
   opacity: 0.4;
   white-space: nowrap;
   font-family: 'JetBrains Mono', monospace;
 }
 
-@media (max-width: 600px) {
+@media (min-width: 640px) {
   .field-row {
-    grid-template-columns: 1fr;
-    gap: 0.25rem;
+    grid-template-columns: 160px 1fr auto;
+    gap: 0.75rem;
   }
+
   .field-hint {
-    display: none;
+    display: inline;
   }
 }
 </style>

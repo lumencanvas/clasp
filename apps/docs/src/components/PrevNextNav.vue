@@ -101,6 +101,7 @@ const nextPage = computed(() => {
 <style scoped>
 .prev-next-nav {
   display: flex;
+  flex-direction: column;
   justify-content: space-between;
   gap: 1rem;
   margin-top: 3rem;
@@ -117,7 +118,7 @@ const nextPage = computed(() => {
   text-decoration: none;
   color: var(--ink);
   transition: border-color 0.15s;
-  max-width: 45%;
+  max-width: 100%;
 }
 
 .pn-link:hover {
@@ -126,7 +127,7 @@ const nextPage = computed(() => {
 }
 
 .pn-next {
-  text-align: right;
+  text-align: left;
   margin-left: auto;
 }
 
@@ -143,17 +144,17 @@ const nextPage = computed(() => {
   letter-spacing: 0.04em;
 }
 
-@media (max-width: 480px) {
+@media (min-width: 640px) {
   .prev-next-nav {
-    flex-direction: column;
+    flex-direction: row;
   }
 
   .pn-link {
-    max-width: 100%;
+    max-width: 45%;
   }
 
   .pn-next {
-    text-align: left;
+    text-align: right;
   }
 }
 </style>

@@ -806,14 +806,14 @@ const portConflicts = computed(() => {
 <style scoped>
 .relay-configurator {
   display: grid;
-  grid-template-columns: 55% 45%;
+  grid-template-columns: 1fr;
   min-height: calc(100vh - var(--nav-height));
   max-width: 1600px;
   margin: 0 auto;
 }
 
 .rc-form {
-  padding: 2rem 2rem 4rem;
+  padding: 1rem 1rem 3rem;
   overflow-y: auto;
 }
 
@@ -822,7 +822,7 @@ const portConflicts = computed(() => {
 }
 
 .rc-header h1 {
-  font-size: 1.4rem;
+  font-size: 1rem;
   letter-spacing: 0.2em;
   margin: 0 0 0.3rem;
 }
@@ -924,20 +924,22 @@ const portConflicts = computed(() => {
 
 /* Output panel */
 .rc-output {
-  border-left: 1px solid var(--border);
+  border-left: none;
+  border-top: 1px solid var(--border);
   background: var(--sidebar-bg);
 }
 
 .rc-output-sticky {
-  position: sticky;
-  top: var(--nav-height);
-  height: calc(100vh - var(--nav-height));
+  position: static;
+  height: auto;
+  max-height: 50vh;
   overflow-y: auto;
-  padding: 1.5rem;
+  padding: 1rem;
 }
 
 .rc-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 0;
   border-bottom: 1px solid var(--border);
   margin-bottom: 1rem;
@@ -972,34 +974,34 @@ const portConflicts = computed(() => {
 }
 
 /* Responsive */
-@media (max-width: 980px) {
+@media (min-width: 1024px) {
   .relay-configurator {
-    grid-template-columns: 1fr;
+    grid-template-columns: 55% 45%;
   }
 
-  .rc-output {
-    border-left: none;
-    border-top: 1px solid var(--border);
-  }
-
-  .rc-output-sticky {
-    position: static;
-    height: auto;
-    max-height: 50vh;
-  }
-}
-
-@media (max-width: 600px) {
   .rc-form {
-    padding: 1rem 1rem 3rem;
-  }
-
-  .rc-output-sticky {
-    padding: 1rem;
+    padding: 2rem 2rem 4rem;
   }
 
   .rc-header h1 {
-    font-size: 1rem;
+    font-size: 1.4rem;
+  }
+
+  .rc-output {
+    border-left: 1px solid var(--border);
+    border-top: none;
+  }
+
+  .rc-output-sticky {
+    position: sticky;
+    top: var(--nav-height);
+    height: calc(100vh - var(--nav-height));
+    max-height: none;
+    padding: 1.5rem;
+  }
+
+  .rc-tabs {
+    flex-wrap: nowrap;
   }
 }
 </style>

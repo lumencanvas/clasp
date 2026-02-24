@@ -86,6 +86,7 @@ function scrollTo(id) {
 
 <style scoped>
 .docs-toc {
+  display: none;
   position: sticky;
   top: calc(var(--nav-height) + 1.5rem);
   align-self: start;
@@ -141,9 +142,9 @@ function scrollTo(id) {
   font-size: 0.74rem;
 }
 
-@media (max-width: 1100px) {
+@media (min-width: 1280px) {
   .docs-toc {
-    display: none;
+    display: block;
   }
 }
 </style>

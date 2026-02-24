@@ -208,7 +208,7 @@ defineExpose({ open })
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 15vh;
+  padding-top: 5vh;
 }
 
 .search-modal {
@@ -217,7 +217,7 @@ defineExpose({ open })
   background: var(--paper);
   border: 1px solid var(--border);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.25);
-  max-height: 70vh;
+  max-height: 85vh;
   display: flex;
   flex-direction: column;
 }
@@ -326,13 +326,13 @@ defineExpose({ open })
   letter-spacing: 0.04em;
 }
 
-@media (max-width: 480px) {
+@media (min-width: 640px) {
   .search-backdrop {
-    padding-top: 5vh;
+    padding-top: 15vh;
   }
 
   .search-modal {
-    max-height: 80vh;
+    max-height: 70vh;
   }
 }
 </style>
