@@ -111,6 +111,18 @@ function openSearch() {
   min-height: 44px;
   display: flex;
   align-items: center;
+  text-decoration: none;
+  color: #fff;
+  opacity: 0.75;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.navlinks a:hover {
+  opacity: 1;
+  text-decoration: none;
 }
 
 .site-link {
@@ -165,6 +177,7 @@ function openSearch() {
     backdrop-filter: none;
     padding: 0;
     border-bottom: none;
+    gap: 0.8rem;
     flex: 1;
     justify-content: flex-end;
     margin-right: 0.5rem;
@@ -174,11 +187,23 @@ function openSearch() {
     padding: 0;
     min-height: 0;
     display: inline;
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
   }
 
   .search-trigger-text,
   .search-trigger-kbd {
     display: inline;
+  }
+}
+
+@media (min-width: 1024px) {
+  .navlinks {
+    gap: 1.2rem;
+  }
+
+  .navlinks a {
+    font-size: 0.8rem;
   }
 }
 </style>

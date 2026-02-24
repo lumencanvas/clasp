@@ -107,26 +107,6 @@ a:hover {
   text-decoration: none;
 }
 
-.topnav .navlinks {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.topnav .navlinks a {
-  text-decoration: none;
-  color: #fff;
-  opacity: 0.75;
-  letter-spacing: 0.08em;
-  font-size: 0.7rem;
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-
-.topnav .navlinks a:hover {
-  opacity: 1;
-  text-decoration: none;
-}
 
 /* === Docs Layout === */
 
@@ -616,15 +596,6 @@ footer {
     padding: 0.6rem 3vw;
   }
 
-  .topnav .navlinks {
-    gap: 0.8rem;
-  }
-
-  .topnav .navlinks a {
-    font-size: 0.75rem;
-    letter-spacing: 0.12em;
-  }
-
   .docs-content-wrap {
     padding: 1.5rem 1.5rem 3rem;
   }
@@ -641,14 +612,6 @@ footer {
 @media (min-width: 1024px) {
   .topnav {
     padding: 0.9rem 6vw;
-  }
-
-  .topnav .navlinks {
-    gap: 1.2rem;
-  }
-
-  .topnav .navlinks a {
-    font-size: 0.8rem;
   }
 
   .docs-layout {
