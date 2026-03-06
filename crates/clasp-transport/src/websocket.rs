@@ -6,8 +6,8 @@ use futures_util::{SinkExt, StreamExt};
 use parking_lot::Mutex;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::mpsc;
 use tokio::io::AsyncWriteExt;
+use tokio::sync::mpsc;
 use tokio_tungstenite::{
     connect_async,
     tungstenite::{
