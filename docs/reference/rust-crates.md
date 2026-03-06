@@ -24,6 +24,8 @@ CLASP is organized as a collection of Rust crates, each with a specific responsi
 | `clasp-rules`       | Rules engine             | `Rule`, `RulesEngine`, `Trigger`, `RuleAction`       | `clasp-core`                       | --                                                       |
 | `clasp-journal`     | State persistence        | `Journal`, `SqliteJournal`, `MemoryJournal`          | `clasp-core`                       | `sqlite`                                                 |
 | `clasp-federation`  | Multi-router federation  | `FederationManager`, `FederationConfig`, `FederationLink` | `clasp-core`                  | --                                                       |
+| `clasp-crypto`      | E2E encryption           | `E2ESession`, `CryptoClient`, `MemoryKeyStore`, `FileSystemKeyStore` | `clasp-core`           | `client`, `fs-store`                                     |
+| `clasp-wasm`        | WebAssembly bindings     | WASM client                                              | `clasp-core`, `clasp-client`  | `p2p`                                                    |
 
 ## Layer Diagram
 
@@ -32,9 +34,9 @@ The crates are organized in dependency layers. Higher layers depend on lower lay
 ```
                         Extensions
     +-----------+-----------+---------+-----------+--------------+
-    | clasp-caps| clasp-    | clasp-  | clasp-    | clasp-       |
-    |           | registry  | rules   | journal   | federation   |
-    +-----------+-----------+---------+-----------+--------------+
+    | clasp-caps| clasp-    | clasp-  | clasp-    | clasp-       | clasp-  |
+    |           | registry  | rules   | journal   | federation   | crypto  |
+    +-----------+-----------+---------+-----------+--------------+---------+
 
                         Application
                 +-------------+-------------+
@@ -53,9 +55,9 @@ The crates are organized in dependency layers. Higher layers depend on lower lay
                     +----------------+
 
                         Standalone
-                    +----------------+
-                    | clasp-embedded |
-                    +----------------+
+                +----------------+------------+
+                | clasp-embedded | clasp-wasm |
+                +----------------+------------+
 ```
 
 **Foundation**: `clasp-core` defines the wire protocol, value types, addressing scheme, and state primitives. All other crates (except `clasp-embedded`) depend on it.
@@ -76,7 +78,7 @@ The foundation crate. Defines the binary wire format, value encoding/decoding, a
 
 ```toml
 [dependencies]
-clasp-core = "3.5"
+clasp-core = "4.1"
 ```
 
 Use this crate directly when building custom tooling that operates at the protocol level or when implementing a new transport.
@@ -87,7 +89,7 @@ Provides transport implementations that carry CLASP frames over the network. Ena
 
 ```toml
 [dependencies]
-clasp-transport = { version = "3.5", features = ["websocket", "quic"] }
+clasp-transport = { version = "4.1", features = ["websocket", "quic"] }
 ```
 
 ### clasp-client
@@ -96,14 +98,14 @@ The async client library for connecting to a CLASP router. This is the primary c
 
 ```toml
 [dependencies]
-clasp-client = "3.5"
+clasp-client = "4.1"
 ```
 
 Enable `p2p` for direct peer-to-peer connections via WebRTC:
 
 ```toml
 [dependencies]
-clasp-client = { version = "3.5", features = ["p2p"] }
+clasp-client = { version = "4.1", features = ["p2p"] }
 ```
 
 ### clasp-router
@@ -112,7 +114,7 @@ Embed a CLASP router in your application. See [Router Config](router-config.md) 
 
 ```toml
 [dependencies]
-clasp-router = "3.5"
+clasp-router = "4.1"
 ```
 
 ### clasp-bridge
@@ -121,7 +123,7 @@ Protocol bridges translate between CLASP and external protocols (OSC, MIDI, Art-
 
 ```toml
 [dependencies]
-clasp-bridge = { version = "3.5", features = ["osc", "midi"] }
+clasp-bridge = { version = "4.1", features = ["osc", "midi"] }
 ```
 
 ### clasp-discovery
@@ -130,7 +132,7 @@ Automatic service discovery using mDNS, UDP broadcast, and rendezvous servers.
 
 ```toml
 [dependencies]
-clasp-discovery = "3.5"
+clasp-discovery = "4.1"
 ```
 
 ### clasp-embedded
@@ -139,7 +141,7 @@ A `no_std`, zero-dependency client for microcontrollers. Implements a minimal CL
 
 ```toml
 [dependencies]
-clasp-embedded = "3.5"
+clasp-embedded = "4.1"
 ```
 
 ### clasp-caps
@@ -148,7 +150,7 @@ Ed25519-based capability tokens for authentication and authorization. Tokens enc
 
 ```toml
 [dependencies]
-clasp-caps = "3.5"
+clasp-caps = "4.1"
 ```
 
 ### clasp-registry
@@ -157,7 +159,7 @@ An entity registry backed by SQLite for tracking devices, users, or other domain
 
 ```toml
 [dependencies]
-clasp-registry = { version = "3.5", features = ["sqlite"] }
+clasp-registry = { version = "4.1", features = ["sqlite"] }
 ```
 
 ### clasp-rules
@@ -166,7 +168,7 @@ A reactive rules engine that evaluates triggers, conditions, and actions against
 
 ```toml
 [dependencies]
-clasp-rules = "3.5"
+clasp-rules = "4.1"
 ```
 
 ### clasp-journal
@@ -175,7 +177,7 @@ State persistence with pluggable backends. `MemoryJournal` for testing, `SqliteJ
 
 ```toml
 [dependencies]
-clasp-journal = { version = "3.5", features = ["sqlite"] }
+clasp-journal = { version = "4.1", features = ["sqlite"] }
 ```
 
 ### clasp-federation
@@ -184,7 +186,32 @@ Multi-router federation for scaling CLASP across multiple nodes. Handles state s
 
 ```toml
 [dependencies]
-clasp-federation = "3.5"
+clasp-federation = "4.1"
+```
+
+### clasp-crypto
+
+Client-side E2E encryption using ECDH P-256 key exchange and AES-256-GCM. The router never sees plaintext. Enable `client` for the `CryptoClient` wrapper over a `Clasp` instance, and `fs-store` for `FileSystemKeyStore`.
+
+```toml
+[dependencies]
+clasp-crypto = { version = "4.1", features = ["client"] }
+```
+
+### clasp-wasm
+
+WebAssembly bindings for using CLASP in the browser or any WASM runtime. Wraps `clasp-client` for JS interop via `wasm-bindgen`.
+
+```toml
+[dependencies]
+clasp-wasm = "4.1"
+```
+
+Enable `p2p` for WebRTC peer-to-peer connections in the browser:
+
+```toml
+[dependencies]
+clasp-wasm = { version = "4.1", features = ["p2p"] }
 ```
 
 ## Using Crates
@@ -198,16 +225,19 @@ Most users need only one crate:
 | Work at the protocol level      | `clasp-core`    | `cargo add clasp-core`                 |
 | Target a microcontroller        | `clasp-embedded`| `cargo add clasp-embedded`             |
 | Bridge to OSC, MIDI, etc.       | `clasp-bridge`  | `cargo add clasp-bridge --features osc`|
+| E2E encryption                  | `clasp-crypto`  | `cargo add clasp-crypto --features client` |
+| WASM browser client             | `clasp-wasm`    | `cargo add clasp-wasm`                 |
 
 For a full application with an embedded router, bridges, and persistence:
 
 ```toml
 [dependencies]
-clasp-router = "3.5"
-clasp-bridge = { version = "3.5", features = ["osc", "midi", "artnet"] }
-clasp-journal = { version = "3.5", features = ["sqlite"] }
-clasp-rules = "3.5"
-clasp-caps = "3.5"
+clasp-router = "4.1"
+clasp-bridge = { version = "4.1", features = ["osc", "midi", "artnet"] }
+clasp-journal = { version = "4.1", features = ["sqlite"] }
+clasp-rules = "4.1"
+clasp-caps = "4.1"
+clasp-crypto = { version = "4.1", features = ["client"] }
 ```
 
 ## Next Steps

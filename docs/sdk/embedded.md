@@ -14,7 +14,7 @@ Add the crate with default features disabled:
 
 ```toml
 [dependencies]
-clasp-embedded = { version = "3.5", default-features = false }
+clasp-embedded = { version = "4.1", default-features = false }
 ```
 
 Or via the command line:

@@ -181,10 +181,11 @@ The listener emits three event types:
 Discovery is optional. You can always connect directly by providing the relay URL:
 
 ```javascript
-import { ClaspClient } from '@clasp-to/core';
+import { ClaspBuilder } from '@clasp-to/core';
 
-const client = new ClaspClient('ws://192.168.1.50:7330');
-await client.connect();
+const client = await new ClaspBuilder('ws://192.168.1.50:7330')
+  .withName('Manual Client')
+  .connect();
 ```
 
 Manual connection is the right choice when:

@@ -16,7 +16,7 @@ CLASP provides client libraries for JavaScript, Python, and Rust, plus a standal
 npm install @clasp-to/core
 ```
 
-Current version: **4.0.0**. Requires Node.js 18+ or any modern browser.
+Current version: **4.1.0**. Requires Node.js 18+ or any modern browser.
 
 Verify the installation:
 
@@ -33,7 +33,7 @@ client.set('/hello', 'world');
 pip install clasp-to
 ```
 
-Current version: **4.0.0**. Requires Python 3.9+.
+Current version: **4.1.0**. Requires Python 3.9+.
 
 Verify the installation:
 
@@ -54,9 +54,9 @@ cargo add clasp-client
 Verify the installation:
 
 ```rust
-use clasp_client::ClaspClient;
+use clasp_client::Clasp;
 
-let client = ClaspClient::connect("ws://localhost:7330", "test").await?;
+let client = Clasp::connect_to("ws://localhost:7330").await?;
 client.set("/hello", "world").await?;
 ```
 

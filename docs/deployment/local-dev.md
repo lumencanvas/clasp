@@ -93,9 +93,9 @@ await clasp.connect()
 Rust:
 
 ```rust
-use clasp_client::ClaspClient;
+use clasp_client::Clasp;
 
-let client = ClaspClient::connect("ws://localhost:7330").await?;
+let client = Clasp::connect_to("ws://localhost:7330").await?;
 ```
 
 ## Next Steps

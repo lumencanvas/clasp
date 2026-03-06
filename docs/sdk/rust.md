@@ -20,7 +20,7 @@ Or manually:
 
 ```toml
 [dependencies]
-clasp-client = "3.5"
+clasp-client = "4.1"
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -237,7 +237,7 @@ The `clasp-client` crate supports optional features via Cargo feature flags:
 
 ```toml
 [dependencies]
-clasp-client = { version = "3.5", features = ["p2p"] }
+clasp-client = { version = "4.1", features = ["p2p"] }
 ```
 
 | Feature | Description |
