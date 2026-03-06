@@ -387,5 +387,6 @@ See [E2E Encryption](../auth/e2e-encryption.md) for the full protocol descriptio
 - [Protocol Bridges](../protocols/README.md) -- connect CLASP to OSC, MIDI, MQTT, and more
 - [Auth & E2E Encryption](../auth/README.md) -- CPSK tokens, capability delegation, and E2E encryption
 - [P2P & WebRTC](../core/p2p.md) -- direct peer-to-peer connections
+- [Relay Server SDK](relay-server.md) -- manage relay servers from Node.js
 - [Python SDK](python.md) -- build CLASP clients with Python
 - [Rust SDK](rust.md) -- build CLASP clients with Rust

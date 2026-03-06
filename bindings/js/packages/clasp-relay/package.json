@@ -1,0 +1,50 @@
+{
+  "name": "@clasp-to/relay",
+  "version": "0.1.0",
+  "description": "Programmatic CLASP relay server for Node.js",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@clasp-to/sdk": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5",
+    "@types/ws": "^8.18.1",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0",
+    "ws": "^8.19.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lumencanvas/clasp",
+    "directory": "bindings/js/packages/clasp-relay"
+  },
+  "keywords": [
+    "clasp",
+    "relay",
+    "server",
+    "websocket",
+    "signal"
+  ]
+}

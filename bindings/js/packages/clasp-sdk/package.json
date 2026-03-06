@@ -1,0 +1,55 @@
+{
+  "name": "@clasp-to/sdk",
+  "version": "4.1.0",
+  "description": "Human-level SDK for CLASP - devices, rooms, rules, bridges in 1-5 lines",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@clasp-to/core": "^4.1.0",
+    "@clasp-to/crypto": "^4.1.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "license": "MIT",
+  "author": "LumenCanvas",
+  "homepage": "https://clasp.to",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lumencanvas/clasp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lumencanvas/clasp/issues"
+  },
+  "keywords": [
+    "clasp",
+    "clasp-to",
+    "sdk",
+    "iot",
+    "devices",
+    "real-time",
+    "protocol",
+    "creative",
+    "osc",
+    "midi",
+    "mqtt"
+  ]
+}

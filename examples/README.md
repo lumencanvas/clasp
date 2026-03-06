@@ -33,6 +33,8 @@ npm install @clasp-to/core
 | `security-tokens.js` | CPSK tokens, scoped permissions, authentication |
 | `p2p-webrtc.js` | Peer-to-peer via WebRTC DataChannels |
 | `embedded-server.js` | Integrating CLASP into your Node.js app |
+| `relay-server.js` | Programmatic relay server with `@clasp-to/relay` |
+| `relay-test-harness.js` | Integration test harness with ephemeral relays |
 | `video-relay.html` | Video streaming via CLASP relay (WebCodecs H.264) |
 | `video-p2p.html` | Video calling via WebRTC with CLASP signaling |
 
@@ -139,6 +141,7 @@ cargo run --example bundles_and_scheduling
 | Security Tokens | security-tokens | security_tokens | security_tokens |
 | P2P WebRTC | p2p-webrtc | p2p_webrtc | p2p_webrtc |
 | Embedded Server | embedded-server | embedded_server | embedded-server |
+| Relay Server SDK | relay-server | - | - |
 | Video Relay (WebCodecs) | video-relay.html | - | - |
 | Video P2P (WebRTC) | video-p2p.html | - | - |
 
