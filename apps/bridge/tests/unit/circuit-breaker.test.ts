@@ -8,109 +8,11 @@
  * - Respects max retries
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-
-// Re-implement CircuitBreaker for testing (same logic as main.js)
-const CircuitState = {
-  CLOSED: 'CLOSED',
-  OPEN: 'OPEN',
-  HALF_OPEN: 'HALF_OPEN',
-} as const;
-
-type CircuitStateType = typeof CircuitState[keyof typeof CircuitState];
-
-interface CircuitBreakerOptions {
-  failureThreshold?: number;
-  resetTimeout?: number;
-  maxRetries?: number;
-  halfOpenMaxAttempts?: number;
-}
-
-class CircuitBreaker {
-  private failureThreshold: number;
-  private resetTimeout: number;
-  private maxRetries: number;
-  private halfOpenMaxAttempts: number;
-
-  private state: CircuitStateType = CircuitState.CLOSED;
-  private failures: number = 0;
-  private retries: number = 0;
-  private lastFailure: number | null = null;
-  private halfOpenAttempts: number = 0;
-
-  constructor(options: CircuitBreakerOptions = {}) {
-    this.failureThreshold = options.failureThreshold || 3;
-    this.resetTimeout = options.resetTimeout || 30000;
-    this.maxRetries = options.maxRetries || 10;
-    this.halfOpenMaxAttempts = options.halfOpenMaxAttempts || 1;
-  }
-
-  shouldRetry(): boolean {
-    if (this.retries >= this.maxRetries) {
-      return false;
-    }
-
-    switch (this.state) {
-      case CircuitState.CLOSED:
-        return true;
-
-      case CircuitState.OPEN:
-        if (this.lastFailure && Date.now() - this.lastFailure >= this.resetTimeout) {
-          this.state = CircuitState.HALF_OPEN;
-          this.halfOpenAttempts = 0;
-          return true;
-        }
-        return false;
-
-      case CircuitState.HALF_OPEN:
-        return this.halfOpenAttempts < this.halfOpenMaxAttempts;
-
-      default:
-        return false;
-    }
-  }
-
-  recordSuccess(): void {
-    this.failures = 0;
-    this.retries = 0;
-    this.state = CircuitState.CLOSED;
-    this.halfOpenAttempts = 0;
-  }
-
-  recordFailure(): void {
-    this.failures++;
-    this.retries++;
-    this.lastFailure = Date.now();
-
-    if (this.state === CircuitState.HALF_OPEN) {
-      this.halfOpenAttempts++;
-      if (this.halfOpenAttempts >= this.halfOpenMaxAttempts) {
-        this.state = CircuitState.OPEN;
-      }
-    } else if (this.failures >= this.failureThreshold) {
-      this.state = CircuitState.OPEN;
-    }
-  }
-
-  getState(): CircuitStateType {
-    return this.state;
-  }
-
-  getRetryCount(): number {
-    return this.retries;
-  }
-
-  reset(): void {
-    this.state = CircuitState.CLOSED;
-    this.failures = 0;
-    this.retries = 0;
-    this.lastFailure = null;
-    this.halfOpenAttempts = 0;
-  }
-}
+import { describe, it, expect, beforeEach } from 'vitest';
+import { CircuitBreaker, CircuitState } from '../../electron/ipc/circuit-breaker.js';
 
 describe('CircuitBreaker', () => {
-  let breaker: CircuitBreaker;
+  let breaker: InstanceType<typeof CircuitBreaker>;
 
   beforeEach(() => {
     breaker = new CircuitBreaker({

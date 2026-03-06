@@ -1,0 +1,64 @@
+/* CLASP Bridge - CSS Custom Properties */
+
+:root {
+  /* Teal Palette */
+  --teal-50: #f0fdfa;
+  --teal-100: #ccfbf1;
+  --teal-200: #99f6e4;
+  --teal-300: #5eead4;
+  --teal-400: #2dd4bf;
+  --teal-500: #14b8a6;
+  --teal-600: #0d9488;
+  --teal-700: #0f766e;
+  --teal-800: #115e59;
+  --teal-900: #134e4a;
+
+  /* Neutrals */
+  --stone-50: #fafaf9;
+  --stone-100: #f5f5f4;
+  --stone-200: #e7e5e4;
+  --stone-300: #d6d3d1;
+  --stone-400: #a8a29e;
+  --stone-500: #78716c;
+  --stone-600: #57534e;
+  --stone-700: #44403c;
+  --stone-800: #292524;
+  --stone-900: #1c1917;
+
+  /* Protocol Colors */
+  --orange-500: #f97316;
+  --purple-500: #a855f7;
+  --pink-500: #ec4899;
+  --pink-600: #db2777;
+  --green-500: #22c55e;
+  --blue-500: #3b82f6;
+  --blue-600: #2563eb;
+
+  /* Semantic */
+  --color-bg: var(--stone-100);
+  --color-surface: var(--stone-50);
+  --color-text: var(--stone-900);
+  --color-text-muted: var(--stone-500);
+  --color-border: var(--stone-300);
+  --color-border-dark: var(--stone-800);
+  --color-accent: var(--teal-500);
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+
+  /* Shadows */
+  --shadow-sm: 2px 2px 0 var(--stone-900);
+  --shadow-md: 3px 3px 0 var(--stone-900);
+
+  /* Typography */
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+
+  --border-width: 2px;
+}
