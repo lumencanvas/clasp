@@ -58,7 +58,7 @@ client.on('/lights/*', (value, address) =&gt; console.log(address, value))</code
 
       <router-link to="/auth" class="home-card">
         <h3>AUTH &amp; SECURITY</h3>
-        <p>3 token types: CPSK login, Ed25519 capability delegation, entity registry.</p>
+        <p>3 token types, E2E encryption (AES-256-GCM), TOFU key verification, auto-rotation.</p>
       </router-link>
 
       <router-link to="/reference" class="home-card">
@@ -77,7 +77,7 @@ client.on('/lights/*', (value, address) =&gt; console.log(address, value))</code
           <p><strong>3 SDKs + embedded</strong> &mdash; JavaScript, Python, Rust, ESP32/RP2040</p>
         </div>
         <div>
-          <p><strong>Auth</strong> &mdash; CPSK tokens, Ed25519 capability delegation, entity registry</p>
+          <p><strong>Auth &amp; encryption</strong> &mdash; CPSK tokens, Ed25519 caps, E2E AES-256-GCM, TOFU</p>
           <p><strong>Server features</strong> &mdash; Rules engine, app config, journal persistence</p>
           <p><strong>Federation</strong> &mdash; Hub-leaf multi-site state sync</p>
           <p><strong>Discovery</strong> &mdash; mDNS, UDP broadcast, rendezvous server</p>
@@ -92,7 +92,8 @@ client.on('/lights/*', (value, address) =&gt; console.log(address, value))</code
           <p><strong>Web/desktop developer</strong><br/>
             <router-link to="/sdk/javascript">SDK guide</router-link> &rarr;
             <router-link to="/core/state">State</router-link> &rarr;
-            <router-link to="/auth">Auth</router-link>
+            <router-link to="/auth">Auth</router-link> &rarr;
+            <router-link to="/auth/e2e-encryption">E2E Encryption</router-link>
           </p>
           <p><strong>Creative/live performance</strong><br/>
             <router-link to="/getting-started/first-connection">First Connection</router-link> &rarr;

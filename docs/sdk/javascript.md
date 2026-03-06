@@ -357,12 +357,35 @@ Working examples in `examples/js/`:
 | `discovery.js` | Service discovery |
 | `security-tokens.js` | CPSK token authentication |
 | `embedded-server.js` | Embedded CLASP router in Node.js |
+| `encrypted-signals.js` | E2E encrypted signals with `@clasp-to/crypto` |
+
+## E2E Encryption
+
+The `@clasp-to/crypto` package adds client-side AES-256-GCM encryption. The router never sees plaintext.
+
+```javascript
+import { CryptoClient, MemoryKeyStore } from '@clasp-to/crypto'
+
+const crypto = new CryptoClient(client, {
+  identityId: 'device-1',
+  store: new MemoryKeyStore(),
+})
+const session = crypto.session('/myapp/signals')
+await session.start()
+await session.enableEncryption()
+
+// Transparent encrypt/decrypt
+await crypto.set('/myapp/signals/fader', 0.75)
+crypto.subscribe('/myapp/signals/**', (data, addr) => console.log(addr, data))
+```
+
+See [E2E Encryption](../auth/e2e-encryption.md) for the full protocol description, key exchange flow, TOFU verification, and key rotation.
 
 ## Next Steps
 
 - [Core Concepts](../concepts/architecture.md) -- understand signals, state, and the router model
 - [Protocol Bridges](../protocols/README.md) -- connect CLASP to OSC, MIDI, MQTT, and more
-- [Auth](../auth/README.md) -- CPSK tokens and capability delegation
+- [Auth & E2E Encryption](../auth/README.md) -- CPSK tokens, capability delegation, and E2E encryption
 - [P2P & WebRTC](../core/p2p.md) -- direct peer-to-peer connections
 - [Python SDK](python.md) -- build CLASP clients with Python
 - [Rust SDK](rust.md) -- build CLASP clients with Rust

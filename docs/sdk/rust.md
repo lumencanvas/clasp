@@ -336,6 +336,7 @@ Working examples in `examples/rust/`:
 | `late_joiner.rs` | Late-joiner state synchronization |
 | `security_tokens.rs` | CPSK token authentication |
 | `embedded-server.rs` | Embedded CLASP router |
+| `encrypted-client.rs` | E2E encrypted client with `clasp-crypto` |
 
 Run any example with:
 
@@ -343,11 +344,39 @@ Run any example with:
 cargo run --example basic-client
 ```
 
+## E2E Encryption
+
+The `clasp-crypto` crate adds client-side AES-256-GCM encryption. The router never sees plaintext.
+
+```rust
+use clasp_crypto::{E2ESession, E2ESessionConfig, MemoryKeyStore};
+use std::sync::Arc;
+
+let store = Arc::new(MemoryKeyStore::new());
+let mut session = E2ESession::new(E2ESessionConfig {
+    identity_id: "device-1".into(),
+    base_path: "/myapp/signals".into(),
+    store,
+    on_key_change: None,
+    password_hash: None,
+    rotation_interval: Some(Duration::from_secs(3600)),
+    on_rotation: None,
+    max_announcement_age: None,
+});
+session.start().await?;
+session.enable_encryption().await?;
+
+let envelope = session.encrypt(r#"{"fader": 0.75}"#)?;
+let plaintext = session.decrypt(&envelope).await?;
+```
+
+Enable the `client` feature for the `CryptoClient` wrapper that handles encryption transparently over a `Clasp` instance. See [E2E Encryption](../auth/e2e-encryption.md) for the full protocol description.
+
 ## Next Steps
 
 - [Core Concepts](../concepts/architecture.md) -- understand signals, state, and the router model
 - [Protocol Bridges](../protocols/README.md) -- connect CLASP to OSC, MIDI, MQTT, and more
-- [Auth](../auth/README.md) -- CPSK tokens and capability delegation
+- [Auth & E2E Encryption](../auth/README.md) -- CPSK tokens, capability delegation, and E2E encryption
 - [P2P & WebRTC](../core/p2p.md) -- direct peer-to-peer connections
 - [Embedded SDK](embedded.md) -- run CLASP on microcontrollers
 - [JavaScript SDK](javascript.md) -- build CLASP clients with JavaScript
