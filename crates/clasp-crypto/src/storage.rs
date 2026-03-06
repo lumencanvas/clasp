@@ -54,7 +54,8 @@ impl KeyStore for MemoryKeyStore {
     }
 
     async fn load_group_key(&self, session_id: &str) -> Result<Option<KeyData>> {
-        Ok(self.group_keys
+        Ok(self
+            .group_keys
             .lock()
             .map_err(|_| CryptoError::Storage("key store lock poisoned".into()))?
             .get(session_id)
@@ -78,7 +79,8 @@ impl KeyStore for MemoryKeyStore {
     }
 
     async fn load_tofu_record(&self, id: &str) -> Result<Option<TofuRecord>> {
-        Ok(self.tofu_records
+        Ok(self
+            .tofu_records
             .lock()
             .map_err(|_| CryptoError::Storage("key store lock poisoned".into()))?
             .get(id)
@@ -97,7 +99,10 @@ mod tests {
             key: serde_json::json!({"kty": "oct", "k": "dGVzdA=="}),
             stored_at: 1000,
         };
-        store.save_group_key("session-1", data.clone()).await.unwrap();
+        store
+            .save_group_key("session-1", data.clone())
+            .await
+            .unwrap();
         let loaded = store.load_group_key("session-1").await.unwrap();
         assert!(loaded.is_some());
         assert_eq!(loaded.unwrap().key["kty"], "oct");

@@ -152,7 +152,9 @@ impl E2ESession {
             return Err(CryptoError::DecryptionFailed("invalid E2E marker".into()));
         }
         if envelope.v != 1 {
-            return Err(CryptoError::DecryptionFailed("unsupported envelope version".into()));
+            return Err(CryptoError::DecryptionFailed(
+                "unsupported envelope version".into(),
+            ));
         }
         let key = Zeroizing::new(match &self.group_key {
             Some(k) => k.clone(),
@@ -169,9 +171,11 @@ impl E2ESession {
             }
         });
 
-        let ciphertext = B64.decode(&envelope.ct)
+        let ciphertext = B64
+            .decode(&envelope.ct)
             .map_err(|e| CryptoError::DecryptionFailed(format!("invalid base64 ct: {e}")))?;
-        let iv = B64.decode(&envelope.iv)
+        let iv = B64
+            .decode(&envelope.iv)
             .map_err(|e| CryptoError::DecryptionFailed(format!("invalid base64 iv: {e}")))?;
         let plaintext = primitives::decrypt(&key, &ciphertext, &iv)?;
         String::from_utf8(plaintext)
@@ -200,10 +204,12 @@ impl E2ESession {
         let peer_pub_bytes = primitives::jwk_to_public_key(&announcement.public_key)?;
 
         // TOFU verification (uses JWK fingerprint for JS interop)
-        self.verify_peer_key(peer_id, &announcement.public_key).await?;
+        self.verify_peer_key(peer_id, &announcement.public_key)
+            .await?;
 
         // Cache SEC1 bytes for crypto
-        self.peer_public_keys.insert(peer_id.to_string(), peer_pub_bytes.clone());
+        self.peer_public_keys
+            .insert(peer_id.to_string(), peer_pub_bytes.clone());
 
         // Only distribute if we have the group key
         let group_key = Zeroizing::new(match &self.group_key {
@@ -214,10 +220,16 @@ impl E2ESession {
         // Derive shared key and encrypt the group key as JWK JSON (JS interop)
         self.ensure_ecdh_key_pair();
         let kp = self.ecdh_key_pair();
-        let shared = Zeroizing::new(primitives::derive_shared_key(&kp.private_key, &peer_pub_bytes, None)?);
+        let shared = Zeroizing::new(primitives::derive_shared_key(
+            &kp.private_key,
+            &peer_pub_bytes,
+            None,
+        )?);
         let group_key_jwk = primitives::group_key_to_jwk(&group_key)?;
-        let mut group_key_json = Zeroizing::new(serde_json::to_string(&group_key_jwk)
-            .map_err(|e| CryptoError::Serialization(e.to_string()))?);
+        let mut group_key_json = Zeroizing::new(
+            serde_json::to_string(&group_key_jwk)
+                .map_err(|e| CryptoError::Serialization(e.to_string()))?,
+        );
         let (ct, iv) = primitives::encrypt(&shared, group_key_json.as_bytes())?;
         group_key_json.zeroize();
 
@@ -239,29 +251,41 @@ impl E2ESession {
         }
         // Reject empty sender ID — prevents TOFU bypass
         if msg.from_id.is_empty() {
-            return Err(CryptoError::InvalidKey("key exchange message missing sender ID".into()));
+            return Err(CryptoError::InvalidKey(
+                "key exchange message missing sender ID".into(),
+            ));
         }
 
         let sender_pub = primitives::jwk_to_public_key(&msg.sender_public_key)?;
 
         // TOFU verify sender (uses JWK fingerprint)
-        self.verify_peer_key(&msg.from_id, &msg.sender_public_key).await?;
+        self.verify_peer_key(&msg.from_id, &msg.sender_public_key)
+            .await?;
 
         // Cache sender's public key for future key rotations
-        self.peer_public_keys.insert(msg.from_id.clone(), sender_pub.clone());
+        self.peer_public_keys
+            .insert(msg.from_id.clone(), sender_pub.clone());
 
         self.ensure_ecdh_key_pair();
         let kp = self.ecdh_key_pair();
-        let shared = Zeroizing::new(primitives::derive_shared_key(&kp.private_key, &sender_pub, None)?);
+        let shared = Zeroizing::new(primitives::derive_shared_key(
+            &kp.private_key,
+            &sender_pub,
+            None,
+        )?);
 
-        let ct = B64.decode(&msg.encrypted_key)
+        let ct = B64
+            .decode(&msg.encrypted_key)
             .map_err(|e| CryptoError::DecryptionFailed(format!("invalid base64: {e}")))?;
-        let iv = B64.decode(&msg.iv)
+        let iv = B64
+            .decode(&msg.iv)
             .map_err(|e| CryptoError::DecryptionFailed(format!("invalid base64: {e}")))?;
 
         let decrypted = primitives::decrypt(&shared, &ct, &iv)?;
-        let mut key_json = Zeroizing::new(String::from_utf8(decrypted)
-            .map_err(|e| CryptoError::DecryptionFailed(format!("invalid UTF-8: {e}")))?);
+        let mut key_json = Zeroizing::new(
+            String::from_utf8(decrypted)
+                .map_err(|e| CryptoError::DecryptionFailed(format!("invalid UTF-8: {e}")))?,
+        );
         let key_jwk: serde_json::Value = serde_json::from_str(&key_json)
             .map_err(|e| CryptoError::DecryptionFailed(format!("invalid JWK JSON: {e}")))?;
         key_json.zeroize();
@@ -302,8 +326,9 @@ impl E2ESession {
         self.group_key = Some(new_key.to_vec());
 
         let jwk = primitives::group_key_to_jwk(&new_key)?;
-        let mut group_key_json = Zeroizing::new(serde_json::to_string(&jwk)
-            .map_err(|e| CryptoError::Serialization(e.to_string()))?);
+        let mut group_key_json = Zeroizing::new(
+            serde_json::to_string(&jwk).map_err(|e| CryptoError::Serialization(e.to_string()))?,
+        );
         new_key.zeroize();
         self.config
             .store
@@ -397,7 +422,11 @@ impl E2ESession {
     /// Always stores the record on first use. On key change, calls the
     /// `on_key_change` callback which must return `true` to accept.
     /// If no callback is set, key changes are rejected.
-    async fn verify_peer_key(&self, peer_id: &str, public_key_jwk: &serde_json::Value) -> Result<()> {
+    async fn verify_peer_key(
+        &self,
+        peer_id: &str,
+        public_key_jwk: &serde_json::Value,
+    ) -> Result<()> {
         let fp = primitives::fingerprint_jwk(public_key_jwk);
         let record_id = format!("{}:{}", self.config.base_path, peer_id);
 
@@ -420,7 +449,9 @@ impl E2ESession {
             Some(record) => {
                 if !primitives::constant_time_eq(record.fingerprint.as_bytes(), fp.as_bytes()) {
                     // Key changed — check if caller accepts
-                    let accepted = self.config.on_key_change
+                    let accepted = self
+                        .config
+                        .on_key_change
                         .as_ref()
                         .map(|cb| cb(peer_id, &record.fingerprint, &fp))
                         .unwrap_or(false);

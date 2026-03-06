@@ -30,4 +30,6 @@ pub use primitives::{
 };
 pub use protocol::E2ESession;
 pub use storage::{KeyStore, MemoryKeyStore};
-pub use types::{E2EEnvelope, ECDHKeyPair, KeyData, KeyExchangeMessage, SigningKeyPair, TofuRecord};
+pub use types::{
+    E2EEnvelope, ECDHKeyPair, KeyData, KeyExchangeMessage, SigningKeyPair, TofuRecord,
+};

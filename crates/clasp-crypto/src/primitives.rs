@@ -7,11 +7,14 @@ use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
     Aes256Gcm, Key, Nonce,
 };
-use base64::{engine::general_purpose::{STANDARD as B64, URL_SAFE_NO_PAD as B64URL}, Engine};
+use base64::{
+    engine::general_purpose::{STANDARD as B64, URL_SAFE_NO_PAD as B64URL},
+    Engine,
+};
 use ecdsa::signature::{Signer, Verifier};
 use hkdf::Hkdf;
 use p256::{
-    ecdsa::{SigningKey, VerifyingKey, Signature},
+    ecdsa::{Signature, SigningKey, VerifyingKey},
     elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint},
     PublicKey, SecretKey,
 };
@@ -97,10 +100,8 @@ pub fn derive_shared_key(
     let peer_pub: PublicKey = Option::from(PublicKey::from_encoded_point(&peer_point))
         .ok_or_else(|| CryptoError::InvalidKey("peer public key is not on curve".into()))?;
 
-    let shared_secret = p256::ecdh::diffie_hellman(
-        secret.to_nonzero_scalar(),
-        peer_pub.as_affine(),
-    );
+    let shared_secret =
+        p256::ecdh::diffie_hellman(secret.to_nonzero_scalar(), peer_pub.as_affine());
     let raw_bytes = shared_secret.raw_secret_bytes();
 
     let hkdf = Hkdf::<Sha256>::new(Some(&[0u8; 32]), raw_bytes);
@@ -153,7 +154,9 @@ pub fn verify(public_key: &[u8], data: &[u8], signature: &[u8]) -> Result<bool> 
 pub fn public_key_to_jwk(sec1_public_key: &[u8]) -> Result<serde_json::Value> {
     // SEC1 uncompressed: 0x04 || x (32 bytes) || y (32 bytes)
     if sec1_public_key.len() != 65 || sec1_public_key[0] != 0x04 {
-        return Err(CryptoError::InvalidKey("expected 65-byte SEC1 uncompressed point".into()));
+        return Err(CryptoError::InvalidKey(
+            "expected 65-byte SEC1 uncompressed point".into(),
+        ));
     }
     let x = B64URL.encode(&sec1_public_key[1..33]);
     let y = B64URL.encode(&sec1_public_key[33..65]);
@@ -173,18 +176,28 @@ pub fn jwk_to_public_key(jwk: &serde_json::Value) -> Result<Vec<u8>> {
     let kty = jwk.get("kty").and_then(|v| v.as_str());
     let crv = jwk.get("crv").and_then(|v| v.as_str());
     if kty != Some("EC") || crv != Some("P-256") {
-        return Err(CryptoError::InvalidKey("JWK must be EC/P-256 public key".into()));
+        return Err(CryptoError::InvalidKey(
+            "JWK must be EC/P-256 public key".into(),
+        ));
     }
-    let x_b64 = jwk.get("x").and_then(|v| v.as_str())
+    let x_b64 = jwk
+        .get("x")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| CryptoError::InvalidKey("JWK missing 'x' field".into()))?;
-    let y_b64 = jwk.get("y").and_then(|v| v.as_str())
+    let y_b64 = jwk
+        .get("y")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| CryptoError::InvalidKey("JWK missing 'y' field".into()))?;
-    let x = B64URL.decode(x_b64)
+    let x = B64URL
+        .decode(x_b64)
         .map_err(|e| CryptoError::InvalidKey(format!("invalid JWK x: {e}")))?;
-    let y = B64URL.decode(y_b64)
+    let y = B64URL
+        .decode(y_b64)
         .map_err(|e| CryptoError::InvalidKey(format!("invalid JWK y: {e}")))?;
     if x.len() != 32 || y.len() != 32 {
-        return Err(CryptoError::InvalidKey("JWK x/y must be 32 bytes each for P-256".into()));
+        return Err(CryptoError::InvalidKey(
+            "JWK x/y must be 32 bytes each for P-256".into(),
+        ));
     }
     let mut sec1 = Vec::with_capacity(65);
     sec1.push(0x04);
@@ -214,15 +227,21 @@ pub fn jwk_to_group_key(jwk: &serde_json::Value) -> Result<Vec<u8>> {
     // Validate key type
     let kty = jwk.get("kty").and_then(|v| v.as_str());
     if kty != Some("oct") {
-        return Err(CryptoError::InvalidKey("JWK must be kty=oct for group key".into()));
+        return Err(CryptoError::InvalidKey(
+            "JWK must be kty=oct for group key".into(),
+        ));
     }
-    let k_b64 = jwk.get("k").and_then(|v| v.as_str())
+    let k_b64 = jwk
+        .get("k")
+        .and_then(|v| v.as_str())
         .ok_or_else(|| CryptoError::InvalidKey("JWK missing 'k' field".into()))?;
-    let bytes = B64URL.decode(k_b64)
+    let bytes = B64URL
+        .decode(k_b64)
         .map_err(|e| CryptoError::InvalidKey(format!("invalid JWK k: {e}")))?;
     if bytes.len() != 32 {
         return Err(CryptoError::InvalidKey(format!(
-            "group key must be 32 bytes, got {}", bytes.len()
+            "group key must be 32 bytes, got {}",
+            bytes.len()
         )));
     }
     Ok(bytes)
@@ -248,7 +267,8 @@ pub fn export_group_key(key: &[u8]) -> String {
 
 /// Import a base64-encoded group key.
 pub fn import_group_key(encoded: &str) -> Result<Vec<u8>> {
-    let bytes = B64.decode(encoded)
+    let bytes = B64
+        .decode(encoded)
         .map_err(|e| CryptoError::InvalidKey(format!("invalid base64: {e}")))?;
     if bytes.len() != 32 {
         return Err(CryptoError::InvalidKey(format!(
@@ -292,7 +312,10 @@ pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
     }
-    a.iter().zip(b.iter()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    a.iter()
+        .zip(b.iter())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
 }
 
 /// Compute a SHA-256 fingerprint of raw SEC1 public key bytes.
@@ -316,11 +339,15 @@ fn canonical_json(value: &serde_json::Value) -> String {
         serde_json::Value::Object(map) => {
             let mut keys: Vec<&String> = map.keys().collect();
             keys.sort();
-            let entries: Vec<String> = keys.iter().map(|k| {
-                // Use serde_json to properly escape key strings
-                let escaped_key = serde_json::to_string(k).unwrap_or_else(|_| format!("\"{}\"", k));
-                format!("{}:{}", escaped_key, canonical_json(&map[*k]))
-            }).collect();
+            let entries: Vec<String> = keys
+                .iter()
+                .map(|k| {
+                    // Use serde_json to properly escape key strings
+                    let escaped_key =
+                        serde_json::to_string(k).unwrap_or_else(|_| format!("\"{}\"", k));
+                    format!("{}:{}", escaped_key, canonical_json(&map[*k]))
+                })
+                .collect();
             format!("{{{}}}", entries.join(","))
         }
         serde_json::Value::Array(arr) => {
@@ -403,8 +430,10 @@ mod tests {
     fn ecdh_different_info_different_keys() {
         let kp_a = generate_ecdh_key_pair();
         let kp_b = generate_ecdh_key_pair();
-        let key1 = derive_shared_key(&kp_a.private_key, &kp_b.public_key, Some("domain-1")).unwrap();
-        let key2 = derive_shared_key(&kp_a.private_key, &kp_b.public_key, Some("domain-2")).unwrap();
+        let key1 =
+            derive_shared_key(&kp_a.private_key, &kp_b.public_key, Some("domain-1")).unwrap();
+        let key2 =
+            derive_shared_key(&kp_a.private_key, &kp_b.public_key, Some("domain-2")).unwrap();
         assert_ne!(key1, key2);
     }
 
