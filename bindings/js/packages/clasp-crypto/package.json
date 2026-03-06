@@ -1,6 +1,6 @@
 {
   "name": "@clasp-to/crypto",
-  "version": "4.0.3",
+  "version": "4.1.0",
   "description": "E2E encryption add-on for CLASP protocol clients - AES-256-GCM, ECDH P-256, ECDSA signing, TOFU verification",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -17,14 +17,14 @@
   ],
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts",
-    "test": "vitest",
+    "test": "vitest run",
     "lint": "eslint src"
   },
   "peerDependencies": {
-    "@clasp-to/core": "^4.0.0"
+    "@clasp-to/core": "^4.1.0"
   },
   "devDependencies": {
-    "@clasp-to/core": "^4.0.3",
+    "@clasp-to/core": "^4.1.0",
     "tsup": "^8.0.0",
     "typescript": "^5.3.0",
     "vitest": "^1.0.0"

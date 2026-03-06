@@ -20,6 +20,7 @@ clasp-client.workspace = true
 clasp-discovery = { workspace = true, features = ["rendezvous"] }
 clasp-embedded.workspace = true
 clasp-test-utils.workspace = true
+clasp-crypto = { workspace = true, features = ["client"] }
 
 # Real protocol libraries for integration testing
 rosc.workspace = true
@@ -214,6 +215,19 @@ path = "src/bin/chaos_tests.rs"
 [[bin]]
 name = "network-simulation-tests"
 path = "src/bin/network_simulation_tests.rs"
+
+# Crypto Tests
+[[bin]]
+name = "crypto-interop-tests"
+path = "src/bin/crypto_interop_tests.rs"
+
+[[bin]]
+name = "crypto-client-tests"
+path = "src/bin/crypto_client_tests.rs"
+
+[[bin]]
+name = "crypto-e2e-tests"
+path = "src/bin/crypto_e2e_tests.rs"
 
 # Benchmark harness
 [[bench]]

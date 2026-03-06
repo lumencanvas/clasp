@@ -28,7 +28,9 @@ pub use primitives::{
     generate_signing_key_pair, group_key_to_jwk, import_group_key, import_public_key,
     jwk_to_group_key, jwk_to_public_key, public_key_to_jwk, sign, verify,
 };
-pub use protocol::E2ESession;
+pub use protocol::{E2ESession, E2ESessionConfig};
+#[cfg(feature = "fs-store")]
+pub use storage::FileSystemKeyStore;
 pub use storage::{KeyStore, MemoryKeyStore};
 pub use types::{
     E2EEnvelope, ECDHKeyPair, KeyData, KeyExchangeMessage, SigningKeyPair, TofuRecord,

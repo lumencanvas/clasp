@@ -26,6 +26,20 @@ export interface E2EConfig {
    * The value is the expected hash that peers must present.
    */
   passwordHash?: string
+  /**
+   * Automatic key rotation interval in milliseconds.
+   * If set, the session will call `rotateKey()` on this interval.
+   * Minimum enforced: 60000 ms (60 seconds).
+   */
+  rotationInterval?: number
+  /** Called after automatic key rotation completes. */
+  onRotation?: () => void
+  /**
+   * Maximum age of a peer's public key announcement in milliseconds.
+   * Announcements older than this are rejected. Default: 300000 (5 min).
+   * Set to 0 to disable timestamp validation.
+   */
+  maxAnnouncementAge?: number
 }
 
 /** Configuration for the CryptoClient wrapper. */

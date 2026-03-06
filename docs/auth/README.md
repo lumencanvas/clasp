@@ -90,3 +90,4 @@ In open mode, any client can connect and access all paths. Adding TLS encrypts t
 - [Capability Tokens](capability-tokens.md) -- Ed25519 delegatable tokens
 - [Entity Registry](entity-registry.md) -- persistent device and service identity
 - [TLS Setup](tls.md) -- transport encryption
+- [E2E Encryption](e2e-encryption.md) -- client-side end-to-end encryption

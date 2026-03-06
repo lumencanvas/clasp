@@ -14,6 +14,7 @@ categories = ["cryptography", "network-programming"]
 [features]
 default = []
 client = ["dep:clasp-client", "dep:clasp-core"]
+fs-store = ["dep:tokio"]
 
 [dependencies]
 # Crypto primitives (RustCrypto)
@@ -38,5 +39,9 @@ zeroize = { version = "1", features = ["derive"] }
 clasp-client = { workspace = true, optional = true }
 clasp-core = { workspace = true, optional = true }
 
+# Optional: filesystem key store
+tokio = { workspace = true, features = ["fs"], optional = true }
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }
+tempfile = "3.10"

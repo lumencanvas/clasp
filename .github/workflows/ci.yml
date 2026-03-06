@@ -177,6 +177,58 @@ jobs:
           name: benchmark-results
           path: benchmark-results.txt
 
+  # Crypto Interop Tests
+  crypto-interop:
+    name: Crypto Interop Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ubuntu-cargo-crypto-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run Rust crypto unit tests
+        run: cargo test -p clasp-crypto
+
+      - name: Run Rust crypto unit tests (fs-store)
+        run: cargo test -p clasp-crypto --features fs-store
+
+      - name: Run Rust crypto interop tests
+        run: cargo run -p clasp-e2e --bin crypto-interop-tests
+
+      - name: Run Rust CryptoClient tests
+        run: cargo run -p clasp-e2e --bin crypto-client-tests
+
+      - name: Run Rust crypto E2E tests
+        run: cargo run -p clasp-e2e --bin crypto-e2e-tests
+
+      - name: Install JS crypto dependencies
+        working-directory: bindings/js/packages/clasp-crypto
+        run: npm install
+
+      - name: Run JS crypto tests
+        working-directory: bindings/js/packages/clasp-crypto
+        run: npm test
+
   # Desktop App Tests
   desktop-tests:
     name: Desktop App Tests

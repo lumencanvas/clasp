@@ -252,19 +252,39 @@ Modifies state entries before delivery to specific clients. Transforms can:
 
 Transforms are applied after visibility filtering and before delivery. The state store retains the full data; only the delivered snapshot is modified.
 
+## End-to-End Encryption
+
+CLASP supports optional E2E encryption via the `clasp-crypto` (Rust) and `@clasp-to/crypto` (JS) libraries. E2E encryption is a separate, additive layer on top of TLS and token auth.
+
+**Key principle**: the router stays transparent. It never holds keys, never decrypts signal values. Encryption is client-side only.
+
+E2E encryption uses AES-256-GCM for symmetric encryption, ECDH P-256 for key exchange, and HKDF-SHA256 for key derivation. Encrypted values flow through the router as opaque envelope objects. Peers exchange group keys over dedicated `/_e2e/` subpaths using ECDH-derived shared secrets.
+
+Features:
+- Automatic key rotation (configurable interval, minimum 60s)
+- TOFU (Trust On First Use) peer key verification with callback
+- Replay protection via nonce tracking
+- Timestamp validation on key announcements
+- Multiple storage backends (Memory, IndexedDB, FileSystem)
+- Password-gated group key distribution
+- Full Rust/JS cross-platform interop (JWK format)
+
+See [E2E Encryption](../auth/e2e-encryption.md) for the full guide.
+
 ## Threat Model
 
 | Threat | Mitigation |
 |---|---|
-| Eavesdropping | TLS encryption on WebSocket and QUIC transports. DTLS on UDP. |
+| Eavesdropping | TLS encryption on WebSocket and QUIC transports. DTLS on UDP. E2E encryption for content confidentiality even from the router. |
 | Man-in-the-middle | TLS certificate verification. Clients can pin certificates. |
 | Unauthorized access | Token authentication required in authenticated mode. Connections without valid tokens are rejected. |
 | Token forgery | Ed25519 signature verification for capability and entity tokens. HMAC verification for CPSK tokens. |
 | Scope escalation | Per-operation scope checks. A valid token with `read` scopes cannot perform `write` operations. |
-| Replay attacks | Token expiration enforced. Capability tokens include nonces in delegation chains. |
+| Replay attacks | Token expiration enforced. Capability tokens include nonces in delegation chains. E2E key exchange messages have nonce-based replay protection. |
 | Federation hijacking | Namespace ownership enforced. A federated peer can only write to its declared namespace prefix. |
 | Resource exhaustion | Configurable session limits (max connections per IP, max subscriptions per session). Rate limiting per client. |
-| Data leakage | Snapshot visibility rules and transforms. Sensitive data redacted before delivery. |
+| Data leakage | Snapshot visibility rules and transforms. Sensitive data redacted before delivery. E2E encryption prevents server-side data access. |
+| Compromised router | E2E encryption ensures the router cannot read signal values. Router sees metadata only (addresses, timing, sizes). |
 
 ## Recommendations by Environment
 

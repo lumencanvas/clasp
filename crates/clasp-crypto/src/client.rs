@@ -5,6 +5,7 @@
 mod inner {
     use std::collections::HashMap;
     use std::sync::Arc;
+    use std::time::Duration;
 
     use crate::error::{CryptoError, Result};
     use crate::protocol::{E2ESession, E2ESessionConfig, OnKeyChange};
@@ -16,6 +17,8 @@ mod inner {
         pub identity_id: String,
         pub store: Arc<dyn KeyStore>,
         pub on_key_change: Option<OnKeyChange>,
+        /// Default rotation interval applied to all new sessions.
+        pub rotation_interval: Option<Duration>,
     }
 
     /// Wraps a `clasp_client::Clasp` instance to provide transparent E2E encryption.
@@ -47,6 +50,9 @@ mod inner {
                     store: self.config.store.clone(),
                     on_key_change: self.config.on_key_change.clone(),
                     password_hash: None,
+                    rotation_interval: self.config.rotation_interval,
+                    on_rotation: None,
+                    max_announcement_age: None,
                 });
                 self.sessions.insert(base_path.to_string(), session);
             }
@@ -54,12 +60,18 @@ mod inner {
         }
 
         /// Encrypt a string value and set it via the inner client.
+        /// Drives automatic key rotation before encrypting if due.
         pub async fn set_encrypted(
-            &self,
+            &mut self,
             address: &str,
-            session: &E2ESession,
+            session_path: &str,
             value: &str,
         ) -> Result<()> {
+            self.drive_rotation(session_path).await?;
+            let session = self
+                .sessions
+                .get(session_path)
+                .ok_or(CryptoError::NoGroupKey)?;
             let envelope = session.encrypt(value)?;
             let json = serde_json::to_value(&envelope)
                 .map_err(|e| CryptoError::Serialization(e.to_string()))?;
@@ -70,12 +82,18 @@ mod inner {
         }
 
         /// Emit an encrypted event via the inner client.
+        /// Drives automatic key rotation before encrypting if due.
         pub async fn emit_encrypted(
-            &self,
+            &mut self,
             address: &str,
-            session: &E2ESession,
+            session_path: &str,
             value: &str,
         ) -> Result<()> {
+            self.drive_rotation(session_path).await?;
+            let session = self
+                .sessions
+                .get(session_path)
+                .ok_or(CryptoError::NoGroupKey)?;
             let envelope = session.encrypt(value)?;
             let json = serde_json::to_value(&envelope)
                 .map_err(|e| CryptoError::Serialization(e.to_string()))?;
@@ -83,6 +101,49 @@ mod inner {
                 .emit(address, clasp_core::Value::from(json.to_string()))
                 .await
                 .map_err(|e| CryptoError::Other(e.to_string()))
+        }
+
+        /// Tick all sessions for automatic rotation. Call this from a
+        /// `tokio::select!` loop or periodic timer to drive rotation
+        /// when not actively sending messages.
+        pub async fn tick_rotations(&mut self) -> Result<()> {
+            let paths: Vec<String> = self.sessions.keys().cloned().collect();
+            for path in paths {
+                self.drive_rotation(&path).await?;
+            }
+            Ok(())
+        }
+
+        /// Drive rotation for a single session, distributing key exchange
+        /// messages via the inner client if rotation occurred.
+        async fn drive_rotation(&mut self, session_path: &str) -> Result<()> {
+            let session = match self.sessions.get_mut(session_path) {
+                Some(s) => s,
+                None => return Ok(()),
+            };
+            if let Some((messages, announcement)) = session.maybe_rotate().await? {
+                // Publish the new announcement
+                let ann_json = serde_json::to_value(&announcement)
+                    .map_err(|e| CryptoError::Serialization(e.to_string()))?;
+                let pubkey_path =
+                    format!("{}/_e2e/pubkey/{}", session_path, self.config.identity_id);
+                self.inner
+                    .set(&pubkey_path, clasp_core::Value::from(ann_json.to_string()))
+                    .await
+                    .map_err(|e| CryptoError::Other(e.to_string()))?;
+
+                // Distribute key exchange messages to peers
+                for (peer_id, keyex) in messages {
+                    let keyex_json = serde_json::to_value(&keyex)
+                        .map_err(|e| CryptoError::Serialization(e.to_string()))?;
+                    let keyex_path = format!("{}/_e2e/keyex/{}", session_path, peer_id);
+                    self.inner
+                        .emit(&keyex_path, clasp_core::Value::from(keyex_json.to_string()))
+                        .await
+                        .map_err(|e| CryptoError::Other(e.to_string()))?;
+                }
+            }
+            Ok(())
         }
 
         /// Check if a value is an E2E envelope.

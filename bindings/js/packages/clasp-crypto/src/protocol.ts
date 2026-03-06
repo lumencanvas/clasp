@@ -43,6 +43,10 @@ export class E2ESession {
   private unsubscribes: (() => void)[] = []
   private started = false
   private destroyed = false
+  private rotationTimer: ReturnType<typeof setInterval> | null = null
+  private _lastRotation: number | null = null
+  private _rotationCount = 0
+  private seenNonces = new Set<string>()
 
   constructor(client: ClaspLike, config: E2EConfig) {
     this.client = client
@@ -60,6 +64,16 @@ export class E2ESession {
     return this.config.basePath
   }
 
+  /** Timestamp of the last key rotation (Unix ms), if any. */
+  get lastRotation(): number | null {
+    return this._lastRotation
+  }
+
+  /** Number of key rotations performed in this session. */
+  get rotationCount(): number {
+    return this._rotationCount
+  }
+
   /**
    * Start the session: subscribe to key exchange paths and attempt
    * to load a persisted group key from the store.
@@ -75,6 +89,8 @@ export class E2ESession {
     if (stored) {
       try {
         this.groupKey = await importGroupKey(stored.key)
+        // Restore rotation timestamp from persisted key
+        this._lastRotation = stored.storedAt
       } catch {
         // Stored key is corrupted, delete it
         await this.store.deleteGroupKey(sessionId)
@@ -83,6 +99,21 @@ export class E2ESession {
 
     // Subscribe to key exchange events
     this.subscribeKeyExchange()
+
+    // Start automatic rotation timer if configured
+    const interval = this.config.rotationInterval
+    if (interval && interval > 0) {
+      const effectiveInterval = Math.max(interval, 60_000) // minimum 60s
+      this.rotationTimer = setInterval(async () => {
+        if (this.destroyed || !this.groupKey) return
+        try {
+          await this.rotateKey()
+          this.config.onRotation?.()
+        } catch {
+          // Non-fatal: rotation will retry on next interval
+        }
+      }, effectiveInterval)
+    }
   }
 
   /**
@@ -95,11 +126,14 @@ export class E2ESession {
 
     this.groupKey = await generateGroupKey()
 
+    const now = Date.now()
+    this._lastRotation = now
+
     // Persist
     const exported = await exportKey(this.groupKey)
     await this.store.saveGroupKey(this.sessionId(), {
       key: exported,
-      storedAt: Date.now(),
+      storedAt: now,
     })
 
     // Publish our ECDH public key to let peers know we're available
@@ -162,11 +196,15 @@ export class E2ESession {
 
     this.groupKey = await generateGroupKey()
 
+    const now = Date.now()
+    this._lastRotation = now
+    this._rotationCount++
+
     // Persist
     const exported = await exportKey(this.groupKey)
     await this.store.saveGroupKey(this.sessionId(), {
       key: exported,
-      storedAt: Date.now(),
+      storedAt: now,
     })
 
     // Re-publish our public key
@@ -181,9 +219,13 @@ export class E2ESession {
     this.peerPublicKeys.delete(peerId)
   }
 
-  /** Clean up subscriptions. */
+  /** Clean up subscriptions and timers. */
   destroy(): void {
     this.destroyed = true
+    if (this.rotationTimer !== null) {
+      clearInterval(this.rotationTimer)
+      this.rotationTimer = null
+    }
     for (const unsub of this.unsubscribes) {
       unsub()
     }
@@ -191,6 +233,7 @@ export class E2ESession {
     this.groupKey = null
     this.ecdhKeyPairPromise = null
     this.peerPublicKeys.clear()
+    this.seenNonces.clear()
   }
 
   // --- Private ---
@@ -230,6 +273,14 @@ export class E2ESession {
 
           const msg = data as { publicKey?: JsonWebKey; timestamp?: number }
           if (!msg.publicKey) return
+
+          // Timestamp validation
+          const maxAge = this.config.maxAnnouncementAge
+          if (maxAge !== undefined && maxAge > 0 && msg.timestamp) {
+            const now = Date.now()
+            if (msg.timestamp + maxAge < now) return // too old
+            if (msg.timestamp > now + 30_000) return // too far in the future
+          }
 
           // TOFU verification — may reject if key changed
           await this.verifyPeerKey(peerId, msg.publicKey)
@@ -292,6 +343,14 @@ export class E2ESession {
         try {
           // Reject empty sender ID — prevents TOFU bypass
           if (!msg.fromId) return
+
+          // Replay protection
+          const nonceKey = `${msg.fromId}:${msg.iv}`
+          if (this.seenNonces.has(nonceKey)) return
+          this.seenNonces.add(nonceKey)
+          // Cap nonce set size to prevent unbounded growth
+          if (this.seenNonces.size > 10_000) this.seenNonces.clear()
+
           await this.verifyPeerKey(msg.fromId, msg.senderPublicKey)
           if (this.destroyed) return
 

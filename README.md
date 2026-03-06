@@ -68,7 +68,9 @@ cargo install clasp-cli
 | **Rust** | [clasp-core](https://crates.io/crates/clasp-core) | `cargo add clasp-core` |
 | **Rust** | [clasp-client](https://crates.io/crates/clasp-client) | `cargo add clasp-client` |
 | **Rust** | [clasp-bridge](https://crates.io/crates/clasp-bridge) | `cargo add clasp-bridge` |
+| **Rust** | [clasp-crypto](https://crates.io/crates/clasp-crypto) | `cargo add clasp-crypto` |
 | **JavaScript** | [@clasp-to/core](https://www.npmjs.com/package/@clasp-to/core) | `npm install @clasp-to/core` |
+| **JavaScript** | [@clasp-to/crypto](https://www.npmjs.com/package/@clasp-to/crypto) | `npm install @clasp-to/crypto` |
 | **Python** | [clasp-to](https://pypi.org/project/clasp-to/) | `pip install clasp-to` |
 
 ### Desktop App
@@ -277,6 +279,7 @@ CLASP clients in different languages can seamlessly communicate:
 - **Signal Routing**: Wildcard patterns (`*`, `**`), transforms, aggregation
 - **Low Latency**: WebSocket transport with sub-millisecond overhead
 - **State Sync**: Automatic state synchronization between clients
+- **E2E Encryption**: Client-side AES-256-GCM encryption with ECDH key exchange, TOFU, auto-rotation
 - **Delegatable Auth**: Ed25519 capability tokens with UCAN-style delegation chains
 - **Entity Registry**: Persistent identity for devices, users, services, and routers
 - **Journal Persistence**: Append-only event log for crash recovery and state replay
@@ -339,6 +342,7 @@ CLASP: [SET][flags][len][addr][value][rev]             → 31 bytes
 | Typed signals (Param/Event/Stream) | ✅ | ❌ | ❌ |
 | Wildcard subscriptions | ✅ | ❌ | ✅ |
 | Clock sync | ✅ | ✅ | ❌ |
+| E2E encryption | ✅ | ❌ | ❌ |
 | Multi-protocol bridging | ✅ | ❌ | ❌ |
 | Delegatable auth (Ed25519) | ✅ | ❌ | ❌ |
 | Router-to-router federation | ✅ | ❌ | ❌ |
@@ -525,6 +529,7 @@ Visit **[clasp.to](https://clasp.to)** for full documentation.
 - [Getting Started](https://clasp.to/docs/getting-started)
 - [Protocol Specification](https://clasp.to/docs/protocol)
 - [API Reference](https://clasp.to/docs/api)
+- [E2E Encryption](docs/auth/e2e-encryption.md)
 - [Examples](https://clasp.to/docs/examples)
 
 ## Crates
@@ -542,6 +547,7 @@ Visit **[clasp.to](https://clasp.to)** for full documentation.
 | [clasp-journal](https://crates.io/crates/clasp-journal) | Append-only event journal for persistence |
 | [clasp-rules](https://crates.io/crates/clasp-rules) | Server-side reactive rules engine |
 | [clasp-federation](https://crates.io/crates/clasp-federation) | Router-to-router federation |
+| [clasp-crypto](https://crates.io/crates/clasp-crypto) | E2E encryption (AES-256-GCM, ECDH, TOFU) |
 | [clasp-cli](https://crates.io/crates/clasp-cli) | Command-line interface |
 
 ## Building from Source

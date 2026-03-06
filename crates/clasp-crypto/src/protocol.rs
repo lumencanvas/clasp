@@ -1,8 +1,8 @@
 //! E2E encryption session — manages key exchange for one group/room/channel.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use zeroize::{Zeroize, Zeroizing};
@@ -19,6 +19,12 @@ use crate::types::{
 /// If absent, key changes are rejected by default.
 pub type OnKeyChange = Arc<dyn Fn(&str, &str, &str) -> bool + Send + Sync>;
 
+/// Minimum allowed rotation interval (60 seconds).
+const MIN_ROTATION_INTERVAL: Duration = Duration::from_secs(60);
+
+/// Default maximum future tolerance for key announcements (30 seconds).
+const DEFAULT_MAX_ANNOUNCEMENT_FUTURE: Duration = Duration::from_secs(30);
+
 /// Configuration for an E2E session.
 pub struct E2ESessionConfig {
     pub identity_id: String,
@@ -26,6 +32,15 @@ pub struct E2ESessionConfig {
     pub store: Arc<dyn KeyStore>,
     pub on_key_change: Option<OnKeyChange>,
     pub password_hash: Option<String>,
+    /// Automatic key rotation interval. If set, `maybe_rotate()` will
+    /// trigger rotation when this duration has elapsed since the last rotation.
+    /// Minimum enforced: 60 seconds.
+    pub rotation_interval: Option<Duration>,
+    /// Called after automatic key rotation completes.
+    pub on_rotation: Option<Arc<dyn Fn() + Send + Sync>>,
+    /// Maximum age of a peer's public key announcement before rejection.
+    /// Default: 5 minutes. Set to `None` to disable timestamp validation.
+    pub max_announcement_age: Option<Duration>,
 }
 
 /// E2E encryption session state machine.
@@ -41,6 +56,12 @@ pub struct E2ESession {
     peer_public_keys: HashMap<String, Vec<u8>>,
     started: bool,
     destroyed: bool,
+    /// Timestamp of the last key rotation (Unix ms).
+    last_rotation: Option<u64>,
+    /// Number of key rotations performed in this session.
+    rotation_count: u64,
+    /// Set of seen nonces ("{from_id}:{iv}") for replay protection.
+    seen_nonces: HashSet<String>,
 }
 
 impl E2ESession {
@@ -52,6 +73,9 @@ impl E2ESession {
             peer_public_keys: HashMap::new(),
             started: false,
             destroyed: false,
+            last_rotation: None,
+            rotation_count: 0,
+            seen_nonces: HashSet::new(),
         }
     }
 
@@ -79,7 +103,11 @@ impl E2ESession {
         let session_id = self.session_id();
         if let Some(data) = self.config.store.load_group_key(&session_id).await? {
             match primitives::jwk_to_group_key(&data.key) {
-                Ok(key) => self.group_key = Some(key),
+                Ok(key) => {
+                    self.group_key = Some(key);
+                    // Restore rotation timestamp from persisted key
+                    self.last_rotation = Some(data.stored_at);
+                }
                 Err(_) => {
                     self.config.store.delete_group_key(&session_id).await?;
                 }
@@ -99,6 +127,9 @@ impl E2ESession {
         let mut key = Zeroizing::new(primitives::generate_group_key());
         self.group_key = Some(key.to_vec());
 
+        let creation_time = now_ms();
+        self.last_rotation = Some(creation_time);
+
         // Persist as JWK for JS interop
         let jwk = primitives::group_key_to_jwk(&key)?;
         key.zeroize();
@@ -108,7 +139,7 @@ impl E2ESession {
                 &self.session_id(),
                 KeyData {
                     key: jwk,
-                    stored_at: now_ms(),
+                    stored_at: creation_time,
                 },
             )
             .await?;
@@ -200,6 +231,26 @@ impl E2ESession {
             return Ok(None);
         }
 
+        // Timestamp validation: reject announcements that are too old or too far in the future
+        if let Some(max_age) = self.config.max_announcement_age {
+            let now = now_ms();
+            let ts = announcement.timestamp;
+            let max_age_ms = max_age.as_millis() as u64;
+            let max_future_ms = DEFAULT_MAX_ANNOUNCEMENT_FUTURE.as_millis() as u64;
+            if ts + max_age_ms < now {
+                return Err(CryptoError::Other(format!(
+                    "announcement from {peer_id} is too old ({} ms)",
+                    now.saturating_sub(ts)
+                )));
+            }
+            if ts > now + max_future_ms {
+                return Err(CryptoError::Other(format!(
+                    "announcement from {peer_id} is too far in the future ({} ms)",
+                    ts.saturating_sub(now)
+                )));
+            }
+        }
+
         // Convert JWK to SEC1 for internal crypto operations
         let peer_pub_bytes = primitives::jwk_to_public_key(&announcement.public_key)?;
 
@@ -254,6 +305,19 @@ impl E2ESession {
             return Err(CryptoError::InvalidKey(
                 "key exchange message missing sender ID".into(),
             ));
+        }
+
+        // Replay protection: reject messages with previously seen nonces
+        let nonce_key = format!("{}:{}", msg.from_id, msg.iv);
+        if !self.seen_nonces.insert(nonce_key) {
+            return Err(CryptoError::Other(format!(
+                "replayed key exchange message from {}",
+                msg.from_id
+            )));
+        }
+        // Cap nonce set size to prevent unbounded growth
+        if self.seen_nonces.len() > 10_000 {
+            self.seen_nonces.clear();
         }
 
         let sender_pub = primitives::jwk_to_public_key(&msg.sender_public_key)?;
@@ -325,6 +389,10 @@ impl E2ESession {
         let mut new_key = Zeroizing::new(primitives::generate_group_key());
         self.group_key = Some(new_key.to_vec());
 
+        let rotation_time = now_ms();
+        self.last_rotation = Some(rotation_time);
+        self.rotation_count += 1;
+
         let jwk = primitives::group_key_to_jwk(&new_key)?;
         let mut group_key_json = Zeroizing::new(
             serde_json::to_string(&jwk).map_err(|e| CryptoError::Serialization(e.to_string()))?,
@@ -336,7 +404,7 @@ impl E2ESession {
                 &self.session_id(),
                 KeyData {
                     key: jwk,
-                    stored_at: now_ms(),
+                    stored_at: rotation_time,
                 },
             )
             .await?;
@@ -377,6 +445,50 @@ impl E2ESession {
         self.peer_public_keys.remove(peer_id);
     }
 
+    /// Check whether automatic rotation is due.
+    pub fn should_rotate(&self) -> bool {
+        let interval = match self.config.rotation_interval {
+            Some(d) => d.max(MIN_ROTATION_INTERVAL),
+            None => return false,
+        };
+        if self.group_key.is_none() || self.destroyed {
+            return false;
+        }
+        let last = self.last_rotation.unwrap_or(0);
+        if last == 0 {
+            return false;
+        }
+        let elapsed_ms = now_ms().saturating_sub(last);
+        elapsed_ms >= interval.as_millis() as u64
+    }
+
+    /// Rotate the key if the rotation interval has elapsed.
+    /// Returns any key exchange messages to distribute, plus a new
+    /// `PublicKeyAnnouncement` so new peers can request the fresh key.
+    pub async fn maybe_rotate(
+        &mut self,
+    ) -> Result<Option<(Vec<(String, KeyExchangeMessage)>, PublicKeyAnnouncement)>> {
+        if !self.should_rotate() {
+            return Ok(None);
+        }
+        let messages = self.rotate_key().await?;
+        let announcement = self.make_public_key_announcement()?;
+        if let Some(ref cb) = self.config.on_rotation {
+            cb();
+        }
+        Ok(Some((messages, announcement)))
+    }
+
+    /// Number of key rotations performed in this session.
+    pub fn rotation_count(&self) -> u64 {
+        self.rotation_count
+    }
+
+    /// Timestamp of the last key rotation (Unix ms), if any.
+    pub fn last_rotation(&self) -> Option<u64> {
+        self.last_rotation
+    }
+
     /// Destroy the session, zeroing all key material.
     pub fn destroy(&mut self) {
         self.destroyed = true;
@@ -387,6 +499,7 @@ impl E2ESession {
         // ECDHKeyPair implements ZeroizeOnDrop, so dropping clears it
         self.ecdh_key_pair = None;
         self.peer_public_keys.clear();
+        self.seen_nonces.clear();
     }
 
     // --- Private ---
@@ -505,6 +618,9 @@ mod tests {
             store,
             on_key_change: None,
             password_hash: None,
+            rotation_interval: None,
+            on_rotation: None,
+            max_announcement_age: None,
         }
     }
 
@@ -568,6 +684,9 @@ mod tests {
             store: store_a,
             on_key_change: None,
             password_hash: None,
+            rotation_interval: None,
+            on_rotation: None,
+            max_announcement_age: None,
         });
         alice.start().await.unwrap();
         let _alice_announcement = alice.enable_encryption().await.unwrap();
@@ -578,6 +697,9 @@ mod tests {
             store: store_b,
             on_key_change: None,
             password_hash: None,
+            rotation_interval: None,
+            on_rotation: None,
+            max_announcement_age: None,
         });
         bob.start().await.unwrap();
         let bob_announcement = bob.request_group_key().unwrap().unwrap();
@@ -627,6 +749,9 @@ mod tests {
                 true // accept the key change
             })),
             password_hash: None,
+            rotation_interval: None,
+            on_rotation: None,
+            max_announcement_age: None,
         });
         session.start().await.unwrap();
         session.enable_encryption().await.unwrap();
@@ -687,6 +812,9 @@ mod tests {
             store: store.clone(),
             on_key_change: Some(Arc::new(|_peer, _old, _new| false)),
             password_hash: None,
+            rotation_interval: None,
+            on_rotation: None,
+            max_announcement_age: None,
         });
         session.start().await.unwrap();
         session.enable_encryption().await.unwrap();
@@ -739,6 +867,9 @@ mod tests {
             store: store_a,
             on_key_change: None,
             password_hash: None,
+            rotation_interval: None,
+            on_rotation: None,
+            max_announcement_age: None,
         });
         alice.start().await.unwrap();
 
@@ -748,6 +879,9 @@ mod tests {
             store: store_b,
             on_key_change: None,
             password_hash: None,
+            rotation_interval: None,
+            on_rotation: None,
+            max_announcement_age: None,
         });
         bob.start().await.unwrap();
         bob.enable_encryption().await.unwrap();
@@ -841,5 +975,184 @@ mod tests {
         };
         let result = session.decrypt(&envelope).await;
         assert!(matches!(result, Err(CryptoError::DecryptionFailed(_))));
+    }
+
+    #[tokio::test]
+    async fn should_rotate_returns_false_without_interval() {
+        let store = Arc::new(MemoryKeyStore::new());
+        let mut session = E2ESession::new(test_config(store));
+        session.start().await.unwrap();
+        session.enable_encryption().await.unwrap();
+        assert!(!session.should_rotate());
+    }
+
+    #[tokio::test]
+    async fn rotation_tracks_count_and_timestamp() {
+        let store = Arc::new(MemoryKeyStore::new());
+        let mut session = E2ESession::new(test_config(store));
+        session.start().await.unwrap();
+        session.enable_encryption().await.unwrap();
+
+        assert_eq!(session.rotation_count(), 0);
+        assert!(session.last_rotation().is_some()); // set by enable_encryption
+
+        session.rotate_key().await.unwrap();
+        assert_eq!(session.rotation_count(), 1);
+
+        session.rotate_key().await.unwrap();
+        assert_eq!(session.rotation_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn maybe_rotate_triggers_when_due() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        let store = Arc::new(MemoryKeyStore::new());
+        let rotation_cb_count = Arc::new(AtomicU32::new(0));
+        let cb_clone = rotation_cb_count.clone();
+
+        let mut session = E2ESession::new(E2ESessionConfig {
+            identity_id: "alice".to_string(),
+            base_path: "/test/room/1".to_string(),
+            store,
+            on_key_change: None,
+            password_hash: None,
+            rotation_interval: Some(Duration::from_secs(60)),
+            on_rotation: Some(Arc::new(move || {
+                cb_clone.fetch_add(1, Ordering::SeqCst);
+            })),
+            max_announcement_age: None,
+        });
+        session.start().await.unwrap();
+        session.enable_encryption().await.unwrap();
+
+        // Not due yet (just created)
+        let result = session.maybe_rotate().await.unwrap();
+        assert!(result.is_none());
+
+        // Force last_rotation to the past
+        session.last_rotation = Some(now_ms() - 120_000);
+        let result = session.maybe_rotate().await.unwrap();
+        assert!(result.is_some());
+        assert_eq!(rotation_cb_count.load(Ordering::SeqCst), 1);
+        assert_eq!(session.rotation_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn timestamp_validation_rejects_old_announcement() {
+        let store = Arc::new(MemoryKeyStore::new());
+        let mut session = E2ESession::new(E2ESessionConfig {
+            identity_id: "alice".to_string(),
+            base_path: "/test/room/1".to_string(),
+            store,
+            on_key_change: None,
+            password_hash: None,
+            rotation_interval: None,
+            on_rotation: None,
+            max_announcement_age: Some(Duration::from_secs(300)),
+        });
+        session.start().await.unwrap();
+        session.enable_encryption().await.unwrap();
+
+        let bob_kp = primitives::generate_ecdh_key_pair();
+        let old_announcement = PublicKeyAnnouncement {
+            public_key: primitives::public_key_to_jwk(&bob_kp.public_key).unwrap(),
+            timestamp: now_ms() - 600_000, // 10 min ago
+        };
+        let result = session.handle_peer_pubkey("bob", &old_announcement).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("too old"));
+    }
+
+    #[tokio::test]
+    async fn timestamp_validation_rejects_future_announcement() {
+        let store = Arc::new(MemoryKeyStore::new());
+        let mut session = E2ESession::new(E2ESessionConfig {
+            identity_id: "alice".to_string(),
+            base_path: "/test/room/1".to_string(),
+            store,
+            on_key_change: None,
+            password_hash: None,
+            rotation_interval: None,
+            on_rotation: None,
+            max_announcement_age: Some(Duration::from_secs(300)),
+        });
+        session.start().await.unwrap();
+        session.enable_encryption().await.unwrap();
+
+        let bob_kp = primitives::generate_ecdh_key_pair();
+        let future_announcement = PublicKeyAnnouncement {
+            public_key: primitives::public_key_to_jwk(&bob_kp.public_key).unwrap(),
+            timestamp: now_ms() + 60_000, // 1 min in future
+        };
+        let result = session
+            .handle_peer_pubkey("bob", &future_announcement)
+            .await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("future"));
+    }
+
+    #[tokio::test]
+    async fn replay_protection_rejects_duplicate_key_exchange() {
+        let store_a = Arc::new(MemoryKeyStore::new());
+        let store_b = Arc::new(MemoryKeyStore::new());
+
+        // Alice has the group key
+        let mut alice = E2ESession::new(E2ESessionConfig {
+            identity_id: "alice".to_string(),
+            base_path: "/test/room/1".to_string(),
+            store: store_a,
+            on_key_change: None,
+            password_hash: None,
+            rotation_interval: None,
+            on_rotation: None,
+            max_announcement_age: None,
+        });
+        alice.start().await.unwrap();
+        alice.enable_encryption().await.unwrap();
+
+        // Bob requests the key
+        let mut bob = E2ESession::new(E2ESessionConfig {
+            identity_id: "bob".to_string(),
+            base_path: "/test/room/1".to_string(),
+            store: store_b,
+            on_key_change: None,
+            password_hash: None,
+            rotation_interval: None,
+            on_rotation: None,
+            max_announcement_age: None,
+        });
+        bob.start().await.unwrap();
+        let bob_announcement = bob.request_group_key().unwrap().unwrap();
+
+        // Alice distributes key to Bob
+        let keyex = alice
+            .handle_peer_pubkey("bob", &bob_announcement)
+            .await
+            .unwrap()
+            .unwrap();
+
+        // First receive should succeed
+        bob.handle_key_exchange(&keyex).await.unwrap();
+
+        // Replay of the same message should fail
+        let result = bob.handle_key_exchange(&keyex).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("replayed"));
+    }
+
+    #[tokio::test]
+    async fn persisted_key_restores_last_rotation() {
+        let store = Arc::new(MemoryKeyStore::new());
+
+        let mut session1 = E2ESession::new(test_config(store.clone()));
+        session1.start().await.unwrap();
+        session1.enable_encryption().await.unwrap();
+        let rotation_ts = session1.last_rotation().unwrap();
+        assert!(rotation_ts > 0);
+
+        let mut session2 = E2ESession::new(test_config(store));
+        session2.start().await.unwrap();
+        assert_eq!(session2.last_rotation(), Some(rotation_ts));
     }
 }
