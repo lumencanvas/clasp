@@ -1,8 +1,10 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
   root: 'src',
   base: './',
+  plugins: [vue()],
   build: {
     outDir: '../dist',
     emptyOutDir: true,
@@ -11,4 +13,4 @@ export default defineConfig({
   server: {
     port: 5173,
   },
-});
+})

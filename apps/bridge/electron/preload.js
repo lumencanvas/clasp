@@ -60,14 +60,6 @@ const api = {
     ipcRenderer.on('device-found', (event, device) => callback(device));
     return () => ipcRenderer.removeAllListeners('device-found');
   },
-  onDeviceUpdated: (callback) => {
-    ipcRenderer.on('device-updated', (event, device) => callback(device));
-    return () => ipcRenderer.removeAllListeners('device-updated');
-  },
-  onDeviceLost: (callback) => {
-    ipcRenderer.on('device-lost', (event, deviceId) => callback(deviceId));
-    return () => ipcRenderer.removeAllListeners('device-lost');
-  },
   onSignal: (callback) => {
     ipcRenderer.on('signal', (event, signal) => callback(signal));
     return () => ipcRenderer.removeAllListeners('signal');
