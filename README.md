@@ -19,18 +19,22 @@
 
 ---
 
-CLASP is a universal protocol bridge and signal router for creative applications. It unifies disparate protocols (OSC, MIDI, DMX, Art-Net, MQTT, WebSocket, HTTP) into a single, routable message system optimized for real-time performance.
+CLASP is a real-time infrastructure layer for connected applications. It provides state synchronization, pub/sub messaging, E2E encryption, device identity, reactive automation, and multi-site federation -- all through a single binary protocol. It also bridges legacy protocols (OSC, MIDI, DMX, Art-Net, MQTT) so existing gear works immediately.
 
 ## Why CLASP?
 
-Creative projects often involve a chaotic mix of protocols:
-- **Lighting** speaks DMX and Art-Net
-- **Audio** software uses OSC and MIDI
-- **IoT sensors** communicate via MQTT
-- **Web interfaces** need WebSocket or HTTP
-- **VJ software** has its own proprietary APIs
+Building connected applications is hard. You need state sync, auth, encryption, discovery, automation, and multi-site coordination -- and every project reinvents the wheel. CLASP gives you all of this out of the box:
 
-CLASP acts as the universal translator, letting everything talk to everything else through a unified address space.
+- **State Sync** -- set a value anywhere, read it everywhere, late-joiners get current state automatically
+- **Pub/Sub** -- wildcard subscriptions (`*`, `**`), rate limiting, epsilon filtering
+- **E2E Encryption** -- AES-256-GCM with ECDH key exchange, TOFU, auto-rotation. The server never sees plaintext
+- **Device Identity** -- Ed25519 capability tokens with UCAN-style delegation chains
+- **Rules Engine** -- server-side reactive automation: "when X changes, set Y"
+- **Federation** -- router-to-router state sharing for multi-site deployments
+- **Protocol Bridges** -- OSC, MIDI, DMX, Art-Net, MQTT, WebSocket, HTTP, Socket.IO
+- **Discovery** -- mDNS/DNS-SD, UDP broadcast, rendezvous server
+
+CLASP started as a protocol bridge for creative applications (lighting, audio, VJ software) and grew into a general-purpose real-time infrastructure protocol. Protocol bridging is still a core feature, but it's one of many.
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
@@ -70,8 +74,11 @@ cargo install clasp-cli
 | **Rust** | [clasp-bridge](https://crates.io/crates/clasp-bridge) | `cargo add clasp-bridge` |
 | **Rust** | [clasp-crypto](https://crates.io/crates/clasp-crypto) | `cargo add clasp-crypto` |
 | **JavaScript** | [@clasp-to/core](https://www.npmjs.com/package/@clasp-to/core) | `npm install @clasp-to/core` |
+| **JavaScript** | [@clasp-to/sdk](https://www.npmjs.com/package/@clasp-to/sdk) | `npm install @clasp-to/sdk` |
+| **JavaScript** | [@clasp-to/relay](https://www.npmjs.com/package/@clasp-to/relay) | `npm install @clasp-to/relay` |
 | **JavaScript** | [@clasp-to/crypto](https://www.npmjs.com/package/@clasp-to/crypto) | `npm install @clasp-to/crypto` |
 | **Python** | [clasp-to](https://pypi.org/project/clasp-to/) | `pip install clasp-to` |
+| **Arduino** | [Clasp](https://github.com/lumencanvas/clasp/tree/main/bindings/arduino/Clasp) | Arduino Library Manager |
 
 ### Desktop App
 
@@ -80,6 +87,28 @@ Download the latest release for your platform:
 - **macOS**: [CLASP Bridge.dmg](https://github.com/lumencanvas/clasp/releases/latest)
 - **Windows**: [CLASP Bridge Setup.exe](https://github.com/lumencanvas/clasp/releases/latest)
 - **Linux**: [clasp-bridge.AppImage](https://github.com/lumencanvas/clasp/releases/latest)
+
+## CLASP SDK
+
+The easiest way to use CLASP from JavaScript/TypeScript. `@clasp-to/sdk` wraps the core protocol with a human-friendly API:
+
+```typescript
+import clasp from '@clasp-to/sdk'
+
+const c = await clasp('ws://localhost:7330', { name: 'My App' })
+
+await c.set('/lights/brightness', 0.8)       // persistent state
+c.on('/lights/**', (val, addr) => { ... })    // wildcard subscribe
+await c.emit('/cues/go')                      // fire-and-forget event
+c.stream('/sensors/accel', { x: 0.1, y: 9.8 }) // high-rate data
+
+// Devices, encrypted rooms, rules, bridges -- all built in
+const device = await c.register({ name: 'Sensor', scopes: ['write:/sensors/**'] })
+const room = await c.room('/chat/private')    // E2E encrypted
+c.rule('alert', { when: '/temp', above: 30, then: { emit: ['/alert', 'hot!'] } })
+```
+
+For lower-level control, use `@clasp-to/core` directly ([docs](docs/sdk/javascript.md)).
 
 ## Quick Start
 

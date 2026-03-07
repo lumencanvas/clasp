@@ -42,6 +42,10 @@ enum Transport {
     /// WARNING: Not supported on DigitalOcean App Platform (use Droplet instead)
     #[cfg(feature = "quic")]
     Quic,
+
+    /// TCP - raw TCP for embedded/IoT clients (Arduino, ESP32)
+    #[cfg(feature = "tcp")]
+    Tcp,
 }
 
 /// Security/authentication mode
@@ -243,6 +247,14 @@ async fn main() -> Result<()> {
             {
                 anyhow::bail!("WebSocket support not compiled in. Build with --features websocket");
             }
+        }
+
+        #[cfg(feature = "tcp")]
+        Transport::Tcp => {
+            use clasp_transport::TcpServer;
+            let addr_str = cli.listen.to_string();
+            let server = TcpServer::bind(&addr_str).await?;
+            router.serve_on(server).await?;
         }
 
         #[cfg(feature = "quic")]

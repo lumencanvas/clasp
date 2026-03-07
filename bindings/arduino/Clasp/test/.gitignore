@@ -1,0 +1,6 @@
+# Compiled test binaries
+test_codec
+test_framing
+test_client
+test_integration
+*.dSYM/

@@ -35,6 +35,9 @@ npm install @clasp-to/core
 | `embedded-server.js` | Integrating CLASP into your Node.js app |
 | `relay-server.js` | Programmatic relay server with `@clasp-to/relay` |
 | `relay-test-harness.js` | Integration test harness with ephemeral relays |
+| `easy-client.js` | `@clasp-to/sdk` connect, pub/sub, devices, rules, bridges |
+| `easy-client-devices.js` | Device registration, children, provisioning with SDK |
+| `easy-client-rooms.js` | Encrypted rooms, passwords, key rotation, TOFU with SDK |
 | `video-relay.html` | Video streaming via CLASP relay (WebCodecs H.264) |
 | `video-p2p.html` | Video calling via WebRTC with CLASP signaling |
 
@@ -142,6 +145,9 @@ cargo run --example bundles_and_scheduling
 | P2P WebRTC | p2p-webrtc | p2p_webrtc | p2p_webrtc |
 | Embedded Server | embedded-server | embedded_server | embedded-server |
 | Relay Server SDK | relay-server | - | - |
+| Easy Client SDK | easy-client | - | - |
+| SDK Devices | easy-client-devices | - | - |
+| SDK Encrypted Rooms | easy-client-rooms | - | - |
 | Video Relay (WebCodecs) | video-relay.html | - | - |
 | Video P2P (WebRTC) | video-p2p.html | - | - |
 

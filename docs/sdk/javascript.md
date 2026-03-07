@@ -358,6 +358,11 @@ Working examples in `examples/js/`:
 | `security-tokens.js` | CPSK token authentication |
 | `embedded-server.js` | Embedded CLASP router in Node.js |
 | `encrypted-signals.js` | E2E encrypted signals with `@clasp-to/crypto` |
+| `relay-server.js` | Programmatic relay server with `@clasp-to/relay` |
+| `relay-test-harness.js` | Integration test harness with ephemeral relays |
+| `easy-client.js` | `@clasp-to/sdk` connect, pub/sub, devices, rules, bridges |
+| `easy-client-devices.js` | Device registration, children, provisioning |
+| `easy-client-rooms.js` | Encrypted rooms, passwords, key rotation, TOFU |
 
 ## E2E Encryption
 
@@ -383,6 +388,7 @@ See [E2E Encryption](../auth/e2e-encryption.md) for the full protocol descriptio
 
 ## Next Steps
 
+- [Easy Client SDK](easy-client.md) -- `@clasp-to/sdk` wraps `@clasp-to/core` with higher-level APIs for devices, rooms, rules, bridges, and discovery
 - [Core Concepts](../concepts/architecture.md) -- understand signals, state, and the router model
 - [Protocol Bridges](../protocols/README.md) -- connect CLASP to OSC, MIDI, MQTT, and more
 - [Auth & E2E Encryption](../auth/README.md) -- CPSK tokens, capability delegation, and E2E encryption

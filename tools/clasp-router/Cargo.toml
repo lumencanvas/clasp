@@ -35,5 +35,7 @@ bridges = ["clasp-bridge"]
 websocket = ["clasp-router/websocket"]
 # QUIC - high-performance, requires UDP (NOT supported on DO App Platform)
 quic = ["clasp-router/quic", "clasp-transport/quic"]
+# TCP - raw TCP transport for embedded/IoT clients (Arduino, ESP32)
+tcp = ["clasp-router/tcp", "clasp-transport/tcp"]
 # Full transport support - for VPS/Droplet deployments
-full = ["websocket", "quic"]
+full = ["websocket", "quic", "tcp"]
