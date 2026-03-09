@@ -1239,7 +1239,15 @@ pub fn execute_rule_actions(
     for action in actions {
         match action.action {
             clasp_rules::RuleAction::Set { address, value } => {
-                match state.set(&address, value.clone(), &action.origin, None, false, false, None) {
+                match state.set(
+                    &address,
+                    value.clone(),
+                    &action.origin,
+                    None,
+                    false,
+                    false,
+                    None,
+                ) {
                     Ok(revision) => {
                         let subscribers =
                             subscriptions.find_subscribers(&address, Some(SignalType::Param));

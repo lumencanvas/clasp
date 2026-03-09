@@ -9,7 +9,8 @@ fn encode_benchmark(c: &mut Criterion) {
         value: Value::Float(1.2345),
         revision: Some(1),
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
 
     c.bench_function("encode_set_message", |b| {
@@ -23,7 +24,8 @@ fn decode_benchmark(c: &mut Criterion) {
         value: Value::Float(1.2345),
         revision: Some(1),
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
     let encoded = codec::encode(&msg).unwrap();
 
@@ -49,7 +51,8 @@ fn roundtrip_benchmark(c: &mut Criterion) {
         ),
         revision: Some(1),
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
 
     c.bench_function("roundtrip_complex_message", |b| {

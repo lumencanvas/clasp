@@ -474,21 +474,24 @@ async fn test_bundle() {
             value: Value::Int(1),
             revision: None,
             lock: false,
-            unlock: false, ttl: None,
+            unlock: false,
+            ttl: None,
         }),
         Message::Set(SetMessage {
             address: "/bundle/b".to_string(),
             value: Value::Int(2),
             revision: None,
             lock: false,
-            unlock: false, ttl: None,
+            unlock: false,
+            ttl: None,
         }),
         Message::Set(SetMessage {
             address: "/bundle/c".to_string(),
             value: Value::Int(3),
             revision: None,
             lock: false,
-            unlock: false, ttl: None,
+            unlock: false,
+            ttl: None,
         }),
     ];
 
@@ -523,7 +526,8 @@ async fn test_bundle_atomicity() {
                 value: Value::Int(i),
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             })
         })
         .collect();
@@ -550,7 +554,8 @@ async fn test_bundle_at() {
         value: Value::Float(99.9),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     })];
 
     let future_time = client.time() + 100_000; // 100ms in microseconds

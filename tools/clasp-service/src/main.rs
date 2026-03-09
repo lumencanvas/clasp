@@ -766,7 +766,8 @@ impl BridgeService {
                 value: sf_value,
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             });
             bridge.bridge.send(msg).await?;
             Ok(())

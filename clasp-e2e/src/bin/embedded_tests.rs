@@ -104,7 +104,8 @@ fn test_decoding_compatibility() {
         value: CoreValue::Float(25.5),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
 
     let encoded = codec::encode(&set_msg).unwrap();

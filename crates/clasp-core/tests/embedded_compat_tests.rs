@@ -45,7 +45,8 @@ fn test_core_set_to_embedded_decode() {
         value: Value::Float(25.5),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     };
 
     // Encode using core

@@ -87,7 +87,8 @@ async fn test_exact_match_subscription() {
         value: Value::Int(1),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
     pub_sender
         .send(codec::encode(&set1).unwrap())
@@ -100,7 +101,8 @@ async fn test_exact_match_subscription() {
         value: Value::Int(2),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
     pub_sender
         .send(codec::encode(&set2).unwrap())
@@ -176,7 +178,8 @@ async fn test_single_wildcard_subscription() {
                 value: Value::Float(22.5),
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             }))
             .unwrap(),
         )
@@ -235,7 +238,8 @@ async fn test_multi_wildcard_subscription() {
                     value: Value::Float(1.0),
                     revision: None,
                     lock: false,
-                    unlock: false, ttl: None,
+                    unlock: false,
+                    ttl: None,
                 }))
                 .unwrap(),
             )
@@ -302,7 +306,8 @@ async fn test_unsubscribe() {
                 value: Value::Int(1),
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             }))
             .unwrap(),
         )
@@ -339,7 +344,8 @@ async fn test_unsubscribe() {
                 value: Value::Int(2),
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             }))
             .unwrap(),
         )
@@ -400,7 +406,8 @@ async fn test_multiple_subscriptions() {
                     value: Value::Int(1),
                     revision: None,
                     lock: false,
-                    unlock: false, ttl: None,
+                    unlock: false,
+                    ttl: None,
                 }))
                 .unwrap(),
             )
@@ -444,7 +451,8 @@ async fn test_subscription_initial_snapshot() {
                 value: Value::Float(42.0),
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             }))
             .unwrap(),
         )

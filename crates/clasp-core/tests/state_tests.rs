@@ -187,7 +187,15 @@ fn test_state_store_pattern_match() {
         )
         .unwrap();
     store
-        .set("/other/value", Value::Int(42), "w", None, false, false, None)
+        .set(
+            "/other/value",
+            Value::Int(42),
+            "w",
+            None,
+            false,
+            false,
+            None,
+        )
         .unwrap();
 
     // Get all layer opacities
@@ -204,7 +212,15 @@ fn test_state_store_remove() {
     let mut store = StateStore::new();
 
     store
-        .set("/test/value", Value::Int(42), "writer", None, false, false, None)
+        .set(
+            "/test/value",
+            Value::Int(42),
+            "writer",
+            None,
+            false,
+            false,
+            None,
+        )
         .unwrap();
     assert!(store.get_value("/test/value").is_some());
 

@@ -247,7 +247,8 @@ mod websocket_tests {
             value: Value::Float(42.0),
             revision: None,
             lock: false,
-            unlock: false, ttl: None,
+            unlock: false,
+            ttl: None,
         });
         sender.send(codec::encode(&set).unwrap()).await.unwrap();
 
@@ -353,7 +354,8 @@ mod websocket_tests {
             value: Value::Float(23.5),
             revision: None,
             lock: false,
-            unlock: false, ttl: None,
+            unlock: false,
+            ttl: None,
         });
         sender2.send(codec::encode(&set).unwrap()).await.unwrap();
 

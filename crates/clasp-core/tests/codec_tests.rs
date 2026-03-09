@@ -59,7 +59,8 @@ fn test_encode_decode_set() {
         value: Value::Float(1.25),
         revision: Some(1),
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
 
     let encoded = codec::encode(&msg).expect("encode failed");
@@ -155,7 +156,8 @@ fn test_value_types() {
             value: value.clone(),
             revision: None,
             lock: false,
-            unlock: false, ttl: None,
+            unlock: false,
+            ttl: None,
         });
 
         let encoded = codec::encode(&msg).expect("encode failed");
@@ -186,7 +188,8 @@ fn test_v3_set_message_size() {
         value: Value::Float(0.75),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
 
     let encoded = codec::encode(&msg).expect("encode failed");
@@ -208,7 +211,8 @@ fn test_v3_set_message_with_revision() {
         value: Value::Float(1.0),
         revision: Some(42),
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
 
     let encoded = codec::encode(&msg).expect("encode failed");
@@ -229,7 +233,8 @@ fn test_v3_set_message_with_lock() {
         value: Value::Bool(true),
         revision: None,
         lock: true,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
 
     let encoded = codec::encode(&msg).expect("encode failed");
@@ -251,7 +256,8 @@ fn test_v3_set_message_string_value() {
         value: Value::String("Hello World".to_string()),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
 
     let encoded = codec::encode(&msg).expect("encode failed");
@@ -274,7 +280,8 @@ fn test_v3_encoding_starts_with_message_type() {
         value: Value::Float(1.0),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
 
     let encoded = codec::encode(&set_msg).expect("encode failed");
@@ -306,7 +313,8 @@ fn test_v3_benchmark_set_encoding() {
         value: Value::Float(0.75),
         revision: Some(1),
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
 
     let iterations = 100_000;

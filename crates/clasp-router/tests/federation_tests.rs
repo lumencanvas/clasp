@@ -334,7 +334,8 @@ async fn test_revision_vector_filters_out_of_scope_addresses() {
         value: clasp_core::Value::Float(0.8),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
     setter.send(codec::encode(&set).unwrap()).await.unwrap();
     // Wait for ACK to ensure state is written
@@ -408,7 +409,8 @@ async fn test_redeclare_namespaces_cleanup() {
         value: clasp_core::Value::Float(22.5),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
     setter.send(codec::encode(&set).unwrap()).await.unwrap();
     let ack = recv_msg(&mut setter_rx).await;
@@ -462,7 +464,8 @@ async fn test_federation_peer_receives_declared_namespace_data() {
         value: clasp_core::Value::Float(22.5),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
     setter.send(codec::encode(&set).unwrap()).await.unwrap();
 

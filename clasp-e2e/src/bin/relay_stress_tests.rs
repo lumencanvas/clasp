@@ -269,7 +269,8 @@ async fn bench_set_ack_latency() -> TestResult {
                     value: Value::Int(i),
                     revision: None,
                     lock: false,
-                    unlock: false, ttl: None,
+                    unlock: false,
+                    ttl: None,
                 }))
                 .await?;
             client.recv(5000).await?;
@@ -285,7 +286,8 @@ async fn bench_set_ack_latency() -> TestResult {
                     value: Value::Int(i),
                     revision: None,
                     lock: false,
-                    unlock: false, ttl: None,
+                    unlock: false,
+                    ttl: None,
                 }))
                 .await?;
 
@@ -349,7 +351,8 @@ async fn bench_pubsub_latency() -> TestResult {
                     value: Value::Int(i),
                     revision: None,
                     lock: false,
-                    unlock: false, ttl: None,
+                    unlock: false,
+                    ttl: None,
                 }))
                 .await?;
 
@@ -406,7 +409,8 @@ async fn bench_throughput() -> TestResult {
                     value: Value::Int(i as i64),
                     revision: None,
                     lock: false,
-                    unlock: false, ttl: None,
+                    unlock: false,
+                    ttl: None,
                 }))
                 .await
                 .is_ok()
@@ -502,7 +506,8 @@ async fn bench_fanout_throughput() -> TestResult {
                     value: Value::Int(i as i64),
                     revision: None,
                     lock: false,
-                    unlock: false, ttl: None,
+                    unlock: false,
+                    ttl: None,
                 }))
                 .await?;
         }
@@ -598,7 +603,8 @@ async fn stress_concurrent_clients() -> TestResult {
                                         value: Value::Int(i as i64),
                                         revision: None,
                                         lock: false,
-                                        unlock: false, ttl: None,
+                                        unlock: false,
+                                        ttl: None,
                                     }))
                                     .await
                                     .is_ok()
@@ -698,7 +704,8 @@ async fn stress_concurrent_writes() -> TestResult {
                             value: Value::String(format!("w{}:{}", writer_id, i)),
                             revision: None,
                             lock: false,
-                            unlock: false, ttl: None,
+                            unlock: false,
+                            ttl: None,
                         }))
                         .await
                         .is_ok()
@@ -845,7 +852,8 @@ async fn test_subscription_patterns() -> TestResult {
                         value: Value::Bool(true),
                         revision: None,
                         lock: false,
-                        unlock: false, ttl: None,
+                        unlock: false,
+                        ttl: None,
                     }))
                     .await?;
                 let _ = pub_client.recv(500).await;
@@ -906,7 +914,8 @@ async fn test_message_ordering() -> TestResult {
                     value: Value::Int(i),
                     revision: None,
                     lock: false,
-                    unlock: false, ttl: None,
+                    unlock: false,
+                    ttl: None,
                 }))
                 .await?;
         }
@@ -980,7 +989,8 @@ async fn test_state_consistency() -> TestResult {
                     value: Value::Int(i),
                     revision: None,
                     lock: false,
-                    unlock: false, ttl: None,
+                    unlock: false,
+                    ttl: None,
                 }))
                 .await?;
             let _ = setter.recv(1000).await;
@@ -992,7 +1002,8 @@ async fn test_state_consistency() -> TestResult {
                 value: final_value.clone(),
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             }))
             .await?;
         let _ = setter.recv(1000).await;
@@ -1078,21 +1089,24 @@ async fn test_bundle_atomicity() -> TestResult {
                 value: Value::Int(1),
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             }),
             Message::Set(SetMessage {
                 address: format!("{}/b", base),
                 value: Value::Int(2),
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             }),
             Message::Set(SetMessage {
                 address: format!("{}/c", base),
                 value: Value::Int(3),
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             }),
         ];
 
@@ -1157,7 +1171,8 @@ async fn test_large_payloads() -> TestResult {
                     value: Value::Bytes(payload),
                     revision: None,
                     lock: false,
-                    unlock: false, ttl: None,
+                    unlock: false,
+                    ttl: None,
                 }))
                 .await
                 .is_err()
@@ -1214,7 +1229,8 @@ async fn test_special_characters() -> TestResult {
                     value: Value::String(format!("test_{}", suffix)),
                     revision: None,
                     lock: false,
-                    unlock: false, ttl: None,
+                    unlock: false,
+                    ttl: None,
                 }))
                 .await?;
 
@@ -1265,7 +1281,8 @@ async fn test_empty_null_values() -> TestResult {
                     value,
                     revision: None,
                     lock: false,
-                    unlock: false, ttl: None,
+                    unlock: false,
+                    ttl: None,
                 }))
                 .await?;
 
@@ -1346,7 +1363,8 @@ async fn test_sustained_load() -> TestResult {
                     value: Value::Int(i as i64),
                     revision: None,
                     lock: false,
-                    unlock: false, ttl: None,
+                    unlock: false,
+                    ttl: None,
                 }))
                 .await
                 .is_ok()

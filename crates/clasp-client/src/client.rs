@@ -668,7 +668,12 @@ impl Clasp {
     }
 
     /// Set a parameter value with a per-message TTL
-    pub async fn set_with_ttl(&self, address: &str, value: impl Into<Value>, ttl: clasp_core::Ttl) -> Result<()> {
+    pub async fn set_with_ttl(
+        &self,
+        address: &str,
+        value: impl Into<Value>,
+        ttl: clasp_core::Ttl,
+    ) -> Result<()> {
         let msg = Message::Set(SetMessage {
             address: address.to_string(),
             value: value.into(),
