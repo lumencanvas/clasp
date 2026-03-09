@@ -365,6 +365,7 @@ async fn set_signal(
         revision: None,
         lock: false,
         unlock: false,
+        ttl: None,
     });
 
     if let Err(e) = state
@@ -453,6 +454,7 @@ async fn delete_signal(
             revision: None,
             lock: false,
             unlock: false,
+            ttl: None,
         });
 
         let _ = state
@@ -650,6 +652,7 @@ impl Bridge for HttpBridge {
                                                                         revision: None,
                                                                         lock: false,
                                                                         unlock: false,
+                                                                        ttl: None,
                                                                     });
 
                                                                 if let Err(e) = tx_clone
@@ -691,6 +694,7 @@ impl Bridge for HttpBridge {
                                                                 revision: None,
                                                                 lock: false,
                                                                 unlock: false,
+                                                                ttl: None,
                                                             });
 
                                                             let _ = tx_clone

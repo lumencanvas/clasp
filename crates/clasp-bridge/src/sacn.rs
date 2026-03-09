@@ -174,6 +174,7 @@ impl SacnBridge {
             revision: None,
             lock: false,
             unlock: false,
+            ttl: None,
         })
     }
 

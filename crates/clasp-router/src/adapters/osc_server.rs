@@ -272,6 +272,7 @@ impl OscServerAdapter {
             revision: None,
             lock: false,
             unlock: false,
+            ttl: None,
         };
 
         if let Ok(revision) = self

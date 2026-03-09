@@ -89,6 +89,29 @@ if let Some(cached) = client.cached("/lights/brightness") {
 }
 ```
 
+### Per-Message TTL
+
+Use `set_with_ttl()` to make values expire automatically on the router:
+
+```rust
+use clasp_client::Ttl;
+
+// Sliding TTL: resets countdown on every new set to the same address
+client.set_with_ttl("/lights/brightness", Value::Float(0.8), Ttl::Sliding(60)).await?;
+
+// Absolute TTL: expires 300s after the first set, ignoring later updates
+client.set_with_ttl("/lights/brightness", Value::Float(0.8), Ttl::Absolute(300)).await?;
+
+// Explicit no-expiry (equivalent to set())
+client.set_with_ttl("/lights/brightness", Value::Float(0.8), Ttl::Never).await?;
+```
+
+| Variant | Description |
+|---|---|
+| `Ttl::Sliding(secs)` | Expires after `secs` seconds of inactivity; resets on each write |
+| `Ttl::Absolute(secs)` | Expires `secs` seconds after the first write, regardless of updates |
+| `Ttl::Never` | Never expires (default behavior, same as `set()`) |
+
 ## Subscriptions
 
 Subscribe to addresses or wildcard patterns with closure callbacks:

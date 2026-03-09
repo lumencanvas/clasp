@@ -91,7 +91,7 @@ Bytes 4+: Payload
 |---|---|---|
 | Magic | 1 byte | `0x53` |
 | Version | 1 byte | `0x01` |
-| Flags | 1 byte | Message type code |
+| Flags | 1 byte | Message type code (bit 4 = `has_ttl`; when set, a 4-byte TTL field follows the payload length) |
 | Payload length | 1 byte | 0--255 (extended framing for larger payloads) |
 
 Header size is 4 bytes. Maximum payload is 1024 bytes by default (configurable).

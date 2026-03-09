@@ -2,8 +2,8 @@
 //! Tests both binary encoding (default) and backward compatibility with MessagePack
 
 use clasp_core::{
-    codec, HelloMessage, Message, PublishMessage, SetMessage, SignalType, SubscribeMessage, Value,
-    WelcomeMessage,
+    codec, HelloMessage, Message, PublishMessage, SetMessage, SignalType, SubscribeMessage, Ttl,
+    Value, WelcomeMessage,
 };
 
 #[test]
@@ -59,7 +59,7 @@ fn test_encode_decode_set() {
         value: Value::Float(1.25),
         revision: Some(1),
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
 
     let encoded = codec::encode(&msg).expect("encode failed");
@@ -155,7 +155,7 @@ fn test_value_types() {
             value: value.clone(),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         });
 
         let encoded = codec::encode(&msg).expect("encode failed");
@@ -186,7 +186,7 @@ fn test_v3_set_message_size() {
         value: Value::Float(0.75),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
 
     let encoded = codec::encode(&msg).expect("encode failed");
@@ -208,7 +208,7 @@ fn test_v3_set_message_with_revision() {
         value: Value::Float(1.0),
         revision: Some(42),
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
 
     let encoded = codec::encode(&msg).expect("encode failed");
@@ -229,7 +229,7 @@ fn test_v3_set_message_with_lock() {
         value: Value::Bool(true),
         revision: None,
         lock: true,
-        unlock: false,
+        unlock: false, ttl: None,
     });
 
     let encoded = codec::encode(&msg).expect("encode failed");
@@ -251,7 +251,7 @@ fn test_v3_set_message_string_value() {
         value: Value::String("Hello World".to_string()),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
 
     let encoded = codec::encode(&msg).expect("encode failed");
@@ -274,7 +274,7 @@ fn test_v3_encoding_starts_with_message_type() {
         value: Value::Float(1.0),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
 
     let encoded = codec::encode(&set_msg).expect("encode failed");
@@ -306,7 +306,7 @@ fn test_v3_benchmark_set_encoding() {
         value: Value::Float(0.75),
         revision: Some(1),
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
 
     let iterations = 100_000;
@@ -729,4 +729,124 @@ fn test_timeline_cubic_bezier() {
     ]);
 
     assert_eq!(timeline.keyframes[0].bezier, Some([0.42, 0.0, 0.58, 1.0]));
+}
+
+// ============================================================================
+// Per-Message TTL Tests
+// ============================================================================
+
+#[test]
+fn test_set_with_sliding_ttl() {
+    let msg = Message::Set(SetMessage {
+        address: "/test/ttl".to_string(),
+        value: Value::Float(1.0),
+        revision: None,
+        lock: false,
+        unlock: false,
+        ttl: Some(Ttl::Sliding(60)),
+    });
+
+    let encoded = codec::encode(&msg).expect("encode failed");
+    let (decoded, _frame) = codec::decode(&encoded).expect("decode failed");
+
+    match decoded {
+        Message::Set(set) => {
+            assert_eq!(set.address, "/test/ttl");
+            assert_eq!(set.ttl, Some(Ttl::Sliding(60)));
+        }
+        _ => panic!("Expected Set message"),
+    }
+}
+
+#[test]
+fn test_set_with_absolute_ttl() {
+    let msg = Message::Set(SetMessage {
+        address: "/test/ttl".to_string(),
+        value: Value::Int(42),
+        revision: Some(5),
+        lock: false,
+        unlock: false,
+        ttl: Some(Ttl::Absolute(300)),
+    });
+
+    let encoded = codec::encode(&msg).expect("encode failed");
+    let (decoded, _frame) = codec::decode(&encoded).expect("decode failed");
+
+    match decoded {
+        Message::Set(set) => {
+            assert_eq!(set.revision, Some(5));
+            assert_eq!(set.ttl, Some(Ttl::Absolute(300)));
+        }
+        _ => panic!("Expected Set message"),
+    }
+}
+
+#[test]
+fn test_set_with_never_ttl() {
+    let msg = Message::Set(SetMessage {
+        address: "/test/ttl".to_string(),
+        value: Value::Bool(true),
+        revision: None,
+        lock: false,
+        unlock: false,
+        ttl: Some(Ttl::Never),
+    });
+
+    let encoded = codec::encode(&msg).expect("encode failed");
+    let (decoded, _frame) = codec::decode(&encoded).expect("decode failed");
+
+    match decoded {
+        Message::Set(set) => {
+            assert_eq!(set.ttl, Some(Ttl::Never));
+        }
+        _ => panic!("Expected Set message"),
+    }
+}
+
+#[test]
+fn test_set_without_ttl_backward_compat() {
+    let msg = Message::Set(SetMessage {
+        address: "/test/no-ttl".to_string(),
+        value: Value::Float(0.5),
+        revision: None,
+        lock: false,
+        unlock: false,
+        ttl: None,
+    });
+
+    let encoded = codec::encode(&msg).expect("encode failed");
+    let (decoded, _frame) = codec::decode(&encoded).expect("decode failed");
+
+    match decoded {
+        Message::Set(set) => {
+            assert_eq!(set.address, "/test/no-ttl");
+            assert_eq!(set.ttl, None);
+        }
+        _ => panic!("Expected Set message"),
+    }
+}
+
+#[test]
+fn test_set_with_ttl_and_lock() {
+    let msg = Message::Set(SetMessage {
+        address: "/test/locked-ttl".to_string(),
+        value: Value::String("hello".to_string()),
+        revision: Some(10),
+        lock: true,
+        unlock: false,
+        ttl: Some(Ttl::Sliding(3600)),
+    });
+
+    let encoded = codec::encode(&msg).expect("encode failed");
+    let (decoded, _frame) = codec::decode(&encoded).expect("decode failed");
+
+    match decoded {
+        Message::Set(set) => {
+            assert!(set.lock);
+            assert_eq!(set.revision, Some(10));
+            assert_eq!(set.ttl, Some(Ttl::Sliding(3600)));
+            assert_eq!(set.value, Value::String("hello".to_string()));
+        }
+        _ => panic!("Expected Set message"),
+    }
 }

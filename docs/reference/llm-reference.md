@@ -252,10 +252,23 @@ let client = Clasp::connect_to("ws://localhost:7330").await?;
 | Operation | JS | Python | Rust |
 |-----------|----|----|------|
 | Set | `client.set(addr, val)` | `client.set(addr, val)` | `client.set(addr, val).await?` |
+| Set w/ TTL | `client.set(addr, val, { ttl: 60 })` | `client.set(addr, val, ttl=60)` | `client.set_with_ttl(addr, val, Ttl::Sliding(60)).await?` |
 | Get | `await client.get(addr)` | `await client.get(addr)` | `client.get(addr).await?` |
 | Cached | `client.cached(addr)` | `client.cached(addr)` | `client.cached(addr)` |
 
 JS `set` is fire-and-forget (no await). Python `get` accepts `timeout=5.0`. Rust `cached` returns `Option<Value>`.
+
+### Per-Message TTL
+
+Values can be given a time-to-live (TTL) in seconds. Expired values are removed from router state and no longer delivered to late joiners.
+
+| Mode | JS | Python | Rust | Behavior |
+|------|-----|--------|------|----------|
+| Sliding | `{ ttl: 60 }` | `ttl=60` | `Ttl::Sliding(60)` | Resets on each write |
+| Absolute | `{ ttl: 60, absolute: true }` | `ttl=60, absolute=True` | `Ttl::Absolute(60)` | Counts from first write |
+| Never | `{ ttl: 0 }` (default) | `ttl=0` (default) | `Ttl::Never` | No expiry |
+
+Wire format: SET message flags byte, bit 4 (`has_ttl`). When set, a 4-byte TTL field (seconds, big-endian u32) follows the standard payload. Bit 5 indicates absolute mode.
 
 ## Subscriptions
 

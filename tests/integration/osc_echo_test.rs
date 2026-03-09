@@ -83,7 +83,7 @@ async fn test_clasp_to_osc() {
         value: Value::Float(0.5),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
 
     bridge.send(msg).await.expect("Failed to send message");

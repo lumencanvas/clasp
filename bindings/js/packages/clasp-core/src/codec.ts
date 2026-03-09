@@ -430,12 +430,13 @@ export function checkComplete(data: Uint8Array): number | null {
 function encodeSet(view: DataView, offset: number, msg: SetMessage): number {
   view.setUint8(offset++, MSG.SET);
 
-  // Flags: [has_rev:1][lock:1][unlock:1][rsv:1][vtype:4]
+  // Flags: [has_rev:1][lock:1][unlock:1][has_ttl:1][vtype:4]
   const vtype = getValueType(msg.value);
   let flags = vtype & 0x0f;
   if (msg.revision !== undefined) flags |= 0x80;
   if (msg.lock) flags |= 0x40;
   if (msg.unlock) flags |= 0x20;
+  if (msg.ttl !== undefined) flags |= 0x10;
   view.setUint8(offset++, flags);
 
   // Address
@@ -448,6 +449,14 @@ function encodeSet(view: DataView, offset: number, msg: SetMessage): number {
   if (msg.revision !== undefined) {
     view.setBigUint64(offset, BigInt(msg.revision), false);
     offset += 8;
+  }
+
+  // TTL
+  if (msg.ttl !== undefined) {
+    let raw = msg.ttl & 0x7fffffff;
+    if (msg.absolute) raw |= 0x80000000;
+    view.setUint32(offset, raw >>> 0, false);
+    offset += 4;
   }
 
   return offset;
@@ -893,13 +902,31 @@ function decodeSet(view: DataView, offset: number): SetMessage {
   const hasRev = (flags & 0x80) !== 0;
   const lock = (flags & 0x40) !== 0;
   const unlock = (flags & 0x20) !== 0;
+  const hasTtl = (flags & 0x10) !== 0;
 
   const [address, newOffset] = decodeString(view, offset);
   offset = newOffset;
   const [value, finalOffset] = decodeValueData(view, offset, vtype);
   offset = finalOffset;
 
-  const revision = hasRev ? Number(view.getBigUint64(offset, false)) : undefined;
+  let revision: number | undefined;
+  if (hasRev) {
+    revision = Number(view.getBigUint64(offset, false));
+    offset += 8;
+  }
+
+  let ttl: number | undefined;
+  let absolute: boolean | undefined;
+  if (hasTtl) {
+    const raw = view.getUint32(offset, false);
+    offset += 4;
+    if (raw === 0) {
+      ttl = 0;
+    } else {
+      ttl = raw & 0x7fffffff;
+      absolute = (raw & 0x80000000) !== 0 ? true : undefined;
+    }
+  }
 
   return {
     type: 'SET',
@@ -908,6 +935,8 @@ function decodeSet(view: DataView, offset: number): SetMessage {
     revision,
     lock: lock || undefined,
     unlock: unlock || undefined,
+    ttl,
+    absolute,
   };
 }
 

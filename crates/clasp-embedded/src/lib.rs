@@ -534,7 +534,7 @@ fn encode_value_data(buf: &mut [u8], value: &Value) -> usize {
 
 /// Encode a SET message payload (without frame header)
 /// Format: msg_type(1) + flags(1) + addr_len(2) + addr + value_data
-/// Flags: [has_rev:1][lock:1][unlock:1][rsv:1][vtype:4]
+/// Flags: [has_rev:1][lock:1][unlock:1][has_ttl:1][vtype:4]
 pub fn encode_set(buf: &mut [u8], address: &str, value: &Value) -> usize {
     if buf.len() < 2 {
         return 0;
@@ -738,7 +738,7 @@ pub fn decode_message(payload: &[u8]) -> Option<Message<'_>> {
         }
         msg::SET => {
             // SET format: flags(1) + address + value_data
-            // Flags: [has_rev:1][lock:1][unlock:1][rsv:1][vtype:4]
+            // Flags: [has_rev:1][lock:1][unlock:1][has_ttl:1][vtype:4]
             if data.is_empty() {
                 return None;
             }

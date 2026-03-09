@@ -62,6 +62,26 @@ const cached = client.cached('/lights/brightness');
 
 `set()` is fire-and-forget. `get()` returns a `Promise` that resolves with the current value stored on the router. `cached()` returns the most recent value this client has seen for the address, or `undefined` if none.
 
+### Per-Message TTL
+
+Pass a `ttl` option to `set()` to make values expire automatically on the router. TTL is specified in seconds.
+
+```javascript
+// Sliding TTL: resets countdown on every new set() to the same address
+client.set('/lights/brightness', 0.8, { ttl: 60 });
+
+// Absolute TTL: expires 60s after the first set(), ignoring later updates
+client.set('/lights/brightness', 0.8, { ttl: 60, absolute: true });
+
+// Explicit no-expiry (default behavior)
+client.set('/lights/brightness', 0.8, { ttl: 0 });
+```
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `ttl` | `number` | `0` | Time-to-live in seconds. `0` means never expire. |
+| `absolute` | `boolean` | `false` | When `true`, TTL counts from the first set and is not reset by subsequent writes. |
+
 ## Subscriptions
 
 Subscribe to addresses or wildcard patterns. Callbacks fire whenever a matching value changes.

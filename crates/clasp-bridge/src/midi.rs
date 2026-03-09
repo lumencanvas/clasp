@@ -366,6 +366,7 @@ fn midi_message_to_clasp(message: &[u8], base_addr: &str) -> Option<Message> {
                 revision: None,
                 lock: false,
                 unlock: false,
+                ttl: None,
             }))
         }
         // Program Change
@@ -395,6 +396,7 @@ fn midi_message_to_clasp(message: &[u8], base_addr: &str) -> Option<Message> {
                 revision: None,
                 lock: false,
                 unlock: false,
+                ttl: None,
             }))
         }
         // System messages (clock, transport)

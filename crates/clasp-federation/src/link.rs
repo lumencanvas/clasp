@@ -221,6 +221,7 @@ impl FederationLink {
             revision: msg.revision,
             lock: false,
             unlock: false,
+            ttl: None,
         });
 
         self.send_message(&set, QoS::Confirm).await

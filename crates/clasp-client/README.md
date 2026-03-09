@@ -18,6 +18,9 @@ async fn main() -> anyhow::Result<()> {
     // Set a parameter
     client.set("/lights/front/brightness", 0.75.into()).await?;
 
+    // Set with a per-message TTL (value expires after 5 seconds)
+    client.set_with_ttl("/lights/front/brightness", 0.75.into(), 5_000_000).await?;
+
     // Get a parameter
     let value = client.get("/lights/front/brightness").await?;
     println!("Brightness: {:?}", value);

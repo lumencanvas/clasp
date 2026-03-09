@@ -110,6 +110,7 @@ twine upload dist/*
 | Cargo | `clasp-core` | `clasp-core = "0.1"` in Cargo.toml |
 | Cargo | `clasp-bridge` | `clasp-bridge = "0.1"` in Cargo.toml |
 | npm | `@clasp-to/core` | `npm install @clasp-to/core` |
+| npm | `@clasp-to/crypto` | `npm install @clasp-to/crypto` |
 | PyPI | `clasp-to` | `pip install clasp-to` |
 
 ---

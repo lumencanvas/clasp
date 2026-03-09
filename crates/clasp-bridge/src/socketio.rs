@@ -244,6 +244,7 @@ impl Bridge for SocketIOBridge {
                         revision: None,
                         lock: false,
                         unlock: false,
+                        ttl: None,
                     });
 
                     debug!("Socket.IO received event: {}", event_name);

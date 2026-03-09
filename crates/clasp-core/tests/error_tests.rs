@@ -251,7 +251,7 @@ async fn test_message_before_hello_returns_error_401() {
         value: Value::Int(1),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
     sender
         .send(codec::encode(&set).expect("Failed to encode"))
@@ -382,7 +382,7 @@ async fn test_very_long_address() {
         value: Value::Int(1),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
     sender
         .send(codec::encode(&set).expect("Failed to encode"))
@@ -416,7 +416,7 @@ async fn test_empty_address_returns_error_400() {
         value: Value::Int(1),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
     sender
         .send(codec::encode(&set).expect("Failed to encode"))
@@ -475,7 +475,7 @@ async fn test_invalid_address_returns_error_400() {
             value: Value::Int(1),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         });
         sender
             .send(codec::encode(&set).expect("Failed to encode"))
@@ -608,7 +608,7 @@ async fn test_special_characters_in_address() {
             value: Value::Int(1),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         });
         sender
             .send(codec::encode(&set).expect("Failed to encode"))
@@ -647,7 +647,7 @@ async fn test_unauthorized_write_to_locked_address_returns_error_403() {
         value: Value::Int(100),
         revision: None,
         lock: true, // Acquire lock
-        unlock: false,
+        unlock: false, ttl: None,
     });
     owner_sender
         .send(codec::encode(&set_locked).expect("Failed to encode"))
@@ -677,7 +677,7 @@ async fn test_unauthorized_write_to_locked_address_returns_error_403() {
         value: Value::Int(999), // Try to overwrite
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
     intruder_sender
         .send(codec::encode(&set_intruder).expect("Failed to encode"))

@@ -72,6 +72,7 @@ pub(crate) async fn handle_replay(
                             revision: entry.revision,
                             lock: false,
                             unlock: false,
+                            ttl: None,
                         })
                     } else {
                         Message::Publish(PublishMessage {

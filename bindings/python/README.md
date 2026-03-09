@@ -66,7 +66,7 @@ async def main():
 - `close()` - Close connection
 - `subscribe(pattern, callback)` - Subscribe to address pattern
 - `on(pattern)` - Decorator for subscriptions
-- `set(address, value)` - Set parameter value
+- `set(address, value, ttl=None)` - Set parameter value (optional TTL in microseconds)
 - `get(address)` - Get parameter value
 - `emit(address, payload)` - Emit event
 - `stream(address, value)` - Send stream sample

@@ -633,6 +633,7 @@ impl Clasp {
             revision: None,
             lock: false,
             unlock: false,
+            ttl: None,
         });
 
         self.send_message(&msg).await
@@ -646,6 +647,7 @@ impl Clasp {
             revision: None,
             lock: true,
             unlock: false,
+            ttl: None,
         });
 
         self.send_message(&msg).await
@@ -659,6 +661,21 @@ impl Clasp {
             revision: None,
             lock: false,
             unlock: true,
+            ttl: None,
+        });
+
+        self.send_message(&msg).await
+    }
+
+    /// Set a parameter value with a per-message TTL
+    pub async fn set_with_ttl(&self, address: &str, value: impl Into<Value>, ttl: clasp_core::Ttl) -> Result<()> {
+        let msg = Message::Set(SetMessage {
+            address: address.to_string(),
+            value: value.into(),
+            revision: None,
+            lock: false,
+            unlock: false,
+            ttl: Some(ttl),
         });
 
         self.send_message(&msg).await

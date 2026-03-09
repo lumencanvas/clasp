@@ -22,6 +22,7 @@ When a client sends a SET message, the router creates or updates a `ParamState` 
 | `strategy` | ConflictStrategy | How concurrent writes are resolved (default: LWW) |
 | `lock_holder` | string or null | Session ID holding exclusive lock, if any |
 | `meta` | object or null | Optional metadata: unit, range, default value |
+| `ttl` | u32 or null | Per-message TTL override (see TTL and Eviction below) |
 | `origin` | string or null | Origin router ID (for federation loop prevention) |
 
 Revisions start at 1 and increment by 1 on every accepted write. They never decrease. This gives every subscriber an unambiguous ordering of writes to a given address.
@@ -137,6 +138,40 @@ Params expire after a configurable Time-To-Live (TTL) based on their `last_acces
 | `--param-ttl <seconds>` | Set param TTL | 3600 (1 hour) |
 | `--no-ttl` | Disable TTL expiration entirely | - |
 | `--max-params <count>` | Maximum number of params in the store | 10,000 |
+
+### Per-Message TTL
+
+Individual SET messages can override the router's default TTL by setting the `has_ttl` flag (bit 4) in the message flags and appending a `ttl:u32` field. This lets clients control expiry on a per-param basis without changing the router configuration.
+
+The TTL field encodes both the duration and the expiry mode in a single u32:
+
+| Mode | Bit 31 | Behavior |
+|------|--------|----------|
+| Sliding | `0` | TTL resets on every read or write. The param expires only after it has been idle for the given duration. |
+| Absolute | `1` | TTL counts down from the write time. The param expires after the given duration regardless of access. |
+
+Bits 30-0 hold the duration in seconds. A value of `0` means "never expires" -- the param is exempt from TTL eviction entirely.
+
+When the `has_ttl` flag is not set, the router applies its default TTL (`--param-ttl`). A per-message TTL replaces the previous TTL for that param -- it does not stack.
+
+```javascript
+// Sliding TTL: expire after 30 seconds of inactivity
+client.set('/session/cursor', { x: 100, y: 200 }, { ttl: 30 });
+
+// Absolute TTL: expire exactly 60 seconds from now
+client.set('/alerts/temp-warning', 'high', { ttl: 60, ttlMode: 'absolute' });
+
+// Never expire
+client.set('/config/version', '2.1.0', { ttl: 0 });
+```
+
+```python
+# Sliding TTL (default mode)
+await client.set('/session/cursor', {'x': 100, 'y': 200}, ttl=30)
+
+# Absolute TTL
+await client.set('/alerts/temp-warning', 'high', ttl=60, ttl_mode='absolute')
+```
 
 When the store reaches `max-params`, the router evicts entries based on the configured strategy:
 

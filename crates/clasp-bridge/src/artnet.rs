@@ -294,6 +294,7 @@ fn artnet_to_clasp(
                         revision: None,
                         lock: false,
                         unlock: false,
+                        ttl: None,
                     }));
                 }
             }

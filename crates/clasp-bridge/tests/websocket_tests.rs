@@ -121,7 +121,7 @@ async fn test_clasp_set_to_websocket_json() {
         value: Value::Int(7),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
 
     bridge

@@ -639,6 +639,7 @@ async fn handle_mqtt_packet(
                 revision: None,
                 lock: false,
                 unlock: false,
+                ttl: None,
             };
 
             if let Ok(revision) = state.apply_set(&set_msg, &mqtt_session.clasp_session_id) {

@@ -214,6 +214,7 @@ pub async fn run(config: RelayConfig) -> Result<()> {
                                 Some(pv.revision),
                                 false,
                                 false,
+                                None,
                             );
                         }
                         tracing::info!("Restored {} params from {}", count, persist_path.display());

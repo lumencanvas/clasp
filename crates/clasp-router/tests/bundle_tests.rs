@@ -45,7 +45,7 @@ async fn test_bundle_atomic_execution() {
                 value: Value::Int(i as i64),
                 revision: None,
                 lock: false,
-                unlock: false,
+                unlock: false, ttl: None,
             })
         })
         .collect();
@@ -107,7 +107,7 @@ async fn test_bundle_scheduled_execution() {
         value: Value::Int(42),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     })];
 
     // Send scheduled bundle
@@ -170,7 +170,7 @@ async fn test_bundle_mixed_message_types() {
             value: Value::Float(1.25),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         }),
         Message::Publish(PublishMessage {
             address: "/mixed/event".to_string(),
@@ -262,7 +262,7 @@ async fn test_bundle_large_bundle() {
                 value: Value::Int(i as i64),
                 revision: None,
                 lock: false,
-                unlock: false,
+                unlock: false, ttl: None,
             })
         })
         .collect();
@@ -333,7 +333,7 @@ async fn test_bundle_timestamp_precision() {
         value: Value::Int(999),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     })];
 
     // Send scheduled bundle

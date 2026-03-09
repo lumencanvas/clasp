@@ -67,9 +67,16 @@ The main client class. All state operations, subscriptions, and signal methods a
 
 | Method                             | Returns           | Description                                              |
 |------------------------------------|-------------------|----------------------------------------------------------|
-| `set(address: string, value: Value)` | `void`          | Set a parameter value on the router                      |
+| `set(address: string, value: Value, options?: SetOptions)` | `void`          | Set a parameter value on the router                      |
 | `get(address: string)`             | `Promise<Value>`  | Request the current value from the router (round-trip)   |
 | `cached(address: string)`         | `Value \| undefined` | Return the locally cached value, or `undefined` if not yet received |
+
+### SetOptions
+
+| Field      | Type      | Default | Description                                                        |
+|------------|-----------|---------|--------------------------------------------------------------------|
+| `ttl`      | `number`  | `0`     | Time-to-live in seconds. `0` means never expire.                   |
+| `absolute` | `boolean` | `false` | When `true`, TTL counts from the first set and is not reset by subsequent writes. |
 
 ### Subscriptions
 
