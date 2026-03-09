@@ -123,6 +123,10 @@ step "2. Bumping npm package versions"
 bump_json_version bindings/js/packages/clasp-core/package.json "$VERSION"
 echo "    @clasp-to/core -> $VERSION"
 
+# @clasp-to/crypto
+bump_json_version bindings/js/packages/clasp-crypto/package.json "$VERSION"
+echo "    @clasp-to/crypto -> $VERSION"
+
 # App package.json files (not published but keep in sync)
 for app_pkg in apps/chat/package.json apps/bridge/package.json apps/docs/package.json site/package.json; do
   if [ -f "$app_pkg" ]; then
@@ -132,7 +136,7 @@ for app_pkg in apps/chat/package.json apps/bridge/package.json apps/docs/package
 done
 
 # Update @clasp-to/core dependency ranges in consumers
-for consumer in apps/chat/package.json site/package.json; do
+for consumer in apps/chat/package.json site/package.json bindings/js/packages/clasp-crypto/package.json; do
   if [ -f "$consumer" ]; then
     python3 -c "
 import json
@@ -177,6 +181,12 @@ ok
 step "6. Building @clasp-to/core (npm)"
 if [ -f bindings/js/packages/clasp-core/tsconfig.json ] || [ -f bindings/js/packages/clasp-core/package.json ]; then
   (cd bindings/js/packages/clasp-core && npm run build 2>&1 | tail -5) || echo "    (build script not available or failed — check manually)"
+fi
+ok
+
+step "6b. Building @clasp-to/crypto (npm)"
+if [ -f bindings/js/packages/clasp-crypto/package.json ]; then
+  (cd bindings/js/packages/clasp-crypto && npm run build 2>&1 | tail -5) || echo "    (build script not available or failed — check manually)"
 fi
 ok
 
@@ -247,6 +257,17 @@ else
 fi
 ok
 
+step "10b. Publishing @clasp-to/crypto to npm"
+if [ "$DRY_RUN" = true ]; then
+  echo "    [dry-run] npm publish"
+  (cd bindings/js/packages/clasp-crypto && npm publish --dry-run 2>&1 | tail -5) || true
+elif [ "$SKIP_PUBLISH" = true ]; then
+  echo "    [skip]"
+else
+  (cd bindings/js/packages/clasp-crypto && npm publish --access public)
+fi
+ok
+
 # ---------------------------------------------------------------------------
 # 6. Publish Python
 # ---------------------------------------------------------------------------
@@ -290,7 +311,7 @@ step "DONE"
 echo ""
 echo "  Version:  $VERSION"
 echo "  Rust:     14 crates on crates.io"
-echo "  npm:      @clasp-to/core on npm"
+echo "  npm:      @clasp-to/core, @clasp-to/crypto on npm"
 echo "  Python:   clasp-to on PyPI"
 echo ""
 if [ "$DRY_RUN" = true ] || [ "$SKIP_PUBLISH" = true ]; then

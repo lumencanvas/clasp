@@ -78,6 +78,7 @@ impl OscBridge {
             revision: None,
             lock: false,
             unlock: false,
+            ttl: None,
         }))
     }
 
@@ -304,6 +305,7 @@ fn packet_to_messages(packet: &OscPacket, namespace: &str) -> Option<Vec<Message
                 revision: None,
                 lock: false,
                 unlock: false,
+                ttl: None,
             })])
         }
         OscPacket::Bundle(bundle) => {

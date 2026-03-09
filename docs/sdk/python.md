@@ -74,6 +74,26 @@ color = await client.get('/lights/color', timeout=10.0)
 cached = client.cached('/lights/brightness')
 ```
 
+### Per-Message TTL
+
+Pass `ttl` and `absolute` keyword arguments to `set()` to make values expire automatically on the router. TTL is specified in seconds.
+
+```python
+# Sliding TTL: resets countdown on every new set() to the same address
+await client.set('/lights/brightness', 0.8, ttl=60)
+
+# Absolute TTL: expires 60s after the first set(), ignoring later updates
+await client.set('/lights/brightness', 0.8, ttl=60, absolute=True)
+
+# Explicit no-expiry (default behavior)
+await client.set('/lights/brightness', 0.8, ttl=0)
+```
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `ttl` | `int` | `0` | Time-to-live in seconds. `0` means never expire. |
+| `absolute` | `bool` | `False` | When `True`, TTL counts from the first set and is not reset by subsequent writes. |
+
 ## Subscriptions
 
 Subscribe to addresses or wildcard patterns. CLASP Python supports both a decorator pattern and a function-call pattern.

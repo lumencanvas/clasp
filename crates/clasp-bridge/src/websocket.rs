@@ -172,6 +172,7 @@ impl WebSocketBridge {
                             revision: None,
                             lock: false,
                             unlock: false,
+                            ttl: None,
                         }))
                     } else {
                         // Plain text message
@@ -181,6 +182,7 @@ impl WebSocketBridge {
                             revision: None,
                             lock: false,
                             unlock: false,
+                            ttl: None,
                         }))
                     }
                 }
@@ -199,6 +201,7 @@ impl WebSocketBridge {
                                 revision: None,
                                 lock: false,
                                 unlock: false,
+                                ttl: None,
                             }))
                         } else {
                             // Wrap text as a message for the namespace
@@ -208,6 +211,7 @@ impl WebSocketBridge {
                                 revision: None,
                                 lock: false,
                                 unlock: false,
+                                ttl: None,
                             }))
                         }
                     } else {
@@ -218,6 +222,7 @@ impl WebSocketBridge {
                             revision: None,
                             lock: false,
                             unlock: false,
+                            ttl: None,
                         }))
                     }
                 }
@@ -235,6 +240,7 @@ impl WebSocketBridge {
                             revision: None,
                             lock: false,
                             unlock: false,
+                            ttl: None,
                         }))
                     }
                 }
@@ -244,6 +250,7 @@ impl WebSocketBridge {
                     revision: None,
                     lock: false,
                     unlock: false,
+                    ttl: None,
                 })),
             },
             _ => None,

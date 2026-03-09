@@ -196,11 +196,12 @@ impl RouterState {
         revision: Option<u64>,
         lock: bool,
         unlock: bool,
+        ttl: Option<clasp_core::Ttl>,
     ) -> Result<u64, UpdateError> {
         let result =
             self.params
                 .write()
-                .set(address, value.clone(), writer, revision, lock, unlock)?;
+                .set(address, value.clone(), writer, revision, lock, unlock, ttl)?;
 
         // Notify listeners
         if let Some(listeners) = self.listeners.get(address) {
@@ -221,6 +222,7 @@ impl RouterState {
             msg.revision,
             msg.lock,
             msg.unlock,
+            msg.ttl,
         )?;
 
         // Fire-and-forget journal append
@@ -321,6 +323,7 @@ impl RouterState {
                     Some(snap.revision),
                     false,
                     false,
+                    None,
                 );
                 recovered += 1;
             }
@@ -341,6 +344,7 @@ impl RouterState {
                             Some(revision),
                             false,
                             false,
+                            None,
                         );
                         recovered += 1;
                     }
@@ -420,6 +424,7 @@ mod tests {
                 None,
                 false,
                 false,
+                None,
             )
             .unwrap();
 
@@ -439,6 +444,7 @@ mod tests {
                 None,
                 false,
                 false,
+                None,
             )
             .unwrap();
         state
@@ -449,6 +455,7 @@ mod tests {
                 None,
                 false,
                 false,
+                None,
             )
             .unwrap();
         state
@@ -459,6 +466,7 @@ mod tests {
                 None,
                 false,
                 false,
+                None,
             )
             .unwrap();
 
@@ -549,6 +557,7 @@ mod tests {
                 None,
                 false,
                 false,
+                None,
             )
             .unwrap();
 

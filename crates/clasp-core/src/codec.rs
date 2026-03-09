@@ -92,7 +92,7 @@ pub fn encode_message(message: &Message) -> Result<Bytes> {
 #[inline]
 fn estimate_message_size(msg: &Message) -> usize {
     match msg {
-        Message::Set(m) => 2 + 2 + m.address.len() + 9 + if m.revision.is_some() { 8 } else { 0 },
+        Message::Set(m) => 2 + 2 + m.address.len() + 9 + if m.revision.is_some() { 8 } else { 0 } + if m.ttl.is_some() { 4 } else { 0 },
         Message::Publish(m) => 2 + 2 + m.address.len() + 16,
         Message::Hello(m) => 4 + m.name.len() + 2,
         Message::Welcome(m) => 12 + m.name.len() + m.session.len() + 4,
@@ -229,6 +229,9 @@ fn encode_set(buf: &mut BytesMut, msg: &SetMessage) -> Result<()> {
     if msg.unlock {
         flags |= 0x20;
     }
+    if msg.ttl.is_some() {
+        flags |= 0x10;
+    }
     buf.put_u8(flags);
 
     // Address
@@ -240,6 +243,16 @@ fn encode_set(buf: &mut BytesMut, msg: &SetMessage) -> Result<()> {
     // Optional revision
     if let Some(rev) = msg.revision {
         buf.put_u64(rev);
+    }
+
+    // Optional TTL
+    if let Some(ttl) = msg.ttl {
+        let raw = match ttl {
+            Ttl::Never => 0u32,
+            Ttl::Sliding(secs) => secs & 0x7FFF_FFFF,
+            Ttl::Absolute(secs) => (secs & 0x7FFF_FFFF) | 0x8000_0000,
+        };
+        buf.put_u32(raw);
     }
 
     Ok(())
@@ -909,11 +922,25 @@ fn decode_set(buf: &mut &[u8]) -> Result<Message> {
     let has_rev = (flags & 0x80) != 0;
     let lock = (flags & 0x40) != 0;
     let unlock = (flags & 0x20) != 0;
+    let has_ttl = (flags & 0x10) != 0;
 
     let address = decode_string(buf)?;
     let value = decode_value_data(buf, vtype)?;
 
     let revision = if has_rev { Some(buf.get_u64()) } else { None };
+
+    let ttl = if has_ttl {
+        let raw = buf.get_u32();
+        if raw == 0 {
+            Some(Ttl::Never)
+        } else if raw & 0x8000_0000 != 0 {
+            Some(Ttl::Absolute(raw & 0x7FFF_FFFF))
+        } else {
+            Some(Ttl::Sliding(raw))
+        }
+    } else {
+        None
+    };
 
     Ok(Message::Set(SetMessage {
         address,
@@ -921,6 +948,7 @@ fn decode_set(buf: &mut &[u8]) -> Result<Message> {
         revision,
         lock,
         unlock,
+        ttl,
     }))
 }
 
@@ -1655,7 +1683,7 @@ mod tests {
             value: Value::Float(0.75),
             revision: Some(42),
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         });
 
         let encoded = encode(&msg).unwrap();
@@ -1680,7 +1708,7 @@ mod tests {
             value: Value::Float(0.5),
             revision: Some(1),
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         });
 
         // Binary encoding
@@ -1720,14 +1748,14 @@ mod tests {
                     value: Value::Float(1.0),
                     revision: None,
                     lock: false,
-                    unlock: false,
+                    unlock: false, ttl: None,
                 }),
                 Message::Set(SetMessage {
                     address: "/light/2".to_string(),
                     value: Value::Float(0.0),
                     revision: None,
                     lock: false,
-                    unlock: false,
+                    unlock: false, ttl: None,
                 }),
             ],
         });
@@ -1761,7 +1789,7 @@ mod tests {
                 value: value.clone(),
                 revision: None,
                 lock: false,
-                unlock: false,
+                unlock: false, ttl: None,
             });
 
             let encoded = encode(&msg).unwrap();
@@ -1784,7 +1812,7 @@ mod tests {
             value: Value::Float(0.5),
             revision: Some(1),
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         };
 
         // Encode as v2 (MessagePack with named keys)

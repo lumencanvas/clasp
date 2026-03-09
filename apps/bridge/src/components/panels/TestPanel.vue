@@ -18,6 +18,8 @@ const { notify } = useNotifications()
 const testProtocol = ref('osc')
 const testPath = ref('/test')
 const testValue = ref('0.5')
+const testTtl = ref('')
+const testTtlAbsolute = ref(false)
 const testResult = ref('')
 const testRunning = ref(false)
 
@@ -44,12 +46,20 @@ async function sendTestSignal() {
     const conn = connections.value.find(c => c.protocol === proto || c.type === proto)
     const address = conn?.address || defaultAddresses[proto as keyof typeof defaultAddresses] || ''
 
-    await invoke('sendTestSignal', {
+    const payload: Record<string, any> = {
       protocol: proto,
       address,
       signalAddress: testPath.value,
       value: parseFloat(testValue.value) || testValue.value,
-    })
+    }
+    if (testTtl.value !== '') {
+      const ttlSeconds = parseFloat(testTtl.value)
+      if (!isNaN(ttlSeconds) && ttlSeconds >= 0) {
+        payload.ttl = ttlSeconds
+        payload.absolute = testTtlAbsolute.value
+      }
+    }
+    await invoke('sendTestSignal', payload)
     testResult.value = 'Signal sent'
     notify('Test signal sent', 'success')
   } catch (e: any) {
@@ -93,6 +103,17 @@ async function sendTestSignal() {
             <div class="form-group">
               <label class="form-label">Value</label>
               <input v-model="testValue" class="input input-sm" placeholder="0.5" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">TTL (seconds)</label>
+              <input v-model="testTtl" type="number" min="0" step="any" class="input input-sm" placeholder="Optional" />
+            </div>
+            <div v-if="testTtl" class="form-group">
+              <label>
+                <input v-model="testTtlAbsolute" type="checkbox" />
+                Absolute expiry
+              </label>
+              <span class="form-hint">{{ testTtlAbsolute ? 'Expires at fixed time' : 'Sliding window (resets on update)' }}</span>
             </div>
             <button class="btn btn-primary btn-sm" :disabled="testRunning" @click="sendTestSignal">
               {{ testRunning ? 'SENDING...' : 'SEND' }}

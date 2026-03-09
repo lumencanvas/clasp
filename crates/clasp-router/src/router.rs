@@ -1239,7 +1239,7 @@ pub fn execute_rule_actions(
     for action in actions {
         match action.action {
             clasp_rules::RuleAction::Set { address, value } => {
-                match state.set(&address, value.clone(), &action.origin, None, false, false) {
+                match state.set(&address, value.clone(), &action.origin, None, false, false, None) {
                     Ok(revision) => {
                         let subscribers =
                             subscriptions.find_subscribers(&address, Some(SignalType::Param));
@@ -1249,6 +1249,7 @@ pub fn execute_rule_actions(
                             revision: Some(revision),
                             lock: false,
                             unlock: false,
+                            ttl: None,
                         });
                         if let Ok(bytes) = codec::encode(&set_msg) {
                             for sub_session_id in subscribers {
@@ -1309,6 +1310,7 @@ pub fn execute_rule_actions(
                         None,
                         false,
                         false,
+                        None,
                     ) {
                         Ok(revision) => {
                             let subscribers =
@@ -1319,6 +1321,7 @@ pub fn execute_rule_actions(
                                 revision: Some(revision),
                                 lock: false,
                                 unlock: false,
+                                ttl: None,
                             });
                             if let Ok(bytes) = codec::encode(&set_msg) {
                                 for sub_session_id in subscribers {

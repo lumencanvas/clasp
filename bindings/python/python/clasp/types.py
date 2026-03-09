@@ -89,6 +89,8 @@ class SetMessage(Message):
     revision: Optional[int] = None
     lock: bool = False
     unlock: bool = False
+    ttl: Optional[int] = None
+    absolute: bool = False
 
 
 @dataclass

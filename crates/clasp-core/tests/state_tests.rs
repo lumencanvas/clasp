@@ -22,6 +22,7 @@ fn test_param_state_update() {
         None,  // no expected revision
         false, // don't request lock
         false, // don't release lock
+        None,  // no TTL
     );
 
     assert!(result.is_ok());
@@ -45,16 +46,16 @@ fn test_param_state_max_strategy() {
         ParamState::new(Value::Int(50), "writer".to_string()).with_strategy(ConflictStrategy::Max);
 
     // Higher value should be accepted
-    let _ = state.try_update(Value::Int(100), "writer-1", None, false, false);
+    let _ = state.try_update(Value::Int(100), "writer-1", None, false, false, None);
     assert_eq!(state.value, Value::Int(100));
 
     // Lower value should be rejected
-    let result = state.try_update(Value::Int(30), "writer-2", None, false, false);
+    let result = state.try_update(Value::Int(30), "writer-2", None, false, false, None);
     assert!(result.is_err());
     assert_eq!(state.value, Value::Int(100)); // Still 100
 
     // Even higher value should be accepted
-    let _ = state.try_update(Value::Int(150), "writer-3", None, false, false);
+    let _ = state.try_update(Value::Int(150), "writer-3", None, false, false, None);
     assert_eq!(state.value, Value::Int(150));
 }
 
@@ -64,12 +65,12 @@ fn test_param_state_min_strategy() {
         ParamState::new(Value::Int(50), "writer".to_string()).with_strategy(ConflictStrategy::Min);
 
     // Higher value should be rejected
-    let result = state.try_update(Value::Int(100), "writer-1", None, false, false);
+    let result = state.try_update(Value::Int(100), "writer-1", None, false, false, None);
     assert!(result.is_err());
     assert_eq!(state.value, Value::Int(50)); // Still 50
 
     // Lower value should be accepted
-    let _ = state.try_update(Value::Int(30), "writer-2", None, false, false);
+    let _ = state.try_update(Value::Int(30), "writer-2", None, false, false, None);
     assert_eq!(state.value, Value::Int(30));
 }
 
@@ -79,23 +80,23 @@ fn test_param_state_lock() {
         ParamState::new(Value::Int(42), "owner".to_string()).with_strategy(ConflictStrategy::Lock);
 
     // Request a lock
-    let result = state.try_update(Value::Int(100), "owner-1", None, true, false);
+    let result = state.try_update(Value::Int(100), "owner-1", None, true, false, None);
     assert!(result.is_ok());
     assert!(state.lock_holder.is_some());
     assert_eq!(state.lock_holder, Some("owner-1".to_string()));
 
     // Non-owner can't update when locked
-    let result = state.try_update(Value::Int(200), "owner-2", None, false, false);
+    let result = state.try_update(Value::Int(200), "owner-2", None, false, false, None);
     assert!(result.is_err());
     assert_eq!(state.value, Value::Int(100)); // Still 100
 
     // Owner can update
-    let result = state.try_update(Value::Int(150), "owner-1", None, false, false);
+    let result = state.try_update(Value::Int(150), "owner-1", None, false, false, None);
     assert!(result.is_ok());
     assert_eq!(state.value, Value::Int(150));
 
     // Owner can release lock
-    let result = state.try_update(Value::Int(200), "owner-1", None, false, true);
+    let result = state.try_update(Value::Int(200), "owner-1", None, false, true, None);
     assert!(result.is_ok());
     assert!(state.lock_holder.is_none());
 }
@@ -105,12 +106,12 @@ fn test_param_state_revision_conflict() {
     let mut state = ParamState::new(Value::Int(42), "writer".to_string());
 
     // Update expecting revision 1 (should succeed)
-    let result = state.try_update(Value::Int(100), "writer-1", Some(1), false, false);
+    let result = state.try_update(Value::Int(100), "writer-1", Some(1), false, false, None);
     assert!(result.is_ok());
     assert_eq!(state.revision, 2);
 
     // Update expecting wrong revision (should fail)
-    let result = state.try_update(Value::Int(200), "writer-2", Some(1), false, false);
+    let result = state.try_update(Value::Int(200), "writer-2", Some(1), false, false, None);
     assert!(result.is_err());
     assert_eq!(state.value, Value::Int(100)); // Unchanged
 }
@@ -121,13 +122,13 @@ fn test_state_store() {
 
     // Set values
     store
-        .set("/test/a", Value::Int(1), "writer", None, false, false)
+        .set("/test/a", Value::Int(1), "writer", None, false, false, None)
         .unwrap();
     store
-        .set("/test/b", Value::Int(2), "writer", None, false, false)
+        .set("/test/b", Value::Int(2), "writer", None, false, false, None)
         .unwrap();
     store
-        .set("/test/c", Value::Int(3), "writer", None, false, false)
+        .set("/test/c", Value::Int(3), "writer", None, false, false, None)
         .unwrap();
 
     // Get values using get_value method
@@ -149,6 +150,7 @@ fn test_state_store_pattern_match() {
             None,
             false,
             false,
+            None,
         )
         .unwrap();
     store
@@ -159,6 +161,7 @@ fn test_state_store_pattern_match() {
             None,
             false,
             false,
+            None,
         )
         .unwrap();
     store
@@ -169,6 +172,7 @@ fn test_state_store_pattern_match() {
             None,
             false,
             false,
+            None,
         )
         .unwrap();
     store
@@ -179,10 +183,11 @@ fn test_state_store_pattern_match() {
             None,
             false,
             false,
+            None,
         )
         .unwrap();
     store
-        .set("/other/value", Value::Int(42), "w", None, false, false)
+        .set("/other/value", Value::Int(42), "w", None, false, false, None)
         .unwrap();
 
     // Get all layer opacities
@@ -199,7 +204,7 @@ fn test_state_store_remove() {
     let mut store = StateStore::new();
 
     store
-        .set("/test/value", Value::Int(42), "writer", None, false, false)
+        .set("/test/value", Value::Int(42), "writer", None, false, false, None)
         .unwrap();
     assert!(store.get_value("/test/value").is_some());
 

@@ -307,13 +307,25 @@ class Clasp:
             return func
         return decorator
 
-    async def set(self, address: str, value: Value) -> None:
-        """Set parameter value"""
-        await self._send({
+    async def set(self, address: str, value: Value, *, ttl: Optional[int] = None, absolute: bool = False) -> None:
+        """Set parameter value
+
+        Args:
+            address: Parameter address
+            value: Value to set
+            ttl: Per-message TTL in seconds (0 = never expire, None = server default)
+            absolute: If True, TTL is absolute (from creation); if False, sliding (resets on access)
+        """
+        msg = {
             "type": "SET",
             "address": address,
             "value": value,
-        })
+        }
+        if ttl is not None:
+            msg["ttl"] = ttl
+            if absolute:
+                msg["absolute"] = True
+        await self._send(msg)
 
     async def get(self, address: str, timeout: float = 5.0) -> Value:
         """Get current value"""
@@ -546,7 +558,7 @@ class Clasp:
 
         if msg_type == "SET":
             parts.append(struct.pack('B', MSG_SET))
-            # Flags: [has_rev:1][lock:1][unlock:1][rsv:1][vtype:4]
+            # Flags: [has_rev:1][lock:1][unlock:1][has_ttl:1][vtype:4]
             vtype = self._value_type(msg["value"])
             flags = vtype & 0x0F
             if msg.get("revision") is not None:
@@ -555,11 +567,18 @@ class Clasp:
                 flags |= 0x40
             if msg.get("unlock"):
                 flags |= 0x20
+            if msg.get("ttl") is not None:
+                flags |= 0x10
             parts.append(struct.pack('B', flags))
             parts.append(self._encode_string(msg["address"]))
             parts.append(self._encode_value_data(msg["value"]))
             if msg.get("revision") is not None:
                 parts.append(struct.pack('>Q', msg["revision"]))
+            if msg.get("ttl") is not None:
+                raw = msg["ttl"] & 0x7FFFFFFF
+                if msg.get("absolute"):
+                    raw |= 0x80000000
+                parts.append(struct.pack('>I', raw))
 
         elif msg_type == "PUBLISH":
             parts.append(struct.pack('B', MSG_PUBLISH))
@@ -667,12 +686,24 @@ class Clasp:
             has_rev = (flags & 0x80) != 0
             lock = (flags & 0x40) != 0
             unlock = (flags & 0x20) != 0
+            has_ttl = (flags & 0x10) != 0
 
             address, offset = self._decode_string(data, offset)
             value, offset = self._decode_value_data(data, offset, vtype)
             revision = None
             if has_rev:
                 revision = struct.unpack_from('>Q', data, offset)[0]
+                offset += 8
+            ttl = None
+            absolute = False
+            if has_ttl:
+                raw = struct.unpack_from('>I', data, offset)[0]
+                offset += 4
+                if raw == 0:
+                    ttl = 0
+                else:
+                    ttl = raw & 0x7FFFFFFF
+                    absolute = bool(raw & 0x80000000)
 
             return {
                 "type": "SET",
@@ -681,6 +712,8 @@ class Clasp:
                 "revision": revision,
                 "lock": lock,
                 "unlock": unlock,
+                "ttl": ttl,
+                "absolute": absolute,
             }
 
         elif msg_type == MSG_PUBLISH:

@@ -325,11 +325,13 @@ export class Clasp {
    * clasp.set('/config/enabled', true);
    * ```
    */
-  set(address: string, value: Value): void {
+  set(address: string, value: Value, options?: { ttl?: number; absolute?: boolean }): void {
     const msg: SetMessage = {
       type: 'SET',
       address,
       value,
+      ttl: options?.ttl,
+      absolute: options?.absolute,
     };
     this.send(msg, QoS.Confirm);
   }

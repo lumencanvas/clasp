@@ -31,7 +31,7 @@ fn test_value_conversion_null() {
         value: clasp_null.clone(),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     }))
     .unwrap();
 
@@ -53,7 +53,7 @@ fn test_value_conversion_bool() {
             value: clasp_bool.clone(),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         }))
         .unwrap();
 
@@ -78,7 +78,7 @@ fn test_value_conversion_int() {
             value: clasp_int.clone(),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         }))
         .unwrap();
 
@@ -103,7 +103,7 @@ fn test_value_conversion_float() {
             value: clasp_float.clone(),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         }))
         .unwrap();
 
@@ -139,7 +139,7 @@ fn test_value_conversion_string() {
             value: clasp_str.clone(),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         }))
         .unwrap();
 
@@ -170,7 +170,7 @@ fn test_value_conversion_bytes() {
             value: clasp_bytes.clone(),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         }))
         .unwrap();
 
@@ -225,7 +225,7 @@ fn test_value_conversion_array() {
             value: clasp_arr.clone(),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         }))
         .unwrap();
 
@@ -252,7 +252,7 @@ fn test_value_conversion_map() {
         value: clasp_map.clone(),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     }))
     .unwrap();
 
@@ -293,7 +293,7 @@ fn test_value_conversion_nested() {
         value: value.clone(),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     }))
     .unwrap();
 
@@ -386,7 +386,7 @@ fn test_set_message() {
         value: Value::Float(0.75),
         revision: Some(42),
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
 
     let encoded = codec::encode(&set).unwrap();
@@ -477,7 +477,7 @@ fn test_binary_data_integrity() {
         value: Value::Bytes(binary_data.clone()),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
 
     let encoded = codec::encode(&msg).unwrap();
@@ -518,7 +518,7 @@ fn test_large_binary_payload() {
         value: Value::Bytes(large_data.clone()),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
 
     let encoded = codec::encode(&msg).unwrap();
@@ -579,7 +579,7 @@ fn test_empty_containers() {
             value: value.clone(),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         });
 
         let encoded = codec::encode(&msg).unwrap();
@@ -605,7 +605,7 @@ fn test_special_floats() {
             value: Value::Float(f),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         });
 
         let encoded = codec::encode(&msg).unwrap();
@@ -649,7 +649,7 @@ fn test_unicode_strings() {
             value: Value::String(s.to_string()),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         });
 
         let encoded = codec::encode(&msg).unwrap();
@@ -675,7 +675,7 @@ fn benchmark_encoding() {
         value: Value::Float(0.5),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
 
     let start = js_sys::Date::now();
@@ -701,7 +701,7 @@ fn benchmark_decoding() {
         value: Value::Float(0.5),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
 
     let encoded = codec::encode(&msg).unwrap();

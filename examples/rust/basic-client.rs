@@ -94,14 +94,14 @@ async fn main() -> Result<()> {
             value: 1.0.into(),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         }),
         Message::Set(SetMessage {
             address: "/example/rust/bundle/b".to_string(),
             value: 2.0.into(),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         }),
     ]).await?;
     println!("  Bundle sent");
@@ -115,7 +115,7 @@ async fn main() -> Result<()> {
             value: "delayed!".into(),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         }),
     ], future_time).await?;
     println!("  Scheduled bundle queued");

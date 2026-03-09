@@ -22,6 +22,7 @@ let msg = Message::Set(SetMessage {
     revision: None,
     lock: false,
     unlock: false,
+    ttl: Some(Ttl::Sliding(60)), // optional per-message TTL (60s sliding)
 });
 
 // Encode to v3 binary format

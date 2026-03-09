@@ -180,11 +180,22 @@ Feature flags bitmask: `param(0x80)`, `event(0x40)`, `stream(0x20)`, `gesture(0x
   bit 7:    has_revision
   bit 6:    lock
   bit 5:    unlock
+  bit 4:    has_ttl
   bit 3-0:  value_type_code
 [address:string]
 [value_data:...]      (type-specific encoding, type from flags)
 [revision:u64]        (if has_revision flag set)
+[ttl:u32]             (if has_ttl flag set)
 ```
+
+**TTL field encoding (u32):**
+
+| Bits | Field | Description |
+|------|-------|-------------|
+| 31 | mode | `0` = sliding (resets on every read or write), `1` = absolute (fixed expiry from write time) |
+| 30-0 | seconds | TTL duration in seconds (max ~68 years) |
+
+A value of `0` means "never expires" -- the param is exempt from TTL eviction. When the `has_ttl` flag is clear (bit 4 = 0), the field is omitted and the router applies its configured default TTL (`--param-ttl`).
 
 ### Publish (0x20)
 

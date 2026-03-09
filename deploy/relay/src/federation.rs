@@ -94,7 +94,7 @@ pub async fn run_federation_leaf(
                 revision,
                 origin,
             } => {
-                match state.set(&address, value.clone(), &origin, revision, false, false) {
+                match state.set(&address, value.clone(), &origin, revision, false, false, None) {
                     Ok(rev) => {
                         let subscribers =
                             subscriptions.find_subscribers(&address, Some(SignalType::Param));
@@ -103,7 +103,7 @@ pub async fn run_federation_leaf(
                             value,
                             revision: Some(rev),
                             lock: false,
-                            unlock: false,
+                            unlock: false, ttl: None,
                         });
                         if let Ok(bytes) = codec::encode(&set_msg) {
                             for sub_session_id in &subscribers {

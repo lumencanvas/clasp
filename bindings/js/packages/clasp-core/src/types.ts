@@ -132,6 +132,8 @@ export interface SetMessage {
   revision?: number;
   lock?: boolean;
   unlock?: boolean;
+  ttl?: number;
+  absolute?: boolean;
 }
 
 /** GET message */

@@ -64,7 +64,7 @@ const client = await new ClaspBuilder(url)
 
 #### Writing
 
-- `set(address, value)` - Set parameter (stateful)
+- `set(address, value, { ttl? })` - Set parameter (stateful, optional TTL in microseconds)
 - `emit(address, payload?)` - Emit event (ephemeral)
 - `stream(address, value)` - Stream sample (high-rate)
 

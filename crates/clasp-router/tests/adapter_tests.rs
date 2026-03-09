@@ -105,6 +105,7 @@ mod mqtt_adapter_tests {
                 None,
                 false,
                 false,
+                None,
             )
             .unwrap();
 
@@ -229,6 +230,7 @@ mod osc_adapter_tests {
                 None,
                 false,
                 false,
+                None,
             )
             .unwrap();
 
@@ -290,6 +292,7 @@ mod multi_protocol_tests {
                 None,
                 false,
                 false,
+                None,
             )
             .unwrap();
 
@@ -301,6 +304,7 @@ mod multi_protocol_tests {
                 None,
                 false,
                 false,
+                None,
             )
             .unwrap();
 
@@ -312,6 +316,7 @@ mod multi_protocol_tests {
                 None,
                 false,
                 false,
+                None,
             )
             .unwrap();
 

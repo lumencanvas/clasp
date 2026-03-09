@@ -38,7 +38,7 @@ async fn test_hello_must_be_first(config: &ConformanceConfig, report: &mut Confo
             value: clasp_core::Value::Int(1),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         });
         sender.send(codec::encode(&set)?).await?;
 

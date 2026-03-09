@@ -163,14 +163,14 @@ async fn test_roundtrip_encode_decode() {
             value: Value::Float(42.5),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         }),
         Message::Set(SetMessage {
             address: "/test/string".to_string(),
             value: Value::String("hello world".to_string()),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         }),
     ];
 
@@ -225,7 +225,7 @@ async fn test_roundtrip_via_server() {
         value: Value::Float(123.456),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
     sender
         .send(codec::encode(&set_msg).unwrap())
@@ -376,7 +376,7 @@ async fn test_large_message() {
         value: Value::Bytes(large_data.clone()),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
     sender
         .send(codec::encode(&set).unwrap())
@@ -423,7 +423,7 @@ async fn test_message_size_boundaries() {
             value: Value::Bytes(data),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         });
         let encoded = codec::encode(&set).unwrap_or_else(|_| panic!("Encode size {} failed", size));
         sender
@@ -599,7 +599,7 @@ async fn test_value_roundtrip_all_types() {
             value: value.clone(),
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         });
 
         let encoded = codec::encode(&msg).unwrap_or_else(|_| panic!("Encode {} failed", name));

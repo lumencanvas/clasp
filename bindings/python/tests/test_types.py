@@ -181,3 +181,87 @@ class TestMessages:
         )
         assert pv.writer == "client-123"
         assert pv.timestamp == 9876543210
+
+    def test_set_message_with_ttl(self):
+        msg = SetMessage(
+            type="SET",
+            address="/test/ttl",
+            value=1.0,
+            ttl=60,
+        )
+        assert msg.ttl == 60
+        assert msg.absolute is False
+
+    def test_set_message_with_absolute_ttl(self):
+        msg = SetMessage(
+            type="SET",
+            address="/test/ttl",
+            value=42,
+            ttl=300,
+            absolute=True,
+        )
+        assert msg.ttl == 300
+        assert msg.absolute is True
+
+    def test_set_message_with_never_ttl(self):
+        msg = SetMessage(
+            type="SET",
+            address="/test/ttl",
+            value=True,
+            ttl=0,
+        )
+        assert msg.ttl == 0
+
+    def test_set_message_default_no_ttl(self):
+        msg = SetMessage(
+            type="SET",
+            address="/test/no-ttl",
+            value="hello",
+        )
+        assert msg.ttl is None
+        assert msg.absolute is False
+
+
+class TestCodecTtlRoundtrip:
+    """Test binary codec roundtrip for SET with TTL."""
+
+    def _roundtrip(self, msg_dict):
+        """Encode then decode a message dict."""
+        from clasp.client import Clasp
+        client = Clasp.__new__(Clasp)
+        client.url = "ws://localhost:7330"
+        client.name = "test"
+        client.features = ["param"]
+        client.token = None
+        client.reconnect = False
+        client.reconnect_interval = 5.0
+        encoded = client._encode_message_v3(msg_dict)
+        return client._decode_message_v3(encoded)
+
+    def test_set_sliding_ttl_roundtrip(self):
+        msg = {"type": "SET", "address": "/test/ttl", "value": 1.0, "ttl": 60}
+        decoded = self._roundtrip(msg)
+        assert decoded["ttl"] == 60
+        assert decoded["absolute"] is False
+
+    def test_set_absolute_ttl_roundtrip(self):
+        msg = {"type": "SET", "address": "/test/ttl", "value": 42, "ttl": 300, "absolute": True}
+        decoded = self._roundtrip(msg)
+        assert decoded["ttl"] == 300
+        assert decoded["absolute"] is True
+
+    def test_set_never_expire_roundtrip(self):
+        msg = {"type": "SET", "address": "/test/ttl", "value": True, "ttl": 0}
+        decoded = self._roundtrip(msg)
+        assert decoded["ttl"] == 0
+
+    def test_set_no_ttl_roundtrip(self):
+        msg = {"type": "SET", "address": "/test/no-ttl", "value": "hello"}
+        decoded = self._roundtrip(msg)
+        assert decoded["ttl"] is None
+
+    def test_set_ttl_with_revision_roundtrip(self):
+        msg = {"type": "SET", "address": "/a", "value": 3.14, "revision": 42, "ttl": 3600}
+        decoded = self._roundtrip(msg)
+        assert decoded["revision"] == 42
+        assert decoded["ttl"] == 3600

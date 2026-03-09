@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { encodeFrame, decodeFrame, MAGIC_BYTE, QoS } from '../src/codec';
+import { encodeFrame, decodeFrame, MAGIC_BYTE, QoS, encode, decode } from '../src/codec';
+import type { SetMessage } from '../src/types';
 
 describe('Frame Codec', () => {
   describe('encodeFrame', () => {
@@ -109,5 +110,87 @@ describe('Frame Codec', () => {
       expect(decoded.qos).toBe(QoS.Commit);
       expect(decoded.timestamp).toBe(options.timestamp);
     });
+  });
+});
+
+describe('SET with TTL', () => {
+  it('should roundtrip SET with sliding TTL', () => {
+    const msg: SetMessage = {
+      type: 'SET',
+      address: '/test/ttl',
+      value: 1.0,
+      ttl: 60,
+    };
+
+    const encoded = encode(msg);
+    const decoded = decode(encoded) as SetMessage;
+
+    expect(decoded.type).toBe('SET');
+    expect(decoded.address).toBe('/test/ttl');
+    expect(decoded.ttl).toBe(60);
+    expect(decoded.absolute).toBeUndefined();
+  });
+
+  it('should roundtrip SET with absolute TTL', () => {
+    const msg: SetMessage = {
+      type: 'SET',
+      address: '/test/ttl',
+      value: 42,
+      ttl: 300,
+      absolute: true,
+    };
+
+    const encoded = encode(msg);
+    const decoded = decode(encoded) as SetMessage;
+
+    expect(decoded.type).toBe('SET');
+    expect(decoded.ttl).toBe(300);
+    expect(decoded.absolute).toBe(true);
+  });
+
+  it('should roundtrip SET with never-expire TTL', () => {
+    const msg: SetMessage = {
+      type: 'SET',
+      address: '/test/ttl',
+      value: true,
+      ttl: 0,
+    };
+
+    const encoded = encode(msg);
+    const decoded = decode(encoded) as SetMessage;
+
+    expect(decoded.type).toBe('SET');
+    expect(decoded.ttl).toBe(0);
+  });
+
+  it('should roundtrip SET without TTL (backward compat)', () => {
+    const msg: SetMessage = {
+      type: 'SET',
+      address: '/test/no-ttl',
+      value: 'hello',
+    };
+
+    const encoded = encode(msg);
+    const decoded = decode(encoded) as SetMessage;
+
+    expect(decoded.type).toBe('SET');
+    expect(decoded.address).toBe('/test/no-ttl');
+    expect(decoded.ttl).toBeUndefined();
+  });
+
+  it('should roundtrip SET with TTL and revision', () => {
+    const msg: SetMessage = {
+      type: 'SET',
+      address: '/test/rev-ttl',
+      value: 3.14,
+      revision: 42,
+      ttl: 3600,
+    };
+
+    const encoded = encode(msg);
+    const decoded = decode(encoded) as SetMessage;
+
+    expect(decoded.revision).toBe(42);
+    expect(decoded.ttl).toBe(3600);
   });
 });

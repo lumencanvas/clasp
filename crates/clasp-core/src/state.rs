@@ -2,7 +2,7 @@
 //!
 //! Provides conflict resolution and revision tracking for stateful parameters.
 
-use crate::{ConflictStrategy, Value};
+use crate::{ConflictStrategy, Ttl, Value};
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -80,6 +80,8 @@ pub struct ParamState {
     pub meta: Option<ParamMeta>,
     /// Origin router ID (for federation loop prevention)
     pub origin: Option<String>,
+    /// Per-param TTL (overrides server-wide TTL when set)
+    pub ttl: Option<Ttl>,
 }
 
 /// Parameter metadata
@@ -104,6 +106,7 @@ impl ParamState {
             lock_holder: None,
             meta: None,
             origin: None,
+            ttl: None,
         }
     }
 
@@ -135,6 +138,7 @@ impl ParamState {
         expected_revision: Option<u64>,
         request_lock: bool,
         release_lock: bool,
+        ttl: Option<Ttl>,
     ) -> Result<u64, UpdateError> {
         let timestamp = current_timestamp();
 
@@ -203,6 +207,11 @@ impl ParamState {
         self.writer = writer.to_string();
         self.timestamp = timestamp;
         self.last_accessed = timestamp;
+
+        // Update per-param TTL if provided
+        if let Some(t) = ttl {
+            self.ttl = Some(t);
+        }
 
         Ok(self.revision)
     }
@@ -338,9 +347,10 @@ impl StateStore {
         revision: Option<u64>,
         lock: bool,
         unlock: bool,
+        ttl: Option<Ttl>,
     ) -> Result<u64, UpdateError> {
         if let Some(param) = self.params.get_mut(address) {
-            param.try_update(value, writer, revision, lock, unlock)
+            param.try_update(value, writer, revision, lock, unlock, ttl)
         } else {
             // Check capacity before creating new param
             if let Some(max) = self.config.max_params {
@@ -364,6 +374,7 @@ impl StateStore {
             if lock {
                 param.lock_holder = Some(writer.to_string());
             }
+            param.ttl = ttl;
             let rev = param.revision;
             self.params.insert(address.to_string(), param);
             Ok(rev)
@@ -398,11 +409,26 @@ impl StateStore {
     /// Returns the number of params removed
     pub fn cleanup_stale(&mut self, ttl: Duration) -> usize {
         let now = current_timestamp();
-        let ttl_micros = ttl.as_micros() as u64;
-        let cutoff = now.saturating_sub(ttl_micros);
+        let global_ttl_micros = ttl.as_micros() as u64;
 
         let before = self.params.len();
-        self.params.retain(|_, v| v.last_accessed >= cutoff);
+        self.params.retain(|_, v| {
+            match v.ttl {
+                Some(Ttl::Never) => true,
+                Some(Ttl::Sliding(secs)) => {
+                    let cutoff = now.saturating_sub(secs as u64 * 1_000_000);
+                    v.last_accessed >= cutoff
+                }
+                Some(Ttl::Absolute(secs)) => {
+                    let expires_at = v.timestamp.saturating_add(secs as u64 * 1_000_000);
+                    now < expires_at
+                }
+                None => {
+                    let cutoff = now.saturating_sub(global_ttl_micros);
+                    v.last_accessed >= cutoff
+                }
+            }
+        });
         before - self.params.len()
     }
 
@@ -469,7 +495,7 @@ mod tests {
     fn test_basic_update() {
         let mut state = ParamState::new(Value::Float(0.5), "session1".to_string());
 
-        let result = state.try_update(Value::Float(0.75), "session2", None, false, false);
+        let result = state.try_update(Value::Float(0.75), "session2", None, false, false, None);
 
         assert!(result.is_ok());
         assert_eq!(state.revision, 2);
@@ -487,6 +513,7 @@ mod tests {
             Some(999), // Wrong revision
             false,
             false,
+            None,
         );
 
         assert!(matches!(result, Err(UpdateError::RevisionConflict { .. })));
@@ -503,16 +530,17 @@ mod tests {
             None,
             true, // Request lock
             false,
+            None,
         );
         assert!(result.is_ok());
         assert_eq!(state.lock_holder, Some("session1".to_string()));
 
         // Session 2 tries to update - should fail
-        let result = state.try_update(Value::Float(0.7), "session2", None, false, false);
+        let result = state.try_update(Value::Float(0.7), "session2", None, false, false, None);
         assert!(matches!(result, Err(UpdateError::LockHeld { .. })));
 
         // Session 1 can still update
-        let result = state.try_update(Value::Float(0.8), "session1", None, false, false);
+        let result = state.try_update(Value::Float(0.8), "session1", None, false, false, None);
         assert!(result.is_ok());
     }
 
@@ -522,12 +550,12 @@ mod tests {
             .with_strategy(ConflictStrategy::Max);
 
         // Higher value wins
-        let result = state.try_update(Value::Float(0.8), "session2", None, false, false);
+        let result = state.try_update(Value::Float(0.8), "session2", None, false, false, None);
         assert!(result.is_ok());
         assert_eq!(state.value, Value::Float(0.8));
 
         // Lower value rejected
-        let result = state.try_update(Value::Float(0.3), "session3", None, false, false);
+        let result = state.try_update(Value::Float(0.3), "session3", None, false, false, None);
         assert!(matches!(result, Err(UpdateError::ConflictRejected)));
         assert_eq!(state.value, Value::Float(0.8)); // Unchanged
     }
@@ -537,13 +565,13 @@ mod tests {
         let mut store = StateStore::new();
 
         store
-            .set("/test/a", Value::Float(1.0), "s1", None, false, false)
+            .set("/test/a", Value::Float(1.0), "s1", None, false, false, None)
             .unwrap();
         store
-            .set("/test/b", Value::Float(2.0), "s1", None, false, false)
+            .set("/test/b", Value::Float(2.0), "s1", None, false, false, None)
             .unwrap();
         store
-            .set("/other/c", Value::Float(3.0), "s1", None, false, false)
+            .set("/other/c", Value::Float(3.0), "s1", None, false, false, None)
             .unwrap();
 
         assert_eq!(store.len(), 3);
@@ -562,20 +590,20 @@ mod tests {
         let mut store = StateStore::with_config(config);
 
         store
-            .set("/test/a", Value::Float(1.0), "s1", None, false, false)
+            .set("/test/a", Value::Float(1.0), "s1", None, false, false, None)
             .unwrap();
         store
-            .set("/test/b", Value::Float(2.0), "s1", None, false, false)
+            .set("/test/b", Value::Float(2.0), "s1", None, false, false, None)
             .unwrap();
 
         // Third should fail
-        let result = store.set("/test/c", Value::Float(3.0), "s1", None, false, false);
+        let result = store.set("/test/c", Value::Float(3.0), "s1", None, false, false, None);
         assert!(matches!(result, Err(UpdateError::AtCapacity)));
         assert_eq!(store.len(), 2);
 
         // Updating existing should still work
         store
-            .set("/test/a", Value::Float(1.5), "s1", None, false, false)
+            .set("/test/a", Value::Float(1.5), "s1", None, false, false, None)
             .unwrap();
         assert_eq!(store.get_value("/test/a"), Some(&Value::Float(1.5)));
     }
@@ -590,11 +618,11 @@ mod tests {
         let mut store = StateStore::with_config(config);
 
         store
-            .set("/test/a", Value::Float(1.0), "s1", None, false, false)
+            .set("/test/a", Value::Float(1.0), "s1", None, false, false, None)
             .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(1));
         store
-            .set("/test/b", Value::Float(2.0), "s1", None, false, false)
+            .set("/test/b", Value::Float(2.0), "s1", None, false, false, None)
             .unwrap();
 
         // Access /test/a to make it more recent
@@ -603,7 +631,7 @@ mod tests {
 
         // Third should evict /test/b (least recently accessed)
         store
-            .set("/test/c", Value::Float(3.0), "s1", None, false, false)
+            .set("/test/c", Value::Float(3.0), "s1", None, false, false, None)
             .unwrap();
 
         assert_eq!(store.len(), 2);
@@ -622,16 +650,16 @@ mod tests {
         let mut store = StateStore::with_config(config);
 
         store
-            .set("/test/a", Value::Float(1.0), "s1", None, false, false)
+            .set("/test/a", Value::Float(1.0), "s1", None, false, false, None)
             .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(1));
         store
-            .set("/test/b", Value::Float(2.0), "s1", None, false, false)
+            .set("/test/b", Value::Float(2.0), "s1", None, false, false, None)
             .unwrap();
 
         // Third should evict /test/a (oldest)
         store
-            .set("/test/c", Value::Float(3.0), "s1", None, false, false)
+            .set("/test/c", Value::Float(3.0), "s1", None, false, false, None)
             .unwrap();
 
         assert_eq!(store.len(), 2);
@@ -645,10 +673,10 @@ mod tests {
         let mut store = StateStore::new();
 
         store
-            .set("/test/a", Value::Float(1.0), "s1", None, false, false)
+            .set("/test/a", Value::Float(1.0), "s1", None, false, false, None)
             .unwrap();
         store
-            .set("/test/b", Value::Float(2.0), "s1", None, false, false)
+            .set("/test/b", Value::Float(2.0), "s1", None, false, false, None)
             .unwrap();
 
         // Sleep a bit, then access /test/a
@@ -672,7 +700,7 @@ mod tests {
         let mut store = StateStore::with_config(config);
 
         store
-            .set("/test/a", Value::Float(1.0), "s1", None, false, false)
+            .set("/test/a", Value::Float(1.0), "s1", None, false, false, None)
             .unwrap();
 
         // Immediate cleanup should remove nothing

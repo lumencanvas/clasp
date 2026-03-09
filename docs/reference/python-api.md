@@ -84,9 +84,16 @@ client = Clasp(
 
 | Method                                        | Returns          | Description                                             |
 |-----------------------------------------------|------------------|---------------------------------------------------------|
-| `set(address: str, value: Value)`             | `None`           | Set a parameter value on the router                     |
+| `set(address: str, value: Value, *, ttl: Optional[int] = None, absolute: bool = False)` | `None` | Set a parameter value on the router |
 | `get(address: str, timeout: float = 5.0)`     | `Awaitable[Value]`| Request the current value from the router (round-trip) |
 | `cached(address: str)`                        | `Value \| None`  | Return the locally cached value, or `None`              |
+
+**TTL keyword arguments** for `set()`:
+
+| Parameter  | Type   | Default | Description                                                        |
+|------------|--------|---------|--------------------------------------------------------------------|
+| `ttl`      | `int`  | `None`  | Time-to-live in seconds. `None` = server default, `0` = never expire. |
+| `absolute` | `bool` | `False` | When `True`, TTL counts from the first set and is not reset by subsequent writes. |
 
 ### Subscriptions
 

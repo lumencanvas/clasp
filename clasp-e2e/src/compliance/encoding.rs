@@ -87,7 +87,7 @@ async fn test_set_encoding(_config: &ConformanceConfig, report: &mut Conformance
             value: Value::Int(42),
             revision: Some(1),
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         });
 
         let encoded = codec::encode(&set)?;
@@ -155,7 +155,7 @@ async fn test_value_int_encoding(_config: &ConformanceConfig, report: &mut Confo
                 value: Value::Int(val),
                 revision: None,
                 lock: false,
-                unlock: false,
+                unlock: false, ttl: None,
             });
 
             let encoded = codec::encode(&msg)?;
@@ -210,7 +210,7 @@ async fn test_value_float_encoding(_config: &ConformanceConfig, report: &mut Con
                 value: Value::Float(val),
                 revision: None,
                 lock: false,
-                unlock: false,
+                unlock: false, ttl: None,
             });
 
             let encoded = codec::encode(&msg)?;
@@ -264,7 +264,7 @@ async fn test_value_string_encoding(_config: &ConformanceConfig, report: &mut Co
                 value: Value::String(val.to_string()),
                 revision: None,
                 lock: false,
-                unlock: false,
+                unlock: false, ttl: None,
             });
 
             let encoded = codec::encode(&msg)?;
@@ -313,7 +313,7 @@ async fn test_value_bool_encoding(_config: &ConformanceConfig, report: &mut Conf
                 value: Value::Bool(val),
                 revision: None,
                 lock: false,
-                unlock: false,
+                unlock: false, ttl: None,
             });
 
             let encoded = codec::encode(&msg)?;
@@ -366,7 +366,7 @@ async fn test_value_bytes_encoding(_config: &ConformanceConfig, report: &mut Con
                 value: Value::Bytes(val.clone()),
                 revision: None,
                 lock: false,
-                unlock: false,
+                unlock: false, ttl: None,
             });
 
             let encoded = codec::encode(&msg)?;
@@ -423,7 +423,7 @@ async fn test_roundtrip_encoding(_config: &ConformanceConfig, report: &mut Confo
                 value: Value::Int(123),
                 revision: Some(5),
                 lock: true,
-                unlock: false,
+                unlock: false, ttl: None,
             }),
         ];
 

@@ -32,7 +32,7 @@ fn make_anonymous_session() -> Session {
 }
 
 fn state_set(state: &RouterState, address: &str, value: Value) {
-    let _ = state.set(address, value, &"test".to_string(), None, false, false);
+    let _ = state.set(address, value, &"test".to_string(), None, false, false, None);
 }
 
 fn set_friendship(state: &RouterState, user_a: &str, user_b: &str) {

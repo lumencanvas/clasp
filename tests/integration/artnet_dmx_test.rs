@@ -72,7 +72,7 @@ async fn test_dmx_virtual_bridge() {
         value: Value::Int(255),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
 
     bridge.send(msg).await.expect("Failed to send DMX message");
@@ -139,7 +139,7 @@ async fn test_artnet_clasp_conversion() {
         value: Value::Int(200),
         revision: None,
         lock: false,
-        unlock: false,
+        unlock: false, ttl: None,
     });
 
     // This will fail because remote isn't listening, but tests the conversion

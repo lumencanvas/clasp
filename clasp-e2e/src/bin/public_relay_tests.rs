@@ -182,7 +182,7 @@ impl TestClient {
             value,
             revision: None,
             lock: false,
-            unlock: false,
+            unlock: false, ttl: None,
         });
 
         self.sender

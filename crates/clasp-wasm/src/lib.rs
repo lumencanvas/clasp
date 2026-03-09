@@ -331,6 +331,7 @@ impl ClaspWasm {
             revision: None,
             lock: false,
             unlock: false,
+            ttl: None,
         });
         self.send_message(&msg);
     }

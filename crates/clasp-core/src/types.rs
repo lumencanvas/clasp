@@ -496,6 +496,17 @@ pub struct PublishMessage {
     pub timeline: Option<TimelineData>,
 }
 
+/// Per-message TTL mode
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum Ttl {
+    /// Sliding window -- resets on every read/write
+    Sliding(u32),
+    /// Absolute -- expires N seconds after creation
+    Absolute(u32),
+    /// Never expires (overrides server TTL)
+    Never,
+}
+
 /// SET message - set param value
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetMessage {
@@ -507,6 +518,8 @@ pub struct SetMessage {
     pub lock: bool,
     #[serde(default)]
     pub unlock: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ttl: Option<Ttl>,
 }
 
 /// GET message - request current value
