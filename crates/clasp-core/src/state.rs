@@ -412,21 +412,19 @@ impl StateStore {
         let global_ttl_micros = ttl.as_micros() as u64;
 
         let before = self.params.len();
-        self.params.retain(|_, v| {
-            match v.ttl {
-                Some(Ttl::Never) => true,
-                Some(Ttl::Sliding(secs)) => {
-                    let cutoff = now.saturating_sub(secs as u64 * 1_000_000);
-                    v.last_accessed >= cutoff
-                }
-                Some(Ttl::Absolute(secs)) => {
-                    let expires_at = v.timestamp.saturating_add(secs as u64 * 1_000_000);
-                    now < expires_at
-                }
-                None => {
-                    let cutoff = now.saturating_sub(global_ttl_micros);
-                    v.last_accessed >= cutoff
-                }
+        self.params.retain(|_, v| match v.ttl {
+            Some(Ttl::Never) => true,
+            Some(Ttl::Sliding(secs)) => {
+                let cutoff = now.saturating_sub(secs as u64 * 1_000_000);
+                v.last_accessed >= cutoff
+            }
+            Some(Ttl::Absolute(secs)) => {
+                let expires_at = v.timestamp.saturating_add(secs as u64 * 1_000_000);
+                now < expires_at
+            }
+            None => {
+                let cutoff = now.saturating_sub(global_ttl_micros);
+                v.last_accessed >= cutoff
             }
         });
         before - self.params.len()
@@ -571,7 +569,15 @@ mod tests {
             .set("/test/b", Value::Float(2.0), "s1", None, false, false, None)
             .unwrap();
         store
-            .set("/other/c", Value::Float(3.0), "s1", None, false, false, None)
+            .set(
+                "/other/c",
+                Value::Float(3.0),
+                "s1",
+                None,
+                false,
+                false,
+                None,
+            )
             .unwrap();
 
         assert_eq!(store.len(), 3);

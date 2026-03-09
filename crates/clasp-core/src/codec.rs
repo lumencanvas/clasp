@@ -92,7 +92,13 @@ pub fn encode_message(message: &Message) -> Result<Bytes> {
 #[inline]
 fn estimate_message_size(msg: &Message) -> usize {
     match msg {
-        Message::Set(m) => 2 + 2 + m.address.len() + 9 + if m.revision.is_some() { 8 } else { 0 } + if m.ttl.is_some() { 4 } else { 0 },
+        Message::Set(m) => {
+            2 + 2
+                + m.address.len()
+                + 9
+                + if m.revision.is_some() { 8 } else { 0 }
+                + if m.ttl.is_some() { 4 } else { 0 }
+        }
         Message::Publish(m) => 2 + 2 + m.address.len() + 16,
         Message::Hello(m) => 4 + m.name.len() + 2,
         Message::Welcome(m) => 12 + m.name.len() + m.session.len() + 4,
@@ -1683,7 +1689,8 @@ mod tests {
             value: Value::Float(0.75),
             revision: Some(42),
             lock: false,
-            unlock: false, ttl: None,
+            unlock: false,
+            ttl: None,
         });
 
         let encoded = encode(&msg).unwrap();
@@ -1708,7 +1715,8 @@ mod tests {
             value: Value::Float(0.5),
             revision: Some(1),
             lock: false,
-            unlock: false, ttl: None,
+            unlock: false,
+            ttl: None,
         });
 
         // Binary encoding
@@ -1748,14 +1756,16 @@ mod tests {
                     value: Value::Float(1.0),
                     revision: None,
                     lock: false,
-                    unlock: false, ttl: None,
+                    unlock: false,
+                    ttl: None,
                 }),
                 Message::Set(SetMessage {
                     address: "/light/2".to_string(),
                     value: Value::Float(0.0),
                     revision: None,
                     lock: false,
-                    unlock: false, ttl: None,
+                    unlock: false,
+                    ttl: None,
                 }),
             ],
         });
@@ -1789,7 +1799,8 @@ mod tests {
                 value: value.clone(),
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             });
 
             let encoded = encode(&msg).unwrap();
@@ -1812,7 +1823,8 @@ mod tests {
             value: Value::Float(0.5),
             revision: Some(1),
             lock: false,
-            unlock: false, ttl: None,
+            unlock: false,
+            ttl: None,
         };
 
         // Encode as v2 (MessagePack with named keys)

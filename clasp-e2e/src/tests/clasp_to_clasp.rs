@@ -155,7 +155,8 @@ async fn test_all_message_types() -> TestResult {
                     value: Value::Float(0.5),
                     revision: Some(1),
                     lock: false,
-                    unlock: false, ttl: None,
+                    unlock: false,
+                    ttl: None,
                 }),
                 Message::Publish(PublishMessage {
                     address: "/test/event".to_string(),
@@ -176,7 +177,8 @@ async fn test_all_message_types() -> TestResult {
                         value: Value::Int(1),
                         revision: None,
                         lock: false,
-                        unlock: false, ttl: None,
+                        unlock: false,
+                        ttl: None,
                     })],
                 }),
                 Message::Sync(SyncMessage {
@@ -261,7 +263,8 @@ async fn test_value_types() -> TestResult {
                 value: val.clone(),
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             });
 
             let encoded =
@@ -299,7 +302,8 @@ async fn test_qos_levels() -> TestResult {
                 value: Value::Int(1),
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             });
 
             // Test each QoS level
@@ -335,7 +339,8 @@ async fn test_timestamp_handling() -> TestResult {
                 value: Value::Int(1),
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             });
 
             let timestamp = 1704067200000000u64; // Microseconds
@@ -428,14 +433,16 @@ async fn test_bundle_messages() -> TestResult {
                         value: Value::Float(1.0),
                         revision: None,
                         lock: false,
-                        unlock: false, ttl: None,
+                        unlock: false,
+                        ttl: None,
                     }),
                     Message::Set(SetMessage {
                         address: "/bundle/light/2".to_string(),
                         value: Value::Float(0.5),
                         revision: None,
                         lock: false,
-                        unlock: false, ttl: None,
+                        unlock: false,
+                        ttl: None,
                     }),
                     Message::Publish(PublishMessage {
                         address: "/bundle/cue".to_string(),
@@ -535,7 +542,8 @@ async fn test_state_revision() -> TestResult {
                 value: Value::Float(0.5),
                 revision: Some(1),
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             });
 
             let encoded1 = encode(&set1).map_err(|e| format!("Set1 encode failed: {:?}", e))?;
@@ -558,7 +566,8 @@ async fn test_state_revision() -> TestResult {
                 value: Value::Float(0.75),
                 revision: Some(42),
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             });
 
             let encoded2 = encode(&set2).map_err(|e| format!("Set2 encode failed: {:?}", e))?;

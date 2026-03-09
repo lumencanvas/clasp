@@ -42,7 +42,8 @@ pub fn benchmark_three_way_encoding(iterations: usize) -> TestResult {
             value: Value::Float(float_value),
             revision: None,
             lock: false,
-            unlock: false, ttl: None,
+            unlock: false,
+            ttl: None,
         });
         let _encoded = codec::encode(&msg).unwrap();
     }
@@ -135,7 +136,8 @@ pub fn benchmark_three_way_decoding(iterations: usize) -> TestResult {
         value: Value::Float(float_value),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
     let clasp_encoded = codec::encode(&clasp_msg).unwrap();
 
@@ -235,7 +237,8 @@ pub fn benchmark_three_way_sizes() -> TestResult {
         value: Value::Float(float_value),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
     let clasp_size = codec::encode(&clasp_msg).unwrap().len();
 
@@ -322,7 +325,8 @@ pub fn benchmark_clasp_vs_osc_encoding(iterations: usize) -> TestResult {
             value: Value::Float(float_value),
             revision: None,
             lock: false,
-            unlock: false, ttl: None,
+            unlock: false,
+            ttl: None,
         });
         let _encoded = codec::encode(&msg).unwrap();
     }
@@ -396,7 +400,8 @@ pub fn benchmark_clasp_vs_osc_decoding(iterations: usize) -> TestResult {
         value: Value::Float(float_value),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
     let clasp_encoded = codec::encode(&clasp_msg).unwrap();
 
@@ -520,7 +525,8 @@ pub fn benchmark_message_sizes() -> TestResult {
                 value: clasp_values.into_iter().next().unwrap(),
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             })
         } else {
             Message::Set(SetMessage {
@@ -528,7 +534,8 @@ pub fn benchmark_message_sizes() -> TestResult {
                 value: Value::Array(clasp_values),
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             })
         };
         let clasp_encoded = codec::encode(&clasp_msg).unwrap();
@@ -585,7 +592,8 @@ pub fn benchmark_latency_distribution(samples: usize) -> TestResult {
             value: Value::Float(value),
             revision: None,
             lock: false,
-            unlock: false, ttl: None,
+            unlock: false,
+            ttl: None,
         });
         let encoded = codec::encode(&msg).unwrap();
         let _ = codec::decode(&encoded).unwrap();
@@ -600,7 +608,8 @@ pub fn benchmark_latency_distribution(samples: usize) -> TestResult {
             value: Value::Float(value),
             revision: None,
             lock: false,
-            unlock: false, ttl: None,
+            unlock: false,
+            ttl: None,
         });
         let encoded = codec::encode(&msg).unwrap();
         let _ = codec::decode(&encoded).unwrap();
@@ -741,7 +750,8 @@ pub fn visualize_osc_to_clasp_bridge() -> TestResult {
         value: Value::Float(0.75),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
     let clasp_bytes = codec::encode(&clasp_msg).unwrap();
 
@@ -791,7 +801,8 @@ pub fn visualize_osc_to_clasp_bridge() -> TestResult {
         ]),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
     let clasp_rgb_bytes = codec::encode(&clasp_rgb).unwrap();
 
@@ -817,7 +828,8 @@ pub fn visualize_osc_to_clasp_bridge() -> TestResult {
         value: Value::String("Movie Mode".to_string()),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
     let clasp_str_bytes = codec::encode(&clasp_str).unwrap();
 
@@ -862,7 +874,8 @@ pub fn visualize_midi_to_clasp_bridge() -> TestResult {
         value: Value::Float(normalized_value),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
     let clasp_cc_bytes = codec::encode(&clasp_cc).unwrap();
 
@@ -1256,7 +1269,8 @@ pub fn stress_test_throughput_limit() -> TestResult {
         value: Value::Float(0.5),
         revision: None,
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
 
     // Test increasing batch sizes
@@ -1329,7 +1343,8 @@ pub fn stress_test_concurrent_access() -> TestResult {
                         value: Value::Float(0.5),
                         revision: None,
                         lock: false,
-                        unlock: false, ttl: None,
+                        unlock: false,
+                        ttl: None,
                     });
 
                     for _ in 0..messages_per_thread {
@@ -1392,7 +1407,8 @@ pub fn stress_test_memory_stability() -> TestResult {
             value: Value::Float((i as f64) / 1000.0),
             revision: Some(i as u64),
             lock: false,
-            unlock: false, ttl: None,
+            unlock: false,
+            ttl: None,
         });
 
         let encoded = codec::encode(&msg).unwrap();

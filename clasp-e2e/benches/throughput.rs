@@ -11,7 +11,8 @@ fn bench_encode_set(c: &mut Criterion) {
         value: Value::Float(0.5),
         revision: Some(1),
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
 
     let mut group = c.benchmark_group("encode");
@@ -28,7 +29,8 @@ fn bench_decode_set(c: &mut Criterion) {
         value: Value::Float(0.5),
         revision: Some(1),
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
     let encoded = encode(&msg).unwrap();
 
@@ -48,7 +50,8 @@ fn bench_roundtrip(c: &mut Criterion) {
         value: Value::Float(0.5),
         revision: Some(1),
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
 
     let mut group = c.benchmark_group("roundtrip");
@@ -100,21 +103,24 @@ fn bench_bundle(c: &mut Criterion) {
                 value: Value::Float(1.0),
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             }),
             Message::Set(SetMessage {
                 address: "/bundle/2".to_string(),
                 value: Value::Float(0.5),
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             }),
             Message::Set(SetMessage {
                 address: "/bundle/3".to_string(),
                 value: Value::Float(0.25),
                 revision: None,
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             }),
         ],
     });
@@ -140,7 +146,8 @@ fn bench_large_array(c: &mut Criterion) {
         value: Value::Array(large_array),
         revision: Some(1),
         lock: false,
-        unlock: false, ttl: None,
+        unlock: false,
+        ttl: None,
     });
 
     let mut group = c.benchmark_group("large_payload");

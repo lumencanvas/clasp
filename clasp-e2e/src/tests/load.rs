@@ -40,7 +40,8 @@ async fn test_encoding_throughput() -> TestResult {
                 value: Value::Float(0.5),
                 revision: Some(1),
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             });
 
             let count = 10_000;
@@ -76,7 +77,8 @@ async fn test_decoding_throughput() -> TestResult {
                 value: Value::Float(0.5),
                 revision: Some(1),
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             });
 
             // Pre-encode messages
@@ -118,7 +120,8 @@ async fn test_roundtrip_throughput() -> TestResult {
                     value: Value::Float(i as f64 / count as f64),
                     revision: Some(i as u64),
                     lock: false,
-                    unlock: false, ttl: None,
+                    unlock: false,
+                    ttl: None,
                 });
 
                 let encoded = encode(&msg).map_err(|e| format!("Encode {} failed: {:?}", i, e))?;
@@ -155,7 +158,8 @@ async fn test_large_payload() -> TestResult {
                 value: Value::Array(large_array),
                 revision: Some(1),
                 lock: false,
-                unlock: false, ttl: None,
+                unlock: false,
+                ttl: None,
             });
 
             let start = Instant::now();
@@ -275,7 +279,8 @@ async fn test_concurrent_encoding() -> TestResult {
                             value: Value::Float(i as f64),
                             revision: Some(i as u64),
                             lock: false,
-                            unlock: false, ttl: None,
+                            unlock: false,
+                            ttl: None,
                         });
 
                         if encode(&msg).is_ok() {
@@ -337,7 +342,8 @@ async fn test_memory_stability() -> TestResult {
                         ]),
                         revision: Some(idx as u64),
                         lock: false,
-                        unlock: false, ttl: None,
+                        unlock: false,
+                        ttl: None,
                     });
 
                     let encoded =
@@ -377,7 +383,8 @@ async fn test_latency_distribution() -> TestResult {
                     value: Value::Float(i as f64),
                     revision: Some(i as u64),
                     lock: false,
-                    unlock: false, ttl: None,
+                    unlock: false,
+                    ttl: None,
                 });
 
                 let start = Instant::now();
