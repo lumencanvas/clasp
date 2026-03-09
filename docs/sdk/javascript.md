@@ -250,11 +250,27 @@ The API is identical in both environments. The only difference is the underlying
 | Browser | Native `WebSocket` API |
 | Node.js | `ws` package (peer dependency) |
 
-In the browser, import directly or use a bundler:
+In the browser, use a CDN script tag (no build step needed):
+
+```html
+<script src="https://unpkg.com/@clasp-to/core"></script>
+<script>
+  const client = new CLASP.ClaspBuilder('ws://localhost:7330')
+    .withName('Browser Client');
+
+  client.connect().then(() => {
+    client.on('/status/*', (value, address) => {
+      document.getElementById('status').textContent = address + ': ' + value;
+    });
+  });
+</script>
+```
+
+Or as an ES module:
 
 ```html
 <script type="module">
-  import { ClaspBuilder } from '@clasp-to/core';
+  import { ClaspBuilder } from 'https://unpkg.com/@clasp-to/core/dist/index.mjs';
 
   const client = await new ClaspBuilder('ws://localhost:7330')
     .withName('Browser Client')

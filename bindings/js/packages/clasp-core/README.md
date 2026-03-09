@@ -114,10 +114,31 @@ CLASP supports wildcards in subscriptions:
 
 ### Bundle Size
 
-- **ESM**: ~15KB minified
-- **ESM + gzip**: ~5KB
+- **Browser (IIFE)**: ~40KB minified, ~12KB gzipped
+- **ESM**: ~58KB
+- **CJS**: ~60KB
 
-### Browser Usage
+### CDN (Script Tag)
+
+```html
+<script src="https://unpkg.com/@clasp-to/core"></script>
+<script>
+  const client = new CLASP.Clasp('wss://your-server.com:7330');
+  client.connect().then(() => {
+    client.on('/sensor/*', (value, addr) => {
+      document.getElementById('display').textContent = addr + ': ' + value;
+    });
+  });
+</script>
+```
+
+Also available via jsDelivr:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@clasp-to/core"></script>
+```
+
+### ES Module (Browser)
 
 ```html
 <script type="module">
@@ -126,7 +147,6 @@ import { Clasp } from 'https://unpkg.com/@clasp-to/core/dist/index.mjs';
 const clasp = new Clasp('wss://your-server.com:7330');
 await clasp.connect();
 
-// Use normally
 clasp.on('/sensor/*', (value, addr) => {
   document.getElementById('display').textContent = `${addr}: ${value}`;
 });
