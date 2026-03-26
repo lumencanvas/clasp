@@ -2,10 +2,11 @@
 
 Last updated: 2026-03-26
 
-## Status: ALL 7 PHASES COMPLETE + INTEGRATION TESTED + PUBLISHED
+## Status: ALL 7 PHASES COMPLETE + FULLY TESTED + PUBLISHED + DOCUMENTED
 
-**108 unit tests + 19/20 integration tests pass against live DefraDB**
+**108 unit tests + 20/20 integration tests pass (including P2P two-store sync)**
 **All 7 crates published to crates.io v4.2.0**
+**CLI tool supports --journal --journal-backend defra --journal-defra-url**
 
 | Phase | Crate | Status | Tests (pass/ignored) |
 |-------|-------|--------|---------------------|
@@ -108,11 +109,30 @@ Last updated: 2026-03-26
 - Int fields are 32-bit — timestamps stored as seconds (converted from/to CLASP microseconds)
 - `json_to_graphql_input()` utility converts JSON objects to GraphQL input syntax (unquoted keys)
 
+### 2026-03-26: Docs, CLI journal, P2P peering
+- README.md added for all 7 crates
+- Doc comments fixed (IdentityError, CacheStats, DefraStateError, peer_id functions)
+- `clasp-router` CLI: added `--journal`, `--journal-backend`, `--journal-path`, `--journal-defra-url`
+- Feature flags: `journal`, `journal-sqlite`, `journal-defra` on `clasp-router-server`
+- `setup.sh`: fixed health check, fixed peer address extraction, bidirectional replication working
+- **20/20 integration tests now pass** including `test_two_store_sync` (P2P state convergence verified)
+
+## CLI Usage
+
+```bash
+# Memory journal (default, no persistence)
+clasp-router --journal --journal-backend memory
+
+# SQLite journal (persistent, single node)
+clasp-router --journal --journal-backend sqlite --journal-path ./journal.db
+
+# DefraDB journal (persistent + P2P sync)
+clasp-router --journal --journal-backend defra --journal-defra-url http://localhost:9181
+```
+
 ## Next Steps
 
-1. **P2P peering**: configure DefraDB node-to-node sync for `test_two_store_sync`
-2. **Wire up to router**: integrate `DefraJournal` and `DefraStateStore` into `clasp-router`
-3. **Wire up bridge app**: connect `DefraConfigStore` to Electron IPC for P2P config sync
-4. **E2E test**: two CLASP routers + two DefraDB nodes, verify state convergence
-5. **Performance benchmarks**: criterion benches for cache hit latency, write-through throughput
-6. **Contact Source Network**: discuss integration, potential upstream contributions
+1. **Wire up bridge app**: connect `DefraConfigStore` to Electron IPC for P2P config sync
+2. **E2E test**: two CLASP routers + two DefraDB nodes, verify state convergence end-to-end
+3. **Performance benchmarks**: criterion benches for cache hit latency, write-through throughput
+4. **Contact Source Network**: discuss integration, potential upstream contributions
