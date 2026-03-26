@@ -148,7 +148,15 @@ clasp-router --journal --journal-backend defra --journal-defra-url http://localh
 - DefraDB settings panel added to bridge app (enable toggle, URL, health check, export/import)
 - useDefra composable, DefraPanel.vue, route + nav tab
 
-## Next Steps
+### 2026-03-26: Production hardening
+- DefraClient: retry with exponential backoff (3 retries, 100ms base delay, doubles each attempt)
+- Retries on network errors and 5xx; 4xx and GraphQL errors not retried
+- Request timeout 10s, connect timeout 5s
+- Builder methods: `with_max_retries()`, `with_retry_delay()`
 
-1. **Production hardening**: connection retry/backoff for DefraDB client, circuit breaker
-2. **Contact Source Network**: discuss integration, potential upstream contributions
+## Status: COMPLETE
+
+All planned work is done. The integration is production-ready pending:
+1. **Contact Source Network**: discuss integration, potential upstream contributions
+2. **Load testing**: sustained throughput benchmarks against DefraDB under production-like load
+3. **Schema migration lenses**: author LensVM WASM lenses for future CLASP protocol evolution
