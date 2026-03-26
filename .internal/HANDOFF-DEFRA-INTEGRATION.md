@@ -2,9 +2,10 @@
 
 Last updated: 2026-03-26
 
-## Status: ALL 7 PHASES COMPLETE
+## Status: ALL 7 PHASES COMPLETE + INTEGRATION TESTED + PUBLISHED
 
-**108 tests pass, 0 failures, 20 integration tests ignored (need running DefraDB)**
+**108 unit tests + 19/20 integration tests pass against live DefraDB**
+**All 7 crates published to crates.io v4.2.0**
 
 | Phase | Crate | Status | Tests (pass/ignored) |
 |-------|-------|--------|---------------------|
@@ -89,11 +90,27 @@ Last updated: 2026-03-26
 ### 2026-03-26: All 7 phases complete
 - Phases 1-2 built first (no dependencies), then 3-4 in parallel, then 5-7 in parallel
 - All crates compile and pass tests in workspace context
-- `cargo test -p clasp-identity -p clasp-journal-defra -p clasp-registry-defra -p clasp-defra-bridge -p clasp-config-defra -p clasp-defra-transport -p clasp-state-defra` — 108 pass, 0 fail
+- 108 unit tests pass, 0 fail
+
+### 2026-03-26: Integration tested + published
+- DefraDB `latest` image pulled and running via Docker Compose
+- Fixed API compatibility: schema endpoint, mutation names (create_ -> add_), health check, Int32 timestamps
+- Fixed test idempotency: unique IDs per run (UUID/nanos) to avoid stale data collisions
+- **19/20 integration tests pass** against live DefraDB (2-node cluster)
+- 1 test (`test_two_store_sync`) needs P2P peering setup between nodes — documented, not blocking
+- All 7 crates published to crates.io as v4.2.0
+
+### DefraDB API fixes applied
+- Schema: `POST /api/v0/collections` with `Content-Type: text/plain` SDL body
+- Mutations: `add_X` not `create_X`; `delete_X(docID: "...")` not `delete_X(docIDs: [...])`
+- `upsert_X` syntax: `upsert_X(filter: {...}, add: {...}, update: {...})`
+- `@index` directive works as expected
+- Int fields are 32-bit — timestamps stored as seconds (converted from/to CLASP microseconds)
+- `json_to_graphql_input()` utility converts JSON objects to GraphQL input syntax (unquoted keys)
 
 ## Next Steps
 
-1. **Integration testing**: spin up DefraDB locally, run `cargo test -- --ignored`
+1. **P2P peering**: configure DefraDB node-to-node sync for `test_two_store_sync`
 2. **Wire up to router**: integrate `DefraJournal` and `DefraStateStore` into `clasp-router`
 3. **Wire up bridge app**: connect `DefraConfigStore` to Electron IPC for P2P config sync
 4. **E2E test**: two CLASP routers + two DefraDB nodes, verify state convergence
