@@ -654,7 +654,35 @@ footer {
   z-index: 25;
 }
 
-/* === Responsive (mobile-first) === */
+/* === Small screen adjustments === */
+
+@media (max-width: 639px) {
+  .doc-content pre {
+    padding: 0.75rem;
+    font-size: 0.8rem;
+    border-left: none;
+    border-right: none;
+    margin-left: -1rem;
+    margin-right: -1rem;
+    border-radius: 0;
+  }
+
+  .doc-content pre code {
+    font-size: 0.78rem;
+  }
+
+  .sidebar-section-label {
+    padding: 0.8rem 1.25rem;
+    font-size: 0.7rem;
+  }
+
+  .sidebar-link {
+    padding: 0.6rem 1.25rem 0.6rem 1.75rem;
+    font-size: 0.85rem;
+  }
+}
+
+/* === Responsive (wider screens) === */
 
 @media (min-width: 640px) {
   .topnav {
