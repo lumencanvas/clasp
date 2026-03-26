@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use tracing::debug;
 
-use clasp_journal_defra::DefraClient;
+use clasp_journal_defra::{json_to_graphql_input, DefraClient};
 use clasp_registry::error::{RegistryError, Result};
 use clasp_registry::store::EntityStore;
 use clasp_registry::{Entity, EntityId, EntityStatus};
@@ -95,14 +95,15 @@ impl EntityStore for DefraEntityStore {
         }
 
         let input = entity_to_defra(entity);
+        let input_gql = json_to_graphql_input(&input);
 
         let query = format!(
             r#"mutation {{
-                create_ClaspEntity(input: {}) {{
+                add_ClaspEntity(input: {}) {{
                     _docID
                 }}
             }}"#,
-            input
+            input_gql
         );
 
         self.client.graphql(&query, None).await.map_err(|e| {
@@ -298,6 +299,7 @@ impl EntityStore for DefraEntityStore {
 
         let doc_id = Self::doc_id(&doc)?;
         let input = entity_to_defra(entity);
+        let input_gql = json_to_graphql_input(&input);
 
         let query = format!(
             r#"mutation {{
@@ -305,7 +307,7 @@ impl EntityStore for DefraEntityStore {
                     _docID
                 }}
             }}"#,
-            input
+            input_gql
         );
 
         self.client.graphql(&query, None).await.map_err(|e| {
@@ -393,11 +395,17 @@ mod tests {
     use std::time::{Duration, UNIX_EPOCH};
 
     fn make_test_entity(name: &str) -> Entity {
+        // Generate unique key per call so tests don't collide
+        let mut key = [0u8; 32];
+        let nanos = std::time::SystemTime::now()
+            .duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        key[..16].copy_from_slice(&nanos.to_le_bytes());
+        let id = EntityId::from_public_key(&key).unwrap();
         Entity {
-            id: EntityId::parse("clasp:3vQB7B6mGGskg").unwrap(),
+            id,
             entity_type: EntityType::Device,
             name: name.to_string(),
-            public_key: vec![0xAA; 32],
+            public_key: key.to_vec(),
             created_at: UNIX_EPOCH + Duration::from_secs(1700000000),
             metadata: HashMap::new(),
             tags: vec!["lighting".to_string()],

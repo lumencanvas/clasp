@@ -23,5 +23,5 @@ mod error;
 mod journal;
 mod schema;
 
-pub use client::DefraClient;
+pub use client::{json_to_graphql_input, DefraClient};
 pub use journal::DefraJournal;

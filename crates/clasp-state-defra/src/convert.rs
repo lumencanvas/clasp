@@ -14,8 +14,8 @@ pub fn param_to_defra(address: &str, state: &ParamState) -> serde_json::Value {
         "valueType": value_type_tag(&state.value),
         "revision": state.revision as i64,
         "writer": state.writer,
-        "timestamp": state.timestamp as i64,
-        "lastAccessed": state.last_accessed as i64,
+        "timestamp": (state.timestamp / 1_000_000) as i64,
+        "lastAccessed": (state.last_accessed / 1_000_000) as i64,
         "strategy": strategy_to_str(state.strategy),
         "lockHolder": state.lock_holder.as_deref().unwrap_or(""),
         "origin": state.origin.as_deref().unwrap_or(""),
@@ -37,8 +37,8 @@ pub fn defra_to_param(doc: &serde_json::Value) -> crate::Result<(String, ParamSt
 
     let revision = doc["revision"].as_i64().unwrap_or(1) as u64;
     let writer = doc["writer"].as_str().unwrap_or("").to_string();
-    let timestamp = doc["timestamp"].as_i64().unwrap_or(0) as u64;
-    let last_accessed = doc["lastAccessed"].as_i64().unwrap_or(0) as u64;
+    let timestamp = doc["timestamp"].as_i64().unwrap_or(0) as u64 * 1_000_000;
+    let last_accessed = doc["lastAccessed"].as_i64().unwrap_or(0) as u64 * 1_000_000;
     let strategy = str_to_strategy(doc["strategy"].as_str().unwrap_or("lww"));
 
     let lock_holder = doc["lockHolder"]
@@ -312,6 +312,7 @@ mod tests {
         assert_eq!(recovered.value, Value::Float(0.75));
         assert_eq!(recovered.revision, 5);
         assert_eq!(recovered.writer, "session-abc");
+        // Timestamps lose sub-second precision in DefraDB (stored as seconds)
         assert_eq!(recovered.timestamp, 1_700_000_000_000_000);
         assert_eq!(recovered.last_accessed, 1_700_000_001_000_000);
         assert_eq!(recovered.strategy, ConflictStrategy::Max);

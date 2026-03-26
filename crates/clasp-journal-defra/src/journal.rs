@@ -238,7 +238,7 @@ impl Journal for DefraJournal {
 
         let mutation = format!(
             r#"mutation {{
-                create_ClaspJournalEntry(input: {{
+                add_ClaspJournalEntry(input: {{
                     seq: {seq},
                     timestamp: {timestamp},
                     author: "{author}",
@@ -387,7 +387,7 @@ impl Journal for DefraJournal {
 
             let mutation = format!(
                 r#"mutation {{
-                    create_ClaspParamSnapshot(input: {{
+                    add_ClaspParamSnapshot(input: {{
                         address: "{address}",
                         value: "{value_escaped}",
                         revision: {revision},
@@ -592,7 +592,7 @@ mod tests {
 
         let mutation = format!(
             r#"mutation {{
-                create_ClaspJournalEntry(input: {{
+                add_ClaspJournalEntry(input: {{
                     seq: {seq},
                     timestamp: {timestamp},
                     author: "{author}",
@@ -615,7 +615,7 @@ mod tests {
             msg_type = entry.msg_type,
         );
 
-        assert!(mutation.contains("create_ClaspJournalEntry"));
+        assert!(mutation.contains("add_ClaspJournalEntry"));
         assert!(mutation.contains("seq: 42"));
         assert!(mutation.contains("signalType: 0"));
         assert!(mutation.contains(r#"author: "test-author""#));

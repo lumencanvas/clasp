@@ -122,7 +122,7 @@ impl DefraStateStore {
     pub fn start_writer(&self) -> tokio::task::JoinHandle<()> {
         // Try to take the receiver. If already taken, return a no-op handle.
         let rx = {
-            let mut guard = self.write_rx.blocking_lock();
+            let mut guard = self.write_rx.try_lock().expect("write_rx lock should not be contended");
             guard.take()
         };
 
@@ -158,7 +158,7 @@ impl DefraStateStore {
                             let doc = param_to_defra(&address, &state);
                             let mutation = format!(
                                 r#"mutation {{
-                                    create_ClaspParam(input: {{
+                                    add_ClaspParam(input: {{
                                         address: {address}
                                         value: {value}
                                         valueType: {value_type}
@@ -617,7 +617,7 @@ async fn upsert_param(
         // Create new
         let create_query = format!(
             r#"mutation {{
-                create_ClaspParam(input: {{
+                add_ClaspParam(input: {{
                     address: {address}
                     value: {value}
                     valueType: {value_type}
@@ -949,14 +949,16 @@ mod tests {
     async fn test_load_from_defra() {
         // Insert directly into DefraDB, then load
         let client = DefraClient::new("http://localhost:9181");
+        let unique_addr = format!("/integration/load-test/{}", std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
         let doc = serde_json::json!({
-            "address": "/integration/load-test",
+            "address": &unique_addr,
             "value": "123",
             "valueType": "int",
             "revision": 1,
             "writer": "direct",
-            "timestamp": 1700000000000000_i64,
-            "lastAccessed": 1700000000000000_i64,
+            "timestamp": 1700000000_i64,
+            "lastAccessed": 1700000000_i64,
             "strategy": "lww",
             "lockHolder": "",
             "origin": "",
@@ -965,14 +967,14 @@ mod tests {
         });
 
         let create_query = format!(
-            r#"mutation {{ create_ClaspParam(input: {{
-                address: "/integration/load-test"
+            r#"mutation {{ add_ClaspParam(input: {{
+                address: "{unique_addr}"
                 value: "123"
                 valueType: "int"
                 revision: 1
                 writer: "direct"
-                timestamp: 1700000000000000
-                lastAccessed: 1700000000000000
+                timestamp: 1700000000
+                lastAccessed: 1700000000
                 strategy: "lww"
                 lockHolder: ""
                 origin: ""
@@ -992,7 +994,7 @@ mod tests {
             .await
             .unwrap();
 
-        let val = store.get("/integration/load-test");
+        let val = store.get(&unique_addr);
         assert_eq!(val, Some(Value::Int(123)));
     }
 

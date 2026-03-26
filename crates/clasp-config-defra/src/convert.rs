@@ -24,7 +24,7 @@ fn vec_to_gql_array(items: &[String]) -> String {
 pub fn router_to_create_mutation(config: &RouterConfig) -> String {
     format!(
         r#"mutation {{
-            create_ClaspRouterConfig(input: {{
+            add_ClaspRouterConfig(input: {{
                 configId: "{config_id}",
                 name: "{name}",
                 host: "{host}",
@@ -115,7 +115,7 @@ pub fn router_from_doc(doc: &Value) -> Result<RouterConfig> {
 pub fn connection_to_create_mutation(config: &ConnectionConfig) -> String {
     format!(
         r#"mutation {{
-            create_ClaspConnectionConfig(input: {{
+            add_ClaspConnectionConfig(input: {{
                 configId: "{config_id}",
                 name: "{name}",
                 routerUrl: "{router_url}",
@@ -196,7 +196,7 @@ pub fn connection_from_doc(doc: &Value) -> Result<ConnectionConfig> {
 pub fn bridge_to_create_mutation(config: &BridgeConfig) -> String {
     format!(
         r#"mutation {{
-            create_ClaspBridgeConfig(input: {{
+            add_ClaspBridgeConfig(input: {{
                 configId: "{config_id}",
                 name: "{name}",
                 protocol: "{protocol}",
@@ -277,7 +277,7 @@ pub fn bridge_from_doc(doc: &Value) -> Result<BridgeConfig> {
 pub fn rule_to_create_mutation(config: &RuleConfig) -> String {
     format!(
         r#"mutation {{
-            create_ClaspRuleConfig(input: {{
+            add_ClaspRuleConfig(input: {{
                 configId: "{config_id}",
                 name: "{name}",
                 trigger: "{trigger}",
@@ -363,7 +363,7 @@ pub fn snapshot_to_create_mutation(snapshot: &ConfigSnapshot) -> Result<String> 
 
     Ok(format!(
         r#"mutation {{
-            create_ClaspConfigSnapshot(input: {{
+            add_ClaspConfigSnapshot(input: {{
                 snapshotId: "{snapshot_id}",
                 name: "{name}",
                 description: "{description}",
@@ -465,7 +465,7 @@ mod tests {
     fn router_mutation_format() {
         let config = RouterConfig::new("r-001", "Test Router", "owner-a");
         let mutation = router_to_create_mutation(&config);
-        assert!(mutation.contains("create_ClaspRouterConfig"));
+        assert!(mutation.contains("add_ClaspRouterConfig"));
         assert!(mutation.contains(r#"configId: "r-001""#));
         assert!(mutation.contains(r#"name: "Test Router""#));
     }

@@ -77,12 +77,17 @@ impl DefraClient {
     /// This is idempotent -- if the schema already exists, the
     /// "already exists" error is silently ignored.
     pub async fn add_schema(&self, sdl: &str) -> Result<()> {
-        let url = format!("{}/api/v0/schema", self.base_url);
-        let body = json!({ "sdl": sdl });
+        let url = format!("{}/api/v0/collections", self.base_url);
 
         debug!(url = %url, "DefraDB schema provision");
 
-        let resp = self.http.post(&url).json(&body).send().await?;
+        let resp = self
+            .http
+            .post(&url)
+            .header("Content-Type", "text/plain")
+            .body(sdl.to_string())
+            .send()
+            .await?;
 
         // Accept 200 and 400 (schema already exists)
         if resp.status().is_success() {
@@ -119,5 +124,30 @@ impl DefraClient {
     /// Return the base URL this client is configured with.
     pub fn base_url(&self) -> &str {
         &self.base_url
+    }
+}
+
+/// Convert a `serde_json::Value` to GraphQL input literal syntax.
+///
+/// JSON uses quoted keys (`{"name": "alice"}`), GraphQL uses unquoted
+/// (`{name: "alice"}`). This function performs the conversion recursively.
+pub fn json_to_graphql_input(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Object(map) => {
+            let entries: Vec<String> = map
+                .iter()
+                .map(|(k, v)| format!("{}: {}", k, json_to_graphql_input(v)))
+                .collect();
+            format!("{{{}}}", entries.join(", "))
+        }
+        serde_json::Value::Array(arr) => {
+            let items: Vec<String> = arr.iter().map(json_to_graphql_input).collect();
+            format!("[{}]", items.join(", "))
+        }
+        serde_json::Value::String(s) => {
+            let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
+            format!("\"{}\"", escaped)
+        }
+        other => other.to_string(),
     }
 }
