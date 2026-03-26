@@ -130,9 +130,16 @@ clasp-router --journal --journal-backend sqlite --journal-path ./journal.db
 clasp-router --journal --journal-backend defra --journal-defra-url http://localhost:9181
 ```
 
+### 2026-03-26: Bridge app IPC, E2E tests, benchmarks
+- Bridge app: `defra-health-check`, `defra-config-export`, `defra-config-import` IPC handlers
+- Bridge app: server-manager passes `--journal-backend` and `--journal-defra-url` to router
+- E2E test binary: `defra-sync-tests` — verifies journal, state, and config sync across 2 DefraDB nodes
+- Criterion benchmarks: `cache_bench` for DashMap hot-path (get, set, pattern match, concurrent, scaling)
+- Fix: all timestamps converted to seconds for DefraDB Int32 (journal, state store, queries)
+- setup.sh: provisions all 8 schemas, replicates all 8 collections bidirectionally
+
 ## Next Steps
 
-1. **Wire up bridge app**: connect `DefraConfigStore` to Electron IPC for P2P config sync
-2. **E2E test**: two CLASP routers + two DefraDB nodes, verify state convergence end-to-end
-3. **Performance benchmarks**: criterion benches for cache hit latency, write-through throughput
-4. **Contact Source Network**: discuss integration, potential upstream contributions
+1. **Bridge app UI**: add DefraDB settings panel (URL, health indicator, sync status)
+2. **Production hardening**: connection retry/backoff for DefraDB client, circuit breaker
+3. **Contact Source Network**: discuss integration, potential upstream contributions
