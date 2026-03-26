@@ -160,7 +160,15 @@ export default function claspDocs() {
       const title = frontmatter.title || extractTitle(content) || formatPathAsTitle(docPath)
       const section = frontmatter.section || docPath.split('/')[0] || 'root'
       const rawHtml = md.render(content, { docPath, filePath: file })
-      const html = processCallouts(rawHtml)
+      const withCallouts = processCallouts(rawHtml)
+      // Wrap tables for mobile horizontal scrolling
+      const html = withCallouts.replace(
+        /<table>/g,
+        '<div class="table-wrap"><table>'
+      ).replace(
+        /<\/table>/g,
+        '</table></div>'
+      )
 
       result[docPath] = {
         path: docPath,
