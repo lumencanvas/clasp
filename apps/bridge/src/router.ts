@@ -45,6 +45,11 @@ const routes = [
     name: 'security',
     component: () => import('./components/panels/SecurityPanel.vue'),
   },
+  {
+    path: '/defra',
+    name: 'defra',
+    component: () => import('./components/panels/DefraPanel.vue'),
+  },
 ]
 
 export const router = createRouter({

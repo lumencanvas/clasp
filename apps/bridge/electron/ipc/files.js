@@ -7,6 +7,11 @@ const { startServer, stopServer } = require('./server-manager');
 
 const configPath = path.join(app.getPath('userData'), 'clasp-config.json');
 
+function gqlEscape(str) {
+  if (typeof str !== 'string') return String(str);
+  return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+}
+
 function isPathAllowed(filePath) {
   const resolvedPath = path.resolve(filePath);
   const allowedDirs = [
@@ -245,14 +250,14 @@ function registerFileHandlers() {
       if (config.routers) {
         for (const r of config.routers) {
           mutations.push(`add_ClaspRouterConfig(input: {
-            configId: "${r.configId || r.config_id}", name: "${r.name}",
-            host: "${r.host || '0.0.0.0'}", port: ${r.port || 7330},
+            configId: "${gqlEscape(r.configId || r.config_id)}", name: "${gqlEscape(r.name)}",
+            host: "${gqlEscape(r.host || '0.0.0.0')}", port: ${r.port || 7330},
             transports: ${JSON.stringify(r.transports || ['websocket']).replace(/"/g, '"')},
-            securityMode: "${r.securityMode || r.security_mode || 'open'}",
+            securityMode: "${gqlEscape(r.securityMode || r.security_mode || 'open')}",
             maxSessions: ${r.maxSessions || r.max_sessions || 1000},
             paramTtlSecs: ${r.paramTtlSecs || r.param_ttl_secs || 3600},
             features: ${JSON.stringify(r.features || []).replace(/"/g, '"')},
-            owner: "${r.owner || 'local'}",
+            owner: "${gqlEscape(r.owner || 'local')}",
             updatedAt: ${Math.floor(Date.now() / 1000)},
             version: ${r.version || 1}
           }) { _docID }`);

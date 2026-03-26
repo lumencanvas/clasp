@@ -12,6 +12,7 @@ const tabs = [
   { name: 'monitor', label: 'MONITOR', path: '/monitor' },
   { name: 'test', label: 'TEST', path: '/test' },
   { name: 'logs', label: 'LOGS', path: '/logs' },
+  { name: 'defra', label: 'DEFRA', path: '/defra' },
 ]
 </script>
 

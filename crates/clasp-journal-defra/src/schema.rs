@@ -9,6 +9,11 @@
 /// `value` is stored as a JSON-serialized string because DefraDB
 /// does not have a native CLASP Value type. Signal types are stored
 /// as integers for compact indexing.
+///
+/// DefraDB `Int` is 32-bit signed (max 2,147,483,647).
+/// Timestamps are stored as seconds since epoch.
+/// This format is valid until January 19, 2038 (Y2038 problem).
+/// If DefraDB adds Int64 support, migrate timestamps to microseconds.
 pub const JOURNAL_ENTRY_SCHEMA: &str = r#"
 type ClaspJournalEntry {
     seq: Int @index

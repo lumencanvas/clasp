@@ -138,8 +138,17 @@ clasp-router --journal --journal-backend defra --journal-defra-url http://localh
 - Fix: all timestamps converted to seconds for DefraDB Int32 (journal, state store, queries)
 - setup.sh: provisions all 8 schemas, replicates all 8 collections bidirectionally
 
+### 2026-03-26: Audit fixes, Bridge UI, production hardening
+- Collection name whitelist in config-defra (prevents GraphQL injection)
+- Warning logs for missing journal entry fields (observability)
+- Removed dead Result type alias in registry-defra
+- Echo suppression TTL configurable (default 5s, was hardcoded 2s)
+- Y2038 timestamp limitation documented in schema
+- GraphQL string escaping in bridge app JS (prevents injection)
+- DefraDB settings panel added to bridge app (enable toggle, URL, health check, export/import)
+- useDefra composable, DefraPanel.vue, route + nav tab
+
 ## Next Steps
 
-1. **Bridge app UI**: add DefraDB settings panel (URL, health indicator, sync status)
-2. **Production hardening**: connection retry/backoff for DefraDB client, circuit breaker
-3. **Contact Source Network**: discuss integration, potential upstream contributions
+1. **Production hardening**: connection retry/backoff for DefraDB client, circuit breaker
+2. **Contact Source Network**: discuss integration, potential upstream contributions

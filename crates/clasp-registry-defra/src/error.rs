@@ -39,5 +39,3 @@ impl From<DefraRegistryError> for RegistryError {
     }
 }
 
-#[allow(dead_code)]
-pub type Result<T> = std::result::Result<T, DefraRegistryError>;

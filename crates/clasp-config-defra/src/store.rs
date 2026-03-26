@@ -427,6 +427,8 @@ impl DefraConfigStore {
         config_id: &str,
         collection: &str,
     ) -> Result<Vec<serde_json::Value>> {
+        Self::validate_collection(collection)?;
+
         // First find the docID for this configId
         let doc_id = self.find_doc_id(collection, config_id).await?;
         let doc_id = match doc_id {
@@ -456,8 +458,29 @@ impl DefraConfigStore {
 
     // -- Internal helpers -----------------------------------------------------
 
+    /// Allowed collection names for GraphQL interpolation.
+    const VALID_COLLECTIONS: &'static [&'static str] = &[
+        "ClaspRouterConfig",
+        "ClaspConnectionConfig",
+        "ClaspBridgeConfig",
+        "ClaspRuleConfig",
+        "ClaspConfigSnapshot",
+    ];
+
+    /// Validate that `collection` is in the whitelist before interpolating
+    /// into a GraphQL query.
+    fn validate_collection(collection: &str) -> Result<()> {
+        if !Self::VALID_COLLECTIONS.contains(&collection) {
+            return Err(ConfigDefraError::InvalidConfig(
+                format!("unknown collection: {}", collection),
+            ));
+        }
+        Ok(())
+    }
+
     /// Find the DefraDB _docID for a document with the given configId.
     async fn find_doc_id(&self, collection: &str, config_id: &str) -> Result<Option<String>> {
+        Self::validate_collection(collection)?;
         let query = format!(
             r#"query {{
                 {collection}(filter: {{configId: {{_eq: "{id}"}}}}) {{

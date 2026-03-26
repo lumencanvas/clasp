@@ -73,8 +73,16 @@ impl DefraBridge {
         Self {
             watcher: DefraWatcher::new(watch_client, collections),
             writer: DefraWriter::new(write_client),
-            origin_tracker: Arc::new(OriginTracker::new(Duration::from_secs(2))),
+            origin_tracker: Arc::new(OriginTracker::new(Duration::from_secs(5))),
         }
+    }
+
+    /// Set the echo suppression TTL (default: 5 seconds).
+    /// Changes within this window from the bridge's own writes are suppressed
+    /// to prevent feedback loops.
+    pub fn with_echo_ttl(mut self, ttl: Duration) -> Self {
+        self.origin_tracker = Arc::new(OriginTracker::new(ttl));
+        self
     }
 
     /// Override the watcher poll interval.

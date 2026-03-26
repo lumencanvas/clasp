@@ -119,6 +119,9 @@ impl DefraJournal {
             .get("seq")
             .and_then(|v| v.as_u64())
             .unwrap_or(0);
+        if doc.get("seq").and_then(|v| v.as_u64()).is_none() {
+            warn!("Journal entry missing 'seq' field, defaulting to 0");
+        }
         let timestamp = doc
             .get("timestamp")
             .and_then(|v| v.as_u64())
@@ -129,11 +132,17 @@ impl DefraJournal {
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
+        if doc.get("author").and_then(|v| v.as_str()).is_none() {
+            warn!("Journal entry missing 'author' field, defaulting to empty string");
+        }
         let address = doc
             .get("address")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
+        if doc.get("address").and_then(|v| v.as_str()).is_none() {
+            warn!("Journal entry missing 'address' field, defaulting to empty string");
+        }
         let signal_type = doc
             .get("signalType")
             .and_then(|v| v.as_i64())
@@ -151,6 +160,9 @@ impl DefraJournal {
             .get("msgType")
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as u8;
+        if doc.get("msgType").and_then(|v| v.as_u64()).is_none() {
+            warn!("Journal entry missing 'msgType' field, defaulting to 0");
+        }
 
         Ok(JournalEntry {
             seq,
