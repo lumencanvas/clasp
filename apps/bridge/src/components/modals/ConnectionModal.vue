@@ -76,7 +76,7 @@ async function save() {
     }
     if (isEdit.value) {
       editConn(editId.value)
-      await add(connConfig)
+      await add({ id: editId.value, ...connConfig })
       notify('Connection updated', 'success')
     } else {
       await add(connConfig)

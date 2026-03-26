@@ -13,7 +13,12 @@ function update(field: string, value: any) {
 }
 
 function updateProtocol(protocol: string) {
-  emit('update:modelValue', { protocol: protocol as AnyProtocol })
+  emit('update:modelValue', { ...props.modelValue, protocol: protocol as AnyProtocol })
+}
+
+function toNumberOrNull(v: string): number | null {
+  const n = Number(v)
+  return isNaN(n) ? null : n
 }
 
 const midiTypes = [
@@ -98,7 +103,7 @@ const midiTypes = [
           max="127"
           placeholder="0"
           :value="modelValue.midiNumber ?? 0"
-          @input="update('midiNumber', Number(($event.target as HTMLInputElement).value) ?? null)"
+          @input="update('midiNumber', toNumberOrNull(($event.target as HTMLInputElement).value))"
         />
       </div>
     </template>
@@ -113,7 +118,7 @@ const midiTypes = [
           min="0"
           placeholder="0"
           :value="modelValue.dmxUniverse ?? 0"
-          @input="update('dmxUniverse', Number(($event.target as HTMLInputElement).value) ?? null)"
+          @input="update('dmxUniverse', toNumberOrNull(($event.target as HTMLInputElement).value))"
         />
       </div>
       <div class="form-group">
@@ -125,7 +130,7 @@ const midiTypes = [
           max="512"
           placeholder="1"
           :value="modelValue.dmxChannel ?? 1"
-          @input="update('dmxChannel', Number(($event.target as HTMLInputElement).value) ?? null)"
+          @input="update('dmxChannel', toNumberOrNull(($event.target as HTMLInputElement).value))"
         />
       </div>
     </template>

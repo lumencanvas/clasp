@@ -38,6 +38,13 @@ const clampMax = ref(1)
 const threshold = ref(0.5)
 const expression = ref('')
 const javascriptCode = ref('')
+const deadzoneMin = ref(0.4)
+const deadzoneMax = ref(0.6)
+const smoothFactor = ref(0.3)
+const quantizeSteps = ref(8)
+const curveType = ref<string>('linear')
+const moduloDivisor = ref(1)
+const powerExponent = ref(2)
 
 // Target fields
 const tgtProtocol = ref<AnyProtocol>('clasp')
@@ -69,6 +76,13 @@ const transformPreview = computed(() => {
     case 'toggle': return 'out = toggle on > 0.5'
     case 'expression': return `out = ${expression.value || '...'}`
     case 'javascript': return 'out = fn(in)'
+    case 'deadzone': return `out = in in [${deadzoneMin.value}, ${deadzoneMax.value}] ? 0 : in`
+    case 'smooth': return `out = EMA(in, factor=${smoothFactor.value})`
+    case 'quantize': return `out = round(in * ${quantizeSteps.value}) / ${quantizeSteps.value}`
+    case 'curve': return `out = ${curveType.value}(in)`
+    case 'modulo': return `out = in % ${moduloDivisor.value}`
+    case 'negate': return 'out = -in'
+    case 'power': return `out = in ^ ${powerExponent.value}`
     default: return ''
   }
 })
@@ -130,6 +144,25 @@ function buildTransform(): TransformConfig {
     case 'javascript':
       cfg.javascriptCode = javascriptCode.value
       break
+    case 'deadzone':
+      cfg.deadzoneMin = deadzoneMin.value
+      cfg.deadzoneMax = deadzoneMax.value
+      break
+    case 'smooth':
+      cfg.smoothFactor = smoothFactor.value
+      break
+    case 'quantize':
+      cfg.quantizeSteps = quantizeSteps.value
+      break
+    case 'curve':
+      cfg.curveType = curveType.value as any
+      break
+    case 'modulo':
+      cfg.moduloDivisor = moduloDivisor.value
+      break
+    case 'power':
+      cfg.powerExponent = powerExponent.value
+      break
   }
   return cfg
 }
@@ -170,6 +203,13 @@ function loadTransform(cfg: TransformConfig) {
   threshold.value = cfg.threshold ?? 0.5
   expression.value = cfg.expression || ''
   javascriptCode.value = cfg.javascriptCode || ''
+  deadzoneMin.value = cfg.deadzoneMin ?? 0.4
+  deadzoneMax.value = cfg.deadzoneMax ?? 0.6
+  smoothFactor.value = cfg.smoothFactor ?? 0.3
+  quantizeSteps.value = cfg.quantizeSteps ?? 8
+  curveType.value = cfg.curveType ?? 'linear'
+  moduloDivisor.value = cfg.moduloDivisor ?? 1
+  powerExponent.value = cfg.powerExponent ?? 2
 }
 
 function resetForm() {
@@ -193,6 +233,13 @@ function resetForm() {
   threshold.value = 0.5
   expression.value = ''
   javascriptCode.value = ''
+  deadzoneMin.value = 0.4
+  deadzoneMax.value = 0.6
+  smoothFactor.value = 0.3
+  quantizeSteps.value = 8
+  curveType.value = 'linear'
+  moduloDivisor.value = 1
+  powerExponent.value = 2
 
   tgtProtocol.value = 'clasp'
   tgtAddress.value = ''
@@ -410,6 +457,61 @@ defineExpose({ open, close })
                 <div class="form-group">
                   <label class="form-label">JavaScript Code</label>
                   <textarea v-model="javascriptCode" class="input" rows="4" placeholder="return value * 2;" />
+                </div>
+              </template>
+
+              <template v-if="transformType === 'deadzone'">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Min</label>
+                    <input v-model.number="deadzoneMin" class="input" type="number" step="any" />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Max</label>
+                    <input v-model.number="deadzoneMax" class="input" type="number" step="any" />
+                  </div>
+                </div>
+              </template>
+
+              <template v-if="transformType === 'smooth'">
+                <div class="form-group">
+                  <label class="form-label">Smoothing Factor (0-1)</label>
+                  <input v-model.number="smoothFactor" class="input" type="number" step="0.01" min="0" max="1" />
+                </div>
+              </template>
+
+              <template v-if="transformType === 'quantize'">
+                <div class="form-group">
+                  <label class="form-label">Steps</label>
+                  <input v-model.number="quantizeSteps" class="input" type="number" min="2" />
+                </div>
+              </template>
+
+              <template v-if="transformType === 'curve'">
+                <div class="form-group">
+                  <label class="form-label">Curve Type</label>
+                  <select v-model="curveType" class="select">
+                    <option value="linear">Linear</option>
+                    <option value="ease-in">Ease In</option>
+                    <option value="ease-out">Ease Out</option>
+                    <option value="ease-in-out">Ease In-Out</option>
+                    <option value="exponential">Exponential</option>
+                    <option value="logarithmic">Logarithmic</option>
+                  </select>
+                </div>
+              </template>
+
+              <template v-if="transformType === 'modulo'">
+                <div class="form-group">
+                  <label class="form-label">Divisor</label>
+                  <input v-model.number="moduloDivisor" class="input" type="number" step="any" />
+                </div>
+              </template>
+
+              <template v-if="transformType === 'power'">
+                <div class="form-group">
+                  <label class="form-label">Exponent</label>
+                  <input v-model.number="powerExponent" class="input" type="number" step="any" />
                 </div>
               </template>
 

@@ -98,7 +98,7 @@ export function evaluateExpression(expr: string, value: number): number {
     .replace(/\bround\b/g, 'Math.round')
     .replace(/\bPI\b/g, 'Math.PI')
 
-  if (!/^[0-9+\-*/%().Math\s,]+$/.test(safeExpr)) {
+  if (!/^[0-9a-zA-Z+\-*/%().\s,]+$/.test(safeExpr)) {
     throw new Error('Invalid expression')
   }
 

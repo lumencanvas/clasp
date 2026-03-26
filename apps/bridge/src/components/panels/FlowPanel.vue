@@ -72,7 +72,7 @@ function drawConnections() {
   }
 
   ctx.clearRect(0, 0, canvas.width, canvas.height)
-  ctx.strokeStyle = '#a8a29e'
+  ctx.strokeStyle = getComputedStyle(canvas).getPropertyValue('--stone-400').trim() || '#a8a29e'
   ctx.lineWidth = 1.5
   ctx.setLineDash([4, 4])
 

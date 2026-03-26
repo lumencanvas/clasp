@@ -202,6 +202,8 @@ async function connectBridgeToRouter(bridgeId, routerId = null) {
                   circuitBreaker.recordSuccess();
                   persistLog('info', 'Reconnection successful', { bridgeId });
                 }
+              }).catch(err => {
+                persistLog('error', 'Reconnection failed', { bridgeId, error: err.message });
               });
             }
           }, delay);

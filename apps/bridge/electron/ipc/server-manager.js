@@ -229,6 +229,7 @@ async function startClaspServer(config) {
 
       setTimeout(async () => {
         if (serverState.status === 'starting' && proc.exitCode === null) {
+          // Fallback: assume running if stdout hasn't confirmed yet
           serverState.status = 'running';
           getMainWindow()?.webContents.send('server-status', {
             id: config.id,

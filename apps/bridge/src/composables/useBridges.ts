@@ -33,20 +33,34 @@ async function restore() {
 async function add(config: { source: AnyProtocol; sourceAddr: string; target: AnyProtocol; targetAddr: string }) {
   const { invoke } = useElectron()
   const { notify } = useNotifications()
+  const isEditing = editingBridge.value !== null
 
-  const existing = bridges.value.find(b =>
-    b.source === config.source && b.target === config.target &&
-    b.sourceAddr === config.sourceAddr && b.targetAddr === config.targetAddr
-  )
-  if (existing) return
+  if (!isEditing) {
+    const existing = bridges.value.find(b =>
+      b.source === config.source && b.target === config.target &&
+      b.sourceAddr === config.sourceAddr && b.targetAddr === config.targetAddr
+    )
+    if (existing) return
+  }
 
   try {
-    let bridge: DirectLink
+    if (isEditing) {
+      await invoke('deleteBridge', editingBridge.value!.id).catch(() => {})
+    }
     const result = await invoke<DirectLink>('createBridge', config)
-    bridge = result || { id: Date.now().toString(), ...config, active: true }
-    bridges.value.push(bridge)
+    const bridge = result || { id: Date.now().toString(), ...config, active: true }
+
+    if (isEditing) {
+      const idx = bridges.value.findIndex(b => b.id === editingBridge.value!.id)
+      if (idx !== -1) bridges.value[idx] = bridge
+      else bridges.value.push(bridge)
+    } else {
+      bridges.value.push(bridge)
+    }
+    editingBridge.value = null
     saveBridges()
   } catch (err: any) {
+    editingBridge.value = null
     notify(`Failed to create bridge: ${err.message}`, 'error')
   }
 }

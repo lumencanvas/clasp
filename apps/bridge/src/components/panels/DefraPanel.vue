@@ -38,7 +38,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { useDefra } from '../../composables/useDefra'
 import { useNotifications } from '../../composables/useNotifications'
 

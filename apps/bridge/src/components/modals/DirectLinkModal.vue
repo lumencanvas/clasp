@@ -5,7 +5,7 @@ import { useBridges } from '../../composables/useBridges'
 import { useNotifications } from '../../composables/useNotifications'
 import { allProtocols, protocolNames, defaultAddresses } from '../../lib/constants'
 
-const { add, remove, saveBridges, bridges } = useBridges()
+const { add, edit: editBridge, saveBridges, bridges } = useBridges()
 const { notify } = useNotifications()
 
 const dialogRef = ref<HTMLDialogElement | null>(null)
@@ -50,24 +50,15 @@ async function save() {
 
   try {
     if (isEdit.value) {
-      // Remove old bridge and re-add with updated config
-      await remove(editId.value)
-      await add({
-        source: sourceProtocol.value,
-        sourceAddr: sourceAddr.value,
-        target: targetProtocol.value,
-        targetAddr: targetAddr.value,
-      })
-      notify('Direct link updated', 'success')
-    } else {
-      await add({
-        source: sourceProtocol.value,
-        sourceAddr: sourceAddr.value,
-        target: targetProtocol.value,
-        targetAddr: targetAddr.value,
-      })
-      notify('Direct link created', 'success')
+      editBridge(editId.value)
     }
+    await add({
+      source: sourceProtocol.value,
+      sourceAddr: sourceAddr.value,
+      target: targetProtocol.value,
+      targetAddr: targetAddr.value,
+    })
+    notify(isEdit.value ? 'Direct link updated' : 'Direct link created', 'success')
     close()
   } catch (e: any) {
     notify(`Failed: ${e.message || e}`, 'error')

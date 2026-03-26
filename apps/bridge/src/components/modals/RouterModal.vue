@@ -275,7 +275,7 @@ async function save() {
 
     if (isEdit.value) {
       editRouter(editId.value)
-      await add(config)
+      await add({ id: editId.value, ...config })
       notify('Router updated', 'success')
     } else {
       await add(config)

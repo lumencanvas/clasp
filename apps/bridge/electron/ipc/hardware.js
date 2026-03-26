@@ -292,6 +292,7 @@ function registerHardwareHandlers() {
 
   ipcMain.handle('test-serial-port', async (event, portPath) => {
     return new Promise((resolve) => {
+      let resolved = false;
       try {
         const { SerialPort } = require('serialport');
         const port = new SerialPort({
@@ -301,6 +302,8 @@ function registerHardwareHandlers() {
         });
 
         port.open((err) => {
+          if (resolved) return;
+          resolved = true;
           if (err) {
             resolve({ success: false, error: err.message });
           } else {
@@ -310,31 +313,43 @@ function registerHardwareHandlers() {
         });
 
         setTimeout(() => {
+          if (resolved) return;
+          resolved = true;
           try { port.close(); } catch (e) { /* ignore */ }
           resolve({ success: false, error: 'Connection timeout' });
         }, 3000);
       } catch (e) {
-        resolve({ success: false, error: e.message });
+        if (!resolved) {
+          resolved = true;
+          resolve({ success: false, error: e.message });
+        }
       }
     });
   });
 
   ipcMain.handle('test-port-available', async (event, { host, port }) => {
     return new Promise((resolve) => {
+      let resolved = false;
       const dgram = require('dgram');
       const socket = dgram.createSocket('udp4');
 
       socket.on('error', (err) => {
-        socket.close();
+        if (resolved) return;
+        resolved = true;
+        try { socket.close(); } catch (e) { /* ignore */ }
         resolve({ success: false, error: err.message });
       });
 
       socket.bind(port, host, () => {
+        if (resolved) return;
+        resolved = true;
         socket.close();
         resolve({ success: true });
       });
 
       setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
         try { socket.close(); } catch (e) { /* ignore */ }
         resolve({ success: false, error: 'Timeout' });
       }, 2000);
