@@ -57,6 +57,11 @@ const SECTION_CONFIG = [
     basePath: 'server'
   },
   {
+    key: 'defra',
+    label: 'DEFRADB INTEGRATION',
+    basePath: 'defra'
+  },
+  {
     key: 'reference',
     label: 'REFERENCE',
     basePath: 'reference'

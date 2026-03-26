@@ -19,20 +19,20 @@
 
 ---
 
-CLASP is a real-time infrastructure layer for connected applications. It provides state synchronization, pub/sub messaging, E2E encryption, device identity, reactive automation, and multi-site federation -- all through a single binary protocol. It also bridges legacy protocols (OSC, MIDI, DMX, Art-Net, MQTT) so existing gear works immediately.
+CLASP is a real-time infrastructure layer for connected applications. It provides state synchronization, pub/sub messaging, E2E encryption, device identity, reactive automation, and multi-site federation through a single binary protocol. It also bridges legacy protocols (OSC, MIDI, DMX, Art-Net, MQTT) so existing gear works immediately.
 
 ## Why CLASP?
 
-Building connected applications is hard. You need state sync, auth, encryption, discovery, automation, and multi-site coordination -- and every project reinvents the wheel. CLASP gives you all of this out of the box:
+Building connected applications is hard. You need state sync, auth, encryption, discovery, automation, and multi-site coordination, and every project reinvents the wheel. CLASP gives you all of this out of the box:
 
-- **State Sync** -- set a value anywhere, read it everywhere, late-joiners get current state automatically
-- **Pub/Sub** -- wildcard subscriptions (`*`, `**`), rate limiting, epsilon filtering
-- **E2E Encryption** -- AES-256-GCM with ECDH key exchange, TOFU, auto-rotation. The server never sees plaintext
-- **Device Identity** -- Ed25519 capability tokens with UCAN-style delegation chains
-- **Rules Engine** -- server-side reactive automation: "when X changes, set Y"
-- **Federation** -- router-to-router state sharing for multi-site deployments
-- **Protocol Bridges** -- OSC, MIDI, DMX, Art-Net, MQTT, WebSocket, HTTP, Socket.IO
-- **Discovery** -- mDNS/DNS-SD, UDP broadcast, rendezvous server
+- **State Sync**: set a value anywhere, read it everywhere, late-joiners get current state automatically
+- **Pub/Sub**: wildcard subscriptions (`*`, `**`), rate limiting, epsilon filtering
+- **E2E Encryption**: AES-256-GCM with ECDH key exchange, TOFU, auto-rotation. The server never sees plaintext
+- **Device Identity**: Ed25519 capability tokens with UCAN-style delegation chains
+- **Rules Engine**: server-side reactive automation: "when X changes, set Y"
+- **Federation**: router-to-router state sharing for multi-site deployments
+- **Protocol Bridges**: OSC, MIDI, DMX, Art-Net, MQTT, WebSocket, HTTP, Socket.IO
+- **Discovery**: mDNS/DNS-SD, UDP broadcast, rendezvous server
 
 CLASP started as a protocol bridge for creative applications (lighting, audio, VJ software) and grew into a general-purpose real-time infrastructure protocol. Protocol bridging is still a core feature, but it's one of many.
 
@@ -77,7 +77,7 @@ cargo install clasp-cli
 | **Python** | [clasp-to](https://pypi.org/project/clasp-to/) | `pip install clasp-to` |
 | **Arduino** | [Clasp](https://github.com/lumencanvas/clasp/tree/main/bindings/arduino/Clasp) | Arduino Library Manager |
 
-**Rust Crates -- Core**
+**Rust Crates: Core**
 
 | Crate | Description | Install |
 |-------|-------------|---------|
@@ -89,7 +89,7 @@ cargo install clasp-cli
 | [clasp-crypto](https://crates.io/crates/clasp-crypto) | E2E encryption (AES-256-GCM, ECDH) | `cargo add clasp-crypto` |
 | [clasp-identity](https://crates.io/crates/clasp-identity) | Unified Ed25519 identity (EntityId + DID + PeerID) | `cargo add clasp-identity` |
 
-**Rust Crates -- Infrastructure**
+**Rust Crates: Infrastructure**
 
 | Crate | Description | Install |
 |-------|-------------|---------|
@@ -100,7 +100,7 @@ cargo install clasp-cli
 | [clasp-federation](https://crates.io/crates/clasp-federation) | Router-to-router federation | `cargo add clasp-federation` |
 | [clasp-discovery](https://crates.io/crates/clasp-discovery) | mDNS/DNS-SD device discovery | `cargo add clasp-discovery` |
 
-**Rust Crates -- DefraDB Integration** ([docs](docs/defra/) | [DEFRA.md](DEFRA.md))
+**Rust Crates: DefraDB Integration** ([docs](docs/defra/) | [DEFRA.md](DEFRA.md))
 
 | Crate | Description | Install |
 |-------|-------------|---------|
@@ -133,13 +133,35 @@ c.on('/lights/**', (val, addr) => { ... })    // wildcard subscribe
 await c.emit('/cues/go')                      // fire-and-forget event
 c.stream('/sensors/accel', { x: 0.1, y: 9.8 }) // high-rate data
 
-// Devices, encrypted rooms, rules, bridges -- all built in
+// Devices, encrypted rooms, rules, bridges. All built in
 const device = await c.register({ name: 'Sensor', scopes: ['write:/sensors/**'] })
 const room = await c.room('/chat/private')    // E2E encrypted
 c.rule('alert', { when: '/temp', above: 30, then: { emit: ['/alert', 'hot!'] } })
 ```
 
 For lower-level control, use `@clasp-to/core` directly ([docs](docs/sdk/javascript.md)).
+
+## DefraDB Integration
+
+CLASP moves data between devices at microsecond speed but forgets everything when you turn it off. [DefraDB](https://source.network/defradb) remembers everything forever and syncs between devices automatically. Six crates plug them together.
+
+When CLASP routes a signal, it can also save it to DefraDB. When DefraDB syncs a change from another device, CLASP broadcasts it as a live signal. The fast path stays fast (sub-100 microseconds from an in-memory cache), and persistence happens in the background.
+
+**CLASP gets memory.** Router dies, restarts, all state is back. Two routers in different cities converge their state automatically through DefraDB's conflict-free sync.
+
+**DefraDB gets into browsers and hardware.** CLASP tunnels DefraDB's sync protocol over WebSocket, WebRTC, and QUIC. A web app can now participate in DefraDB replication.
+
+**Physical world meets distributed database.** A temperature sensor speaking MQTT, a lighting desk speaking DMX, a phone speaking WebSocket. CLASP already bridges all of those. Now that bridge extends to DefraDB.
+
+```bash
+clasp-router --journal --journal-backend defra --journal-defra-url http://localhost:9181
+```
+
+```
+CLASP Router A ──> DefraDB Node 1 ◄──P2P──► DefraDB Node 2 <── CLASP Router B
+```
+
+See [DEFRA.md](DEFRA.md) for the full guide. Detailed docs at [docs/defra/](docs/defra/).
 
 ## Quick Start
 
@@ -460,7 +482,7 @@ cargo add clasp-transport --features "websocket,quic,serial"
 
 ## CLASP Chat
 
-[CLASP Chat](apps/chat/) is a fully-featured encrypted chat application built entirely on top of CLASP. It demonstrates what happens when you push the protocol to its limits: a real-time chat app with E2E encryption, video calling, namespaces, and a plugin system — all running on a **generic CLASP relay that has zero knowledge of chat**.
+[CLASP Chat](apps/chat/) is a fully-featured encrypted chat application built entirely on top of CLASP. It demonstrates what happens when you push the protocol to its limits: a real-time chat app with E2E encryption, video calling, namespaces, and a plugin system running on a **generic CLASP relay that has zero knowledge of chat**.
 
 ### No Chat Server
 
@@ -583,52 +605,6 @@ clasp server --port 7331 \
     --federation-hub ws://hub:7330 \
     --federation-namespaces "/site-a/**"
 ```
-
-### DefraDB Integration (P2P State Sync)
-
-CLASP integrates with [DefraDB](https://source.network/defradb), a peer-to-peer document database built on Merkle CRDTs, for persistent storage with automatic multi-node replication. No central database server required -- data syncs directly between peers.
-
-```
-┌──────────────┐     ┌──────────────┐
-│  CLASP       │     │  CLASP       │
-│  Router A    │     │  Router B    │
-│  (port 7330) │     │  (port 7331) │
-└──────┬───────┘     └──────┬───────┘
-       │                    │
-       ▼                    ▼
-┌──────────────┐     ┌──────────────┐
-│  DefraDB     │◄───►│  DefraDB     │
-│  Node 1      │ P2P │  Node 2      │
-└──────────────┘     └──────────────┘
-```
-
-What this enables:
-
-- **P2P Journal Sync** -- router state mutations replicate across nodes via Merkle CRDTs. No federation protocol needed
-- **Unified Identity** -- one Ed25519 keypair produces a CLASP EntityId, a W3C DID, and a libp2p PeerID
-- **Real-Time Bridge** -- DefraDB document changes become CLASP signals; CLASP SETs update DefraDB documents
-- **Config Sync** -- router/bridge/connection configs sync P2P with version history and rollback
-- **Persistent State Store** -- write-through DashMap cache (sub-100us hot path) with async DefraDB persistence
-- **Browser P2P** -- tunnel DefraDB sync over CLASP's WebSocket/WebRTC transports
-
-```bash
-# Start router with DefraDB journal backend
-clasp-router --journal --journal-backend defra --journal-defra-url http://localhost:9181
-```
-
-```rust
-use clasp_journal_defra::DefraJournal;
-use clasp_journal::Journal;
-
-// Connect to DefraDB -- schemas provisioned automatically
-let journal = DefraJournal::connect("http://localhost:9181").await?;
-
-// Use as any Journal backend -- P2P sync happens automatically
-journal.append(entry).await?;
-let history = journal.query("/lights/**", None, None, Some(100), &[]).await?;
-```
-
-See [DEFRA.md](DEFRA.md) for the full integration guide, architecture decisions, and testing strategy. Detailed docs at [docs/defra/](docs/defra/).
 
 ## Documentation
 

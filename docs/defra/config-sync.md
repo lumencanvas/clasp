@@ -52,7 +52,7 @@ When two team members use `DefraConfigStore` pointed at peered DefraDB nodes, co
 2. DefraDB replicates the document to Bob's node via Merkle CRDTs
 3. Bob's `DefraConfigStore` sees the new config on its next query
 
-Concurrent edits merge deterministically -- DefraDB's LWW-Register picks the latest write by timestamp.
+Concurrent edits merge deterministically: DefraDB's LWW-Register picks the latest write by timestamp.
 
 ## Version History
 

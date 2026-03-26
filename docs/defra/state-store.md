@@ -91,7 +91,7 @@ CLASP's conflict strategies (LWW, Max, Min, Lock, Merge) are enforced in the CLA
 
 ## Crash Recovery
 
-With `preload: true`, the store loads all state from DefraDB when `DefraStateStore::new()` is called. No separate recovery step needed -- the constructor handles it.
+With `preload: true`, the store loads all state from DefraDB when `DefraStateStore::new()` is called. No separate recovery step needed: the constructor handles it.
 
 ## Timestamps
 

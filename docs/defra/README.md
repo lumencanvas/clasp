@@ -6,7 +6,7 @@ order: 7
 
 # DefraDB Integration
 
-CLASP integrates with [DefraDB](https://source.network/defradb), a peer-to-peer document database built on Merkle CRDTs. This gives CLASP durable, distributed state without requiring a central database -- data syncs directly between peers.
+CLASP integrates with [DefraDB](https://source.network/defradb), a peer-to-peer document database built on Merkle CRDTs. This gives CLASP durable, distributed state without requiring a central database: data syncs directly between peers.
 
 ## Why DefraDB?
 
@@ -35,11 +35,11 @@ Each CLASP router connects to a local DefraDB instance. The hot path (SET/GET) s
 
 ## Getting Started
 
-1. [Quick Start](quick-start.md) -- run DefraDB and connect a CLASP router
-2. [Crate Guide](crates.md) -- what each crate does and when to use it
-3. [State Store](state-store.md) -- the write-through cache architecture
-4. [Configuration Sync](config-sync.md) -- P2P configuration management
-5. [Bridge](bridge.md) -- real-time DefraDB change notifications
-6. [Transport Tunnel](transport.md) -- DefraDB sync over CLASP transports
-7. [Identity](identity.md) -- unified Ed25519 identity across systems
-8. [Testing](testing.md) -- Docker setup, integration tests, E2E tests
+1. [Quick Start](quick-start.md): run DefraDB and connect a CLASP router
+2. [Crate Guide](crates.md): what each crate does and when to use it
+3. [State Store](state-store.md): the write-through cache architecture
+4. [Configuration Sync](config-sync.md): P2P configuration management
+5. [Bridge](bridge.md): real-time DefraDB change notifications
+6. [Transport Tunnel](transport.md): DefraDB sync over CLASP transports
+7. [Identity](identity.md): unified Ed25519 identity across systems
+8. [Testing](testing.md): Docker setup, integration tests, E2E tests

@@ -53,7 +53,7 @@ let client = ClaspBuilder::new("ws://localhost:7330")
 client.set("/lights/brightness", Value::Float(0.8)).await?;
 ```
 
-Kill the router, restart it. The value is still there -- recovered from DefraDB on startup.
+Kill the router, restart it. The value is still there: recovered from DefraDB on startup.
 
 ## 4. Two-Node Setup (P2P Sync)
 

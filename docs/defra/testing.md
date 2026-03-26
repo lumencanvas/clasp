@@ -57,9 +57,9 @@ bash teardown.sh
 
 The `defra-sync-tests` binary verifies end-to-end state propagation:
 
-1. **test_journal_sync** -- write journal entry on node 1, verify it appears on node 2
-2. **test_state_store_sync** -- set param via DefraStateStore on node 1, load from node 2
-3. **test_config_sync** -- save router config on node 1, query from node 2
+1. **test_journal_sync**: write journal entry on node 1, verify it appears on node 2
+2. **test_state_store_sync**: set param via DefraStateStore on node 1, load from node 2
+3. **test_config_sync**: save router config on node 1, query from node 2
 
 All use unique UUIDs to avoid collisions. Tests skip gracefully if DefraDB is not running.
 
@@ -74,11 +74,11 @@ cargo bench -p clasp-state-defra --bench cache_bench -- --test
 ```
 
 Benchmark groups:
-- `cache_get` -- hit and miss lookups
-- `cache_set` -- new inserts and updates
-- `cache_pattern_match` -- prefix filtering
-- `concurrent_read_write` -- interleaved operations
-- `cache_scaling` -- GET latency at 100, 1k, 10k, 100k entries
+- `cache_get`: hit and miss lookups
+- `cache_set`: new inserts and updates
+- `cache_pattern_match`: prefix filtering
+- `concurrent_read_write`: interleaved operations
+- `cache_scaling`: GET latency at 100, 1k, 10k, 100k entries
 
 ## CI
 

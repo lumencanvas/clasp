@@ -12,9 +12,9 @@ Three things this makes possible that neither could do alone:
 
 **CLASP gets memory.** Router dies, restarts, all state is back. Two routers in different cities converge their state automatically through DefraDB's conflict-free sync. No more single-point-of-failure hub-and-spoke.
 
-**DefraDB gets into browsers and hardware.** DefraDB uses LibP2P for sync, which barely works in browsers and doesn't work at all on Arduinos or BLE sensors. CLASP tunnels DefraDB's sync protocol over WebSocket, WebRTC, and QUIC -- transports that work everywhere. A web app can now participate in DefraDB replication.
+**DefraDB gets into browsers and hardware.** DefraDB uses LibP2P for sync, which barely works in browsers and doesn't work at all on Arduinos or BLE sensors. CLASP tunnels DefraDB's sync protocol over WebSocket, WebRTC, and QUIC: transports that work everywhere. A web app can now participate in DefraDB replication.
 
-**Physical world meets distributed database.** A temperature sensor speaking MQTT, a lighting desk speaking DMX, a phone speaking WebSocket -- CLASP already bridges all of those. Now that bridge extends to DefraDB. Hardware data lands in a persistent, P2P-replicated, conflict-free database without anyone writing glue code.
+**Physical world meets distributed database.** A temperature sensor speaking MQTT, a lighting desk speaking DMX, a phone speaking WebSocket: CLASP already bridges all of those. Now that bridge extends to DefraDB. Hardware data lands in a persistent, P2P-replicated, conflict-free database without anyone writing glue code.
 
 Short version: CLASP is DefraDB's nervous system. DefraDB is CLASP's long-term memory.
 
@@ -72,13 +72,13 @@ Configuration knobs via `DefraStateConfig`:
 Bidirectional signal bridge. Maps DefraDB documents to CLASP addresses:
 
 ```
-/defra/{collection}/{docID}          -- whole document
-/defra/{collection}/{docID}/{field}  -- specific field
+/defra/{collection}/{docID}          whole document
+/defra/{collection}/{docID}/{field}  specific field
 ```
 
 A `DefraWatcher` polls DefraDB for document changes and emits CLASP signals. A `DefraWriter` subscribes to `/defra/**` on the CLASP router and writes incoming signals back to DefraDB. An `OriginTracker` prevents echo loops with a configurable TTL-based suppression window (default 5s).
 
-This is what lets any CLASP client -- a TouchOSC surface, a web dashboard, an Arduino -- subscribe to database mutations as real-time signals.
+This is what lets any CLASP client (a TouchOSC surface, a web dashboard, an Arduino) subscribe to database mutations as real-time signals.
 
 ```rust
 use clasp_defra_bridge::{DefraBridge, SignalSender, SignalReceiver};
@@ -111,7 +111,7 @@ This crate wraps DefraDB sync messages as `TunnelMessage` variants:
 
 Address namespace: `/defra/sync/{peer_id}/{collection}`
 
-This breaks DefraDB out of the LibP2P-only world. Browsers, BLE devices, serial-connected microcontrollers, anything behind restrictive NATs -- all can participate in DefraDB replication through CLASP's transport layer.
+This breaks DefraDB out of the LibP2P-only world. Browsers, BLE devices, serial-connected microcontrollers, anything behind restrictive NATs: all can participate in DefraDB replication through CLASP's transport layer.
 
 **Tests**: 10 unit (protocol roundtrips, address parsing, peer registration) + 2 integration
 
@@ -175,11 +175,11 @@ println!("{}", id.peer_id());   // 12D3KooW...
 
 ### State survives router restarts
 
-`DefraStateStore` preloads all state from DefraDB on startup. Kill the router, restart it, every param is back at its last value. Late-joining clients get the full current state -- including everything written before the last reboot.
+`DefraStateStore` preloads all state from DefraDB on startup. Kill the router, restart it, every param is back at its last value. Late-joining clients get the full current state: including everything written before the last reboot.
 
 ### Multi-router topologies without federation
 
-Two CLASP routers backed by peered DefraDB nodes converge state automatically. Router A sets `/lights/brightness` to 0.8. DefraDB syncs the document. Router B's sync worker picks it up. Any client on Router B sees the change. No federation protocol needed -- DefraDB's Merkle CRDTs handle it.
+Two CLASP routers backed by peered DefraDB nodes converge state automatically. Router A sets `/lights/brightness` to 0.8. DefraDB syncs the document. Router B's sync worker picks it up. Any client on Router B sees the change. No federation protocol needed: DefraDB's Merkle CRDTs handle it.
 
 ### Browser-to-browser DefraDB sync
 
@@ -191,7 +191,7 @@ The bridge maps DefraDB changes to subscribable CLASP signals. A dashboard subsc
 
 ### Distributed configuration management
 
-Show configs, device registrations, routing rules -- all stored as DefraDB documents with automatic P2P sync, version history, and DID-based access control. A touring show connects at a new venue and pulls the full production config from any peer that has it.
+Show configs, device registrations, routing rules: all stored as DefraDB documents with automatic P2P sync, version history, and DID-based access control. A touring show connects at a new venue and pulls the full production config from any peer that has it.
 
 ## CLI Usage
 
@@ -235,16 +235,16 @@ Plus 3 E2E sync tests (`cargo run -p clasp-e2e --bin defra-sync-tests`) and 5 cr
 
 Verify end-to-end state propagation across two DefraDB nodes:
 
-1. `test_journal_sync` -- write journal entry on node 1, read from node 2 after P2P sync
-2. `test_state_store_sync` -- set param via DefraStateStore on node 1, verify on node 2
-3. `test_config_sync` -- save router config on node 1, load from node 2
+1. `test_journal_sync`: write journal entry on node 1, read from node 2 after P2P sync
+2. `test_state_store_sync`: set param via DefraStateStore on node 1, verify on node 2
+3. `test_config_sync`: save router config on node 1, load from node 2
 
 All three pass with 3-5 second sync windows on a local Docker network.
 
 ## Architecture Decisions
 
 ### ADR-001: HTTP/GraphQL for DefraDB communication
-DefraDB is Go, CLASP is Rust. HTTP/GraphQL is the cleanest boundary -- no CGO, no build complexity. Journal append is fire-and-forget async, so latency is acceptable.
+DefraDB is Go, CLASP is Rust. HTTP/GraphQL is the cleanest boundary: no CGO, no build complexity. Journal append is fire-and-forget async, so latency is acceptable.
 
 ### ADR-002: Sequence numbers are router-local
 DefraDB documents get CIDs, not sequential IDs. Local AtomicU64 counter initialized from max(seq) on startup. Cross-router sync uses DefraDB's native Merkle CRDT replication.
