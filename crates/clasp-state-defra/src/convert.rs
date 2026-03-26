@@ -316,10 +316,7 @@ mod tests {
         assert_eq!(recovered.timestamp, 1_700_000_000_000_000);
         assert_eq!(recovered.last_accessed, 1_700_000_001_000_000);
         assert_eq!(recovered.strategy, ConflictStrategy::Max);
-        assert_eq!(
-            recovered.lock_holder,
-            Some("session-abc".to_string())
-        );
+        assert_eq!(recovered.lock_holder, Some("session-abc".to_string()));
         assert_eq!(recovered.origin, Some("router-1".to_string()));
         assert_eq!(recovered.ttl, Some(Ttl::Sliding(300)));
     }

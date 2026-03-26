@@ -98,14 +98,14 @@ impl DefraTunnel {
 
             TunnelMessage::DagBlock { cid, data, links } => {
                 debug!(peer = %from_peer, %cid, "received DAG block");
-                let block_info = BlockInfo { cid: cid.clone(), data, links };
+                let block_info = BlockInfo {
+                    cid: cid.clone(),
+                    data,
+                    links,
+                };
                 let applied = apply_received_blocks(&self.local_defra, &[block_info]).await?;
                 Ok(Some(TunnelMessage::BlockAck {
-                    cids: if applied > 0 {
-                        vec![cid]
-                    } else {
-                        vec![]
-                    },
+                    cids: if applied > 0 { vec![cid] } else { vec![] },
                 }))
             }
 
@@ -167,8 +167,7 @@ impl DefraTunnel {
 
         for collection in &state.collections {
             let last_cid = state.last_sync.get(collection).map(|s| s.as_str());
-            let blocks =
-                compute_sync_diff(&self.local_defra, collection, last_cid).await?;
+            let blocks = compute_sync_diff(&self.local_defra, collection, last_cid).await?;
 
             for block in blocks {
                 messages.push(TunnelMessage::DagBlock {
@@ -267,10 +266,7 @@ mod tests {
             collections: vec!["devices".into()],
         };
 
-        let response = tunnel
-            .handle_message("remote-peer", msg)
-            .await
-            .unwrap();
+        let response = tunnel.handle_message("remote-peer", msg).await.unwrap();
 
         assert!(response.is_some());
         if let Some(TunnelMessage::PeerInfo { peer_id, .. }) = response {

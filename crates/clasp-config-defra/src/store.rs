@@ -29,9 +29,10 @@ impl DefraConfigStore {
 
         // Provision all config schemas
         for sdl in schema::ALL_SCHEMAS {
-            client.add_schema(sdl).await.map_err(|e| {
-                ConfigDefraError::Schema(e.to_string())
-            })?;
+            client
+                .add_schema(sdl)
+                .await
+                .map_err(|e| ConfigDefraError::Schema(e.to_string()))?;
         }
 
         debug!("Config schemas provisioned");
@@ -42,7 +43,10 @@ impl DefraConfigStore {
 
     /// Save a router config (upsert: creates or updates by configId).
     pub async fn save_router(&self, config: &RouterConfig) -> Result<()> {
-        if let Some(doc_id) = self.find_doc_id("ClaspRouterConfig", &config.config_id).await? {
+        if let Some(doc_id) = self
+            .find_doc_id("ClaspRouterConfig", &config.config_id)
+            .await?
+        {
             let mutation = convert::router_to_update_mutation(&doc_id, config);
             self.execute_mutation(&mutation).await?;
             debug!(config_id = %config.config_id, "Updated router config");
@@ -109,14 +113,18 @@ impl DefraConfigStore {
 
     /// Delete a router config by configId. Returns true if found and deleted.
     pub async fn delete_router(&self, config_id: &str) -> Result<bool> {
-        self.delete_by_config_id("ClaspRouterConfig", config_id).await
+        self.delete_by_config_id("ClaspRouterConfig", config_id)
+            .await
     }
 
     // -- Connection configs ---------------------------------------------------
 
     /// Save a connection config (upsert).
     pub async fn save_connection(&self, config: &ConnectionConfig) -> Result<()> {
-        if let Some(doc_id) = self.find_doc_id("ClaspConnectionConfig", &config.config_id).await? {
+        if let Some(doc_id) = self
+            .find_doc_id("ClaspConnectionConfig", &config.config_id)
+            .await?
+        {
             let mutation = convert::connection_to_update_mutation(&doc_id, config);
             self.execute_mutation(&mutation).await?;
             debug!(config_id = %config.config_id, "Updated connection config");
@@ -161,19 +169,25 @@ impl DefraConfigStore {
 
         let data = self.execute_query(&query).await?;
         let docs = extract_array(&data, "ClaspConnectionConfig");
-        docs.iter().map(|d| convert::connection_from_doc(d)).collect()
+        docs.iter()
+            .map(|d| convert::connection_from_doc(d))
+            .collect()
     }
 
     /// Delete a connection config by configId.
     pub async fn delete_connection(&self, config_id: &str) -> Result<bool> {
-        self.delete_by_config_id("ClaspConnectionConfig", config_id).await
+        self.delete_by_config_id("ClaspConnectionConfig", config_id)
+            .await
     }
 
     // -- Bridge configs -------------------------------------------------------
 
     /// Save a bridge config (upsert).
     pub async fn save_bridge(&self, config: &BridgeConfig) -> Result<()> {
-        if let Some(doc_id) = self.find_doc_id("ClaspBridgeConfig", &config.config_id).await? {
+        if let Some(doc_id) = self
+            .find_doc_id("ClaspBridgeConfig", &config.config_id)
+            .await?
+        {
             let mutation = convert::bridge_to_update_mutation(&doc_id, config);
             self.execute_mutation(&mutation).await?;
             debug!(config_id = %config.config_id, "Updated bridge config");
@@ -223,14 +237,18 @@ impl DefraConfigStore {
 
     /// Delete a bridge config by configId.
     pub async fn delete_bridge(&self, config_id: &str) -> Result<bool> {
-        self.delete_by_config_id("ClaspBridgeConfig", config_id).await
+        self.delete_by_config_id("ClaspBridgeConfig", config_id)
+            .await
     }
 
     // -- Rule configs ---------------------------------------------------------
 
     /// Save a rule config (upsert).
     pub async fn save_rule(&self, config: &RuleConfig) -> Result<()> {
-        if let Some(doc_id) = self.find_doc_id("ClaspRuleConfig", &config.config_id).await? {
+        if let Some(doc_id) = self
+            .find_doc_id("ClaspRuleConfig", &config.config_id)
+            .await?
+        {
             let mutation = convert::rule_to_update_mutation(&doc_id, config);
             self.execute_mutation(&mutation).await?;
             debug!(config_id = %config.config_id, "Updated rule config");
@@ -355,9 +373,8 @@ impl DefraConfigStore {
     ///
     /// Returns the snapshot that was created from the import.
     pub async fn import_json(&self, json: &str, owner: &str) -> Result<ConfigSnapshot> {
-        let snapshot: ConfigSnapshot = serde_json::from_str(json).map_err(|e| {
-            ConfigDefraError::Deserialization(format!("invalid config JSON: {e}"))
-        })?;
+        let snapshot: ConfigSnapshot = serde_json::from_str(json)
+            .map_err(|e| ConfigDefraError::Deserialization(format!("invalid config JSON: {e}")))?;
 
         // Save individual configs
         for router in &snapshot.routers {
@@ -471,9 +488,10 @@ impl DefraConfigStore {
     /// into a GraphQL query.
     fn validate_collection(collection: &str) -> Result<()> {
         if !Self::VALID_COLLECTIONS.contains(&collection) {
-            return Err(ConfigDefraError::InvalidConfig(
-                format!("unknown collection: {}", collection),
-            ));
+            return Err(ConfigDefraError::InvalidConfig(format!(
+                "unknown collection: {}",
+                collection
+            )));
         }
         Ok(())
     }
@@ -668,7 +686,11 @@ mod tests {
             name: "Test Snapshot".into(),
             description: "Integration test".into(),
             routers: vec![RouterConfig::new(&format!("sr-{}", uid()), "R1", "test")],
-            connections: vec![ConnectionConfig::new(&format!("sc-{}", uid()), "C1", "test")],
+            connections: vec![ConnectionConfig::new(
+                &format!("sc-{}", uid()),
+                "C1",
+                "test",
+            )],
             bridges: vec![],
             rules: vec![],
             owner: "test".into(),

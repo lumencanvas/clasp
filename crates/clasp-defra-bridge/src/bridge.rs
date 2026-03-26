@@ -107,9 +107,8 @@ impl DefraBridge {
         let shutdown_writer = shutdown.clone();
 
         // Spawn watcher task (DefraDB -> CLASP)
-        let watcher_handle = tokio::spawn(async move {
-            self.watcher.run(sender, shutdown_watcher).await
-        });
+        let watcher_handle =
+            tokio::spawn(async move { self.watcher.run(sender, shutdown_watcher).await });
 
         // Spawn writer task (CLASP -> DefraDB)
         let writer = self.writer;

@@ -115,18 +115,11 @@ impl DefraJournal {
 
     /// Parse a single journal entry document.
     fn parse_entry(doc: &serde_json::Value) -> Result<JournalEntry> {
-        let seq = doc
-            .get("seq")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let seq = doc.get("seq").and_then(|v| v.as_u64()).unwrap_or(0);
         if doc.get("seq").and_then(|v| v.as_u64()).is_none() {
             warn!("Journal entry missing 'seq' field, defaulting to 0");
         }
-        let timestamp = doc
-            .get("timestamp")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0)
-            * 1_000_000; // Stored as seconds, convert back to microseconds
+        let timestamp = doc.get("timestamp").and_then(|v| v.as_u64()).unwrap_or(0) * 1_000_000; // Stored as seconds, convert back to microseconds
         let author = doc
             .get("author")
             .and_then(|v| v.as_str())
@@ -148,18 +141,10 @@ impl DefraJournal {
             .and_then(|v| v.as_i64())
             .map(|v| convert::int_to_signal_type(v as i32))
             .unwrap_or(SignalType::Event);
-        let value_str = doc
-            .get("value")
-            .and_then(|v| v.as_str())
-            .unwrap_or("null");
+        let value_str = doc.get("value").and_then(|v| v.as_str()).unwrap_or("null");
         let value = convert::json_to_value(value_str);
-        let revision = doc
-            .get("revision")
-            .and_then(|v| v.as_u64());
-        let msg_type = doc
-            .get("msgType")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as u8;
+        let revision = doc.get("revision").and_then(|v| v.as_u64());
+        let msg_type = doc.get("msgType").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
         if doc.get("msgType").and_then(|v| v.as_u64()).is_none() {
             warn!("Journal entry missing 'msgType' field, defaulting to 0");
         }
@@ -198,25 +183,15 @@ impl DefraJournal {
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
-        let value_str = doc
-            .get("value")
-            .and_then(|v| v.as_str())
-            .unwrap_or("null");
+        let value_str = doc.get("value").and_then(|v| v.as_str()).unwrap_or("null");
         let value = convert::json_to_value(value_str);
-        let revision = doc
-            .get("revision")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let revision = doc.get("revision").and_then(|v| v.as_u64()).unwrap_or(0);
         let writer = doc
             .get("writer")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
-        let timestamp = doc
-            .get("timestamp")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0)
-            * 1_000_000; // Stored as seconds, convert back to microseconds
+        let timestamp = doc.get("timestamp").and_then(|v| v.as_u64()).unwrap_or(0) * 1_000_000; // Stored as seconds, convert back to microseconds
 
         Ok(ParamSnapshot {
             address,
@@ -323,10 +298,7 @@ impl Journal for DefraJournal {
                 .iter()
                 .map(|t| convert::signal_type_to_int(*t).to_string())
                 .collect();
-            filters.push(format!(
-                "signalType: {{_in: [{}]}}",
-                type_ints.join(", ")
-            ));
+            filters.push(format!("signalType: {{_in: [{}]}}", type_ints.join(", ")));
         }
 
         let filter_str = filters.join(", ");
@@ -515,11 +487,7 @@ impl Journal for DefraJournal {
             .and_then(|v| v.as_array())
             .map(|arr| {
                 arr.iter()
-                    .filter_map(|doc| {
-                        doc.get("_docID")
-                            .and_then(|v| v.as_str())
-                            .map(String::from)
-                    })
+                    .filter_map(|doc| doc.get("_docID").and_then(|v| v.as_str()).map(String::from))
                     .collect()
             })
             .unwrap_or_default();

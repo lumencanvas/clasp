@@ -3,13 +3,24 @@ name: DefraDB Integration Tests
 on:
   push:
     paths:
-      - 'crates/clasp-journal-defra/**'
       - 'crates/clasp-identity/**'
+      - 'crates/clasp-journal-defra/**'
+      - 'crates/clasp-registry-defra/**'
+      - 'crates/clasp-defra-bridge/**'
+      - 'crates/clasp-config-defra/**'
+      - 'crates/clasp-defra-transport/**'
+      - 'crates/clasp-state-defra/**'
       - 'tests/defra/**'
+      - '.github/workflows/defra-integration.yml'
   pull_request:
     paths:
-      - 'crates/clasp-journal-defra/**'
       - 'crates/clasp-identity/**'
+      - 'crates/clasp-journal-defra/**'
+      - 'crates/clasp-registry-defra/**'
+      - 'crates/clasp-defra-bridge/**'
+      - 'crates/clasp-config-defra/**'
+      - 'crates/clasp-defra-transport/**'
+      - 'crates/clasp-state-defra/**'
       - 'tests/defra/**'
 
 jobs:
@@ -22,29 +33,34 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p clasp-identity
       - run: cargo test -p clasp-journal-defra
+      - run: cargo test -p clasp-registry-defra
+      - run: cargo test -p clasp-defra-bridge
+      - run: cargo test -p clasp-config-defra
+      - run: cargo test -p clasp-defra-transport
+      - run: cargo test -p clasp-state-defra
 
   integration-tests:
     name: Integration Tests (DefraDB)
     runs-on: ubuntu-latest
     services:
       defra1:
-        image: sourcenetwork/defradb:v1.0.0-rc1
+        image: sourcenetwork/defradb:latest
         ports:
           - 9181:9181
         options: >-
-          --health-cmd "wget --spider -q http://localhost:9181/api/v0/ || exit 1"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
+          --health-cmd "bash -c 'echo > /dev/tcp/localhost/9181'"
+          --health-interval 3s
+          --health-timeout 2s
+          --health-retries 15
       defra2:
-        image: sourcenetwork/defradb:v1.0.0-rc1
+        image: sourcenetwork/defradb:latest
         ports:
           - 9182:9181
         options: >-
-          --health-cmd "wget --spider -q http://localhost:9181/api/v0/ || exit 1"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
+          --health-cmd "bash -c 'echo > /dev/tcp/localhost/9181'"
+          --health-interval 3s
+          --health-timeout 2s
+          --health-retries 15
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -55,3 +71,7 @@ jobs:
           DEFRA_URL_2: http://localhost:9182
         run: |
           cargo test -p clasp-journal-defra -- --ignored --test-threads=1
+          cargo test -p clasp-registry-defra -- --ignored --test-threads=1
+          cargo test -p clasp-config-defra -- --ignored --test-threads=1
+          cargo test -p clasp-defra-transport -- --ignored --test-threads=1
+          cargo test -p clasp-state-defra -- --ignored --test-threads=1

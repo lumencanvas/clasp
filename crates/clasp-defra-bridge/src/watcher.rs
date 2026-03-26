@@ -214,10 +214,7 @@ mod tests {
             address: &str,
             value: Value,
         ) -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
-            self.sets
-                .lock()
-                .unwrap()
-                .push((address.to_string(), value));
+            self.sets.lock().unwrap().push((address.to_string(), value));
             Ok(())
         }
 
@@ -261,7 +258,10 @@ mod tests {
         sender
             .emit(
                 "/defra/User/bae-abc",
-                Value::Map(HashMap::from([("name".to_string(), Value::String("Alice".into()))])),
+                Value::Map(HashMap::from([(
+                    "name".to_string(),
+                    Value::String("Alice".into()),
+                )])),
             )
             .await
             .unwrap();

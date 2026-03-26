@@ -11,9 +11,7 @@ use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter("info")
-        .init();
+    tracing_subscriber::fmt().with_env_filter("info").init();
 
     println!("=== DefraDB Sync E2E Tests ===\n");
 
@@ -97,7 +95,10 @@ async fn test_journal_sync(defra1: &str, defra2: &str) -> Result<()> {
     if let Value::Float(v) = &synced.value {
         assert!((v - 42.0).abs() < f64::EPSILON);
     } else {
-        anyhow::bail!("Wrong value type synced: expected Float, got {:?}", synced.value);
+        anyhow::bail!(
+            "Wrong value type synced: expected Float, got {:?}",
+            synced.value
+        );
     }
 
     println!("ok (seq={}, synced {} entries)", seq, entries.len());
@@ -171,11 +172,7 @@ async fn test_config_sync(defra1: &str, defra2: &str) -> Result<()> {
 
     let unique_id = format!(
         "e2e-router-{}",
-        uuid::Uuid::new_v4()
-            .to_string()
-            .split('-')
-            .next()
-            .unwrap()
+        uuid::Uuid::new_v4().to_string().split('-').next().unwrap()
     );
     let config = RouterConfig::new(&unique_id, "E2E Sync Test Router", "e2e-owner");
     store1.save_router(&config).await?;

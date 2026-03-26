@@ -73,7 +73,11 @@ impl DefraClient {
         for attempt in 0..=self.max_retries {
             if attempt > 0 {
                 let delay = self.retry_base_delay * 2u32.saturating_pow(attempt - 1);
-                warn!(attempt, delay_ms = delay.as_millis() as u64, "Retrying DefraDB request");
+                warn!(
+                    attempt,
+                    delay_ms = delay.as_millis() as u64,
+                    "Retrying DefraDB request"
+                );
                 tokio::time::sleep(delay).await;
             }
 
@@ -90,7 +94,9 @@ impl DefraClient {
             if resp.status().is_server_error() {
                 let status = resp.status();
                 let text = resp.text().await.unwrap_or_default();
-                last_err = Some(DefraError::GraphQL(format!("server error {status}: {text}")));
+                last_err = Some(DefraError::GraphQL(format!(
+                    "server error {status}: {text}"
+                )));
                 continue;
             }
 
@@ -153,9 +159,7 @@ impl DefraClient {
         }
 
         warn!(status = %status, body = %text, "Schema provisioning failed");
-        Err(DefraError::Schema(format!(
-            "status {status}: {text}"
-        )))
+        Err(DefraError::Schema(format!("status {status}: {text}")))
     }
 
     /// Check whether the DefraDB instance is reachable.

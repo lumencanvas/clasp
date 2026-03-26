@@ -38,4 +38,3 @@ impl From<DefraRegistryError> for RegistryError {
         }
     }
 }
-

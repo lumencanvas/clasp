@@ -28,9 +28,10 @@ impl DefraEntityStore {
     pub async fn connect(defra_url: &str) -> Result<Self> {
         let client = DefraClient::new(defra_url);
 
-        client.add_schema(ENTITY_SCHEMA).await.map_err(|e| {
-            RegistryError::StorageError(format!("schema provisioning failed: {e}"))
-        })?;
+        client
+            .add_schema(ENTITY_SCHEMA)
+            .await
+            .map_err(|e| RegistryError::StorageError(format!("schema provisioning failed: {e}")))?;
 
         debug!(url = %defra_url, "DefraDB entity store connected");
 
@@ -40,10 +41,7 @@ impl DefraEntityStore {
     /// Look up a single entity document by its entityId field.
     ///
     /// Returns the raw DefraDB document (including `_docID`) or `None`.
-    async fn find_doc_by_entity_id(
-        &self,
-        entity_id: &str,
-    ) -> Result<Option<serde_json::Value>> {
+    async fn find_doc_by_entity_id(&self, entity_id: &str) -> Result<Option<serde_json::Value>> {
         let query = r#"
             query {
                 ClaspEntity(filter: { entityId: { _eq: $id } }) {
@@ -63,13 +61,13 @@ impl DefraEntityStore {
         "#
         .replace("$id", &format!("\"{}\"", entity_id));
 
-        let data = self.client.graphql(&query, None).await.map_err(|e| {
-            RegistryError::StorageError(format!("query failed: {e}"))
-        })?;
+        let data = self
+            .client
+            .graphql(&query, None)
+            .await
+            .map_err(|e| RegistryError::StorageError(format!("query failed: {e}")))?;
 
-        let docs = data
-            .get("ClaspEntity")
-            .and_then(|v| v.as_array());
+        let docs = data.get("ClaspEntity").and_then(|v| v.as_array());
 
         match docs {
             Some(arr) if !arr.is_empty() => Ok(Some(arr[0].clone())),
@@ -90,7 +88,11 @@ impl DefraEntityStore {
 impl EntityStore for DefraEntityStore {
     async fn create(&self, entity: &Entity) -> Result<()> {
         // Check for existing entity with same ID
-        if self.find_doc_by_entity_id(entity.id.as_str()).await?.is_some() {
+        if self
+            .find_doc_by_entity_id(entity.id.as_str())
+            .await?
+            .is_some()
+        {
             return Err(RegistryError::AlreadyExists(entity.id.as_str().to_string()));
         }
 
@@ -106,9 +108,10 @@ impl EntityStore for DefraEntityStore {
             input_gql
         );
 
-        self.client.graphql(&query, None).await.map_err(|e| {
-            RegistryError::StorageError(format!("create failed: {e}"))
-        })?;
+        self.client
+            .graphql(&query, None)
+            .await
+            .map_err(|e| RegistryError::StorageError(format!("create failed: {e}")))?;
 
         debug!(entity_id = %entity.id, "entity created in DefraDB");
         Ok(())
@@ -144,13 +147,13 @@ impl EntityStore for DefraEntityStore {
             }}"#
         );
 
-        let data = self.client.graphql(&query, None).await.map_err(|e| {
-            RegistryError::StorageError(format!("query failed: {e}"))
-        })?;
+        let data = self
+            .client
+            .graphql(&query, None)
+            .await
+            .map_err(|e| RegistryError::StorageError(format!("query failed: {e}")))?;
 
-        let docs = data
-            .get("ClaspEntity")
-            .and_then(|v| v.as_array());
+        let docs = data.get("ClaspEntity").and_then(|v| v.as_array());
 
         match docs {
             Some(arr) if !arr.is_empty() => {
@@ -179,9 +182,11 @@ impl EntityStore for DefraEntityStore {
             }
         }"#;
 
-        let data = self.client.graphql(query, None).await.map_err(|e| {
-            RegistryError::StorageError(format!("query failed: {e}"))
-        })?;
+        let data = self
+            .client
+            .graphql(query, None)
+            .await
+            .map_err(|e| RegistryError::StorageError(format!("query failed: {e}")))?;
 
         let docs = data
             .get("ClaspEntity")
@@ -194,11 +199,7 @@ impl EntityStore for DefraEntityStore {
             let tags = doc
                 .get("tags")
                 .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_str())
-                        .collect::<Vec<_>>()
-                })
+                .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
                 .unwrap_or_default();
 
             if tags.iter().any(|t| *t == tag) {
@@ -227,9 +228,11 @@ impl EntityStore for DefraEntityStore {
             }
         }"#;
 
-        let data = self.client.graphql(query, None).await.map_err(|e| {
-            RegistryError::StorageError(format!("query failed: {e}"))
-        })?;
+        let data = self
+            .client
+            .graphql(query, None)
+            .await
+            .map_err(|e| RegistryError::StorageError(format!("query failed: {e}")))?;
 
         let docs = data
             .get("ClaspEntity")
@@ -242,11 +245,7 @@ impl EntityStore for DefraEntityStore {
             let namespaces = doc
                 .get("namespaces")
                 .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_str())
-                        .collect::<Vec<_>>()
-                })
+                .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
                 .unwrap_or_default();
 
             if namespaces.iter().any(|ns| *ns == namespace) {
@@ -276,9 +275,11 @@ impl EntityStore for DefraEntityStore {
             }}"#
         );
 
-        let data = self.client.graphql(&query, None).await.map_err(|e| {
-            RegistryError::StorageError(format!("query failed: {e}"))
-        })?;
+        let data = self
+            .client
+            .graphql(&query, None)
+            .await
+            .map_err(|e| RegistryError::StorageError(format!("query failed: {e}")))?;
 
         let docs = data
             .get("ClaspEntity")
@@ -310,9 +311,10 @@ impl EntityStore for DefraEntityStore {
             input_gql
         );
 
-        self.client.graphql(&query, None).await.map_err(|e| {
-            RegistryError::StorageError(format!("update failed: {e}"))
-        })?;
+        self.client
+            .graphql(&query, None)
+            .await
+            .map_err(|e| RegistryError::StorageError(format!("update failed: {e}")))?;
 
         debug!(entity_id = %entity.id, "entity updated in DefraDB");
         Ok(())
@@ -334,9 +336,10 @@ impl EntityStore for DefraEntityStore {
             }}"#
         );
 
-        self.client.graphql(&query, None).await.map_err(|e| {
-            RegistryError::StorageError(format!("update_status failed: {e}"))
-        })?;
+        self.client
+            .graphql(&query, None)
+            .await
+            .map_err(|e| RegistryError::StorageError(format!("update_status failed: {e}")))?;
 
         debug!(entity_id = %id, %status, "entity status updated in DefraDB");
         Ok(())
@@ -358,9 +361,10 @@ impl EntityStore for DefraEntityStore {
             }}"#
         );
 
-        self.client.graphql(&query, None).await.map_err(|e| {
-            RegistryError::StorageError(format!("delete failed: {e}"))
-        })?;
+        self.client
+            .graphql(&query, None)
+            .await
+            .map_err(|e| RegistryError::StorageError(format!("delete failed: {e}")))?;
 
         debug!(entity_id = %id, "entity deleted from DefraDB");
         Ok(true)
@@ -373,9 +377,11 @@ impl EntityStore for DefraEntityStore {
             }
         }"#;
 
-        let data = self.client.graphql(query, None).await.map_err(|e| {
-            RegistryError::StorageError(format!("count query failed: {e}"))
-        })?;
+        let data = self
+            .client
+            .graphql(query, None)
+            .await
+            .map_err(|e| RegistryError::StorageError(format!("count query failed: {e}")))?;
 
         let count = data
             .get("ClaspEntity")
@@ -398,7 +404,9 @@ mod tests {
         // Generate unique key per call so tests don't collide
         let mut key = [0u8; 32];
         let nanos = std::time::SystemTime::now()
-            .duration_since(UNIX_EPOCH).unwrap().as_nanos();
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         key[..16].copy_from_slice(&nanos.to_le_bytes());
         let id = EntityId::from_public_key(&key).unwrap();
         Entity {

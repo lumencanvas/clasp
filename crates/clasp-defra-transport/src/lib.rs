@@ -29,8 +29,7 @@ pub mod sync;
 pub mod tunnel;
 
 pub use address::{
-    block_channel, collection_channel, parse_sync_address, peer_channel, SyncAddress,
-    DEFRA_SYNC_NS,
+    block_channel, collection_channel, parse_sync_address, peer_channel, SyncAddress, DEFRA_SYNC_NS,
 };
 pub use error::{Result, TunnelError};
 pub use protocol::TunnelMessage;

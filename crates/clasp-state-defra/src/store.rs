@@ -126,7 +126,10 @@ impl DefraStateStore {
     pub fn start_writer(&self) -> tokio::task::JoinHandle<()> {
         // Try to take the receiver. If already taken, return a no-op handle.
         let rx = {
-            let mut guard = self.write_rx.try_lock().expect("write_rx lock should not be contended");
+            let mut guard = self
+                .write_rx
+                .try_lock()
+                .expect("write_rx lock should not be contended");
             guard.take()
         };
 
@@ -254,9 +257,7 @@ impl DefraStateStore {
                                     Ok((addr, remote_state)) => {
                                         // Only update cache if remote revision is newer
                                         let should_update = match cache.get(&addr) {
-                                            Some(local) => {
-                                                remote_state.revision > local.revision
-                                            }
+                                            Some(local) => remote_state.revision > local.revision,
                                             None => true,
                                         };
                                         if should_update {
@@ -520,9 +521,7 @@ impl DefraStateStore {
 
         for key in expired {
             if self.cache.remove(&key).is_some() {
-                let _ = self.write_tx.send(WriteOp::Delete {
-                    address: key,
-                });
+                let _ = self.write_tx.send(WriteOp::Delete { address: key });
                 removed += 1;
             }
         }
@@ -785,7 +784,15 @@ mod tests {
 
         // Higher value wins
         let rev = store
-            .set("/test/e", Value::Float(10.0), "s2", None, false, false, None)
+            .set(
+                "/test/e",
+                Value::Float(10.0),
+                "s2",
+                None,
+                false,
+                false,
+                None,
+            )
             .unwrap();
         assert_eq!(rev, 2);
         assert_eq!(store.get("/test/e"), Some(Value::Float(10.0)));
@@ -877,13 +884,37 @@ mod tests {
     fn get_matching_returns_matches() {
         let store = test_store();
         store
-            .set("/synth/osc1/freq", Value::Float(440.0), "s1", None, false, false, None)
+            .set(
+                "/synth/osc1/freq",
+                Value::Float(440.0),
+                "s1",
+                None,
+                false,
+                false,
+                None,
+            )
             .unwrap();
         store
-            .set("/synth/osc1/amp", Value::Float(0.8), "s1", None, false, false, None)
+            .set(
+                "/synth/osc1/amp",
+                Value::Float(0.8),
+                "s1",
+                None,
+                false,
+                false,
+                None,
+            )
             .unwrap();
         store
-            .set("/mixer/ch1/vol", Value::Float(0.5), "s1", None, false, false, None)
+            .set(
+                "/mixer/ch1/vol",
+                Value::Float(0.5),
+                "s1",
+                None,
+                false,
+                false,
+                None,
+            )
             .unwrap();
 
         let matches = store.get_matching("/synth/**");
@@ -953,8 +984,13 @@ mod tests {
     async fn test_load_from_defra() {
         // Insert directly into DefraDB, then load
         let client = DefraClient::new("http://localhost:9181");
-        let unique_addr = format!("/integration/load-test/{}", std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
+        let unique_addr = format!(
+            "/integration/load-test/{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
         let doc = serde_json::json!({
             "address": &unique_addr,
             "value": "123",
@@ -1014,8 +1050,13 @@ mod tests {
             .unwrap();
         let _writer_a = store_a.start_writer();
 
-        let unique_addr = format!("/integration/p2p-sync/{}", std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
+        let unique_addr = format!(
+            "/integration/p2p-sync/{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
 
         store_a
             .set(
@@ -1034,7 +1075,15 @@ mod tests {
         tokio::time::sleep(Duration::from_secs(5)).await;
 
         // Store B connects to node 2 with preload
-        let store_b = match DefraStateStore::new("http://localhost:9182", DefraStateConfig { preload: true, ..Default::default() }).await {
+        let store_b = match DefraStateStore::new(
+            "http://localhost:9182",
+            DefraStateConfig {
+                preload: true,
+                ..Default::default()
+            },
+        )
+        .await
+        {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("Store B creation failed (DefraDB node 2 may be unavailable): {e}");
@@ -1043,9 +1092,6 @@ mod tests {
         };
 
         let val = store_b.get(&unique_addr);
-        assert_eq!(
-            val,
-            Some(Value::String("hello from A".into()))
-        );
+        assert_eq!(val, Some(Value::String("hello from A".into())));
     }
 }

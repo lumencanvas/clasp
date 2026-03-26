@@ -3,9 +3,9 @@
 //! These benchmarks test the hot path (DashMap cache) WITHOUT DefraDB.
 //! The cache must stay under 100us for SET/GET to meet CLASP latency targets.
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use clasp_core::state::ParamState;
 use clasp_core::Value;
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use dashmap::DashMap;
 use std::sync::Arc;
 
@@ -15,7 +15,10 @@ fn bench_cache_get(c: &mut Criterion) {
     // Pre-populate with 1000 params
     for i in 0..1000 {
         let addr = format!("/bench/param/{}", i);
-        cache.insert(addr, ParamState::new(Value::Float(i as f64), "bench".into()));
+        cache.insert(
+            addr,
+            ParamState::new(Value::Float(i as f64), "bench".into()),
+        );
     }
 
     c.bench_function("cache_get_hit", |b| {
@@ -40,7 +43,10 @@ fn bench_cache_set(c: &mut Criterion) {
         let mut i = 0u64;
         b.iter(|| {
             let addr = format!("/bench/set/{}", i);
-            cache.insert(addr, ParamState::new(Value::Float(i as f64), "bench".into()));
+            cache.insert(
+                addr,
+                ParamState::new(Value::Float(i as f64), "bench".into()),
+            );
             i += 1;
         })
     });
@@ -71,7 +77,10 @@ fn bench_cache_pattern_match(c: &mut Criterion) {
     for ns in 0..10 {
         for i in 0..100 {
             let addr = format!("/bench/ns{}/param/{}", ns, i);
-            cache.insert(addr, ParamState::new(Value::Float(i as f64), "bench".into()));
+            cache.insert(
+                addr,
+                ParamState::new(Value::Float(i as f64), "bench".into()),
+            );
         }
     }
 
@@ -104,7 +113,10 @@ fn bench_cache_concurrent(c: &mut Criterion) {
     // Pre-populate
     for i in 0..1000 {
         let addr = format!("/bench/concurrent/{}", i);
-        cache.insert(addr, ParamState::new(Value::Float(i as f64), "bench".into()));
+        cache.insert(
+            addr,
+            ParamState::new(Value::Float(i as f64), "bench".into()),
+        );
     }
 
     c.bench_function("concurrent_read_write", |b| {
@@ -130,7 +142,10 @@ fn bench_cache_scaling(c: &mut Criterion) {
         let cache: DashMap<String, ParamState> = DashMap::new();
         for i in 0..*size {
             let addr = format!("/bench/scale/{}", i);
-            cache.insert(addr, ParamState::new(Value::Float(i as f64), "bench".into()));
+            cache.insert(
+                addr,
+                ParamState::new(Value::Float(i as f64), "bench".into()),
+            );
         }
 
         group.bench_with_input(BenchmarkId::new("get", size), size, |b, &size| {

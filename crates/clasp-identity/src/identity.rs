@@ -155,8 +155,8 @@ mod tests {
     #[test]
     fn identity_from_seed_deterministic() {
         let seed: [u8; 32] = [
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-            24, 25, 26, 27, 28, 29, 30, 31, 32,
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+            25, 26, 27, 28, 29, 30, 31, 32,
         ];
         let id1 = Identity::from_bytes(&seed).unwrap();
         let id2 = Identity::from_bytes(&seed).unwrap();
@@ -170,11 +170,19 @@ mod tests {
     fn entity_id_format() {
         let id = Identity::generate();
         let eid = id.entity_id();
-        assert!(eid.starts_with("clasp:"), "should start with 'clasp:', got: {}", eid);
+        assert!(
+            eid.starts_with("clasp:"),
+            "should start with 'clasp:', got: {}",
+            eid
+        );
         let suffix = &eid[6..];
         // Verify base58 is valid
         let decoded = bs58::decode(suffix).into_vec().unwrap();
-        assert_eq!(decoded.len(), 16, "entity_id suffix should decode to 16 bytes");
+        assert_eq!(
+            decoded.len(),
+            16,
+            "entity_id suffix should decode to 16 bytes"
+        );
     }
 
     #[test]

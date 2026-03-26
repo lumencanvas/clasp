@@ -36,8 +36,14 @@ impl DefraWriter {
         );
 
         match addr.field {
-            Some(field) => self.update_field(&addr.collection, &addr.doc_id, &field, value).await,
-            None => self.update_document(&addr.collection, &addr.doc_id, value).await,
+            Some(field) => {
+                self.update_field(&addr.collection, &addr.doc_id, &field, value)
+                    .await
+            }
+            None => {
+                self.update_document(&addr.collection, &addr.doc_id, value)
+                    .await
+            }
         }
     }
 
@@ -66,12 +72,7 @@ impl DefraWriter {
     }
 
     /// Update all fields on a document from a CLASP Map value.
-    async fn update_document(
-        &self,
-        collection: &str,
-        doc_id: &str,
-        value: Value,
-    ) -> Result<()> {
+    async fn update_document(&self, collection: &str, doc_id: &str, value: Value) -> Result<()> {
         let fields = match &value {
             Value::Map(map) => map,
             _ => {

@@ -84,9 +84,7 @@ fn value_to_serde(value: &Value) -> serde_json::Value {
         Value::Int(i) => serde_json::json!(i),
         Value::Float(f) => serde_json::json!(f),
         Value::String(s) => serde_json::Value::String(s.clone()),
-        Value::Array(arr) => {
-            serde_json::Value::Array(arr.iter().map(value_to_serde).collect())
-        }
+        Value::Array(arr) => serde_json::Value::Array(arr.iter().map(value_to_serde).collect()),
         Value::Map(map) => {
             let obj: serde_json::Map<String, serde_json::Value> = map
                 .iter()
@@ -116,9 +114,7 @@ fn serde_to_value(v: &serde_json::Value) -> Value {
             }
         }
         serde_json::Value::String(s) => Value::String(s.clone()),
-        serde_json::Value::Array(arr) => {
-            Value::Array(arr.iter().map(serde_to_value).collect())
-        }
+        serde_json::Value::Array(arr) => Value::Array(arr.iter().map(serde_to_value).collect()),
         serde_json::Value::Object(obj) => {
             // Check for encoded bytes
             if obj.len() == 1 {
@@ -142,8 +138,7 @@ fn serde_to_value(v: &serde_json::Value) -> Value {
 // the existing clasp-core Bytes serialization.
 
 fn base64_encode(bytes: &[u8]) -> String {
-    const CHARS: &[u8] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity((bytes.len() + 2) / 3 * 4);
     for chunk in bytes.chunks(3) {
         let b0 = chunk[0] as u32;
@@ -288,7 +283,10 @@ mod tests {
 
     #[test]
     fn convert_pattern_literal() {
-        assert_eq!(clasp_pattern_to_like("/synth/osc1/freq"), "/synth/osc1/freq");
+        assert_eq!(
+            clasp_pattern_to_like("/synth/osc1/freq"),
+            "/synth/osc1/freq"
+        );
     }
 
     #[test]

@@ -21,7 +21,11 @@ pub struct RouterConfig {
 
 impl RouterConfig {
     /// Create a new router config with sensible defaults.
-    pub fn new(config_id: impl Into<String>, name: impl Into<String>, owner: impl Into<String>) -> Self {
+    pub fn new(
+        config_id: impl Into<String>,
+        name: impl Into<String>,
+        owner: impl Into<String>,
+    ) -> Self {
         Self {
             config_id: config_id.into(),
             name: name.into(),
@@ -56,7 +60,11 @@ pub struct ConnectionConfig {
 
 impl ConnectionConfig {
     /// Create a new connection config with sensible defaults.
-    pub fn new(config_id: impl Into<String>, name: impl Into<String>, owner: impl Into<String>) -> Self {
+    pub fn new(
+        config_id: impl Into<String>,
+        name: impl Into<String>,
+        owner: impl Into<String>,
+    ) -> Self {
         Self {
             config_id: config_id.into(),
             name: name.into(),
@@ -90,7 +98,11 @@ pub struct BridgeConfig {
 
 impl BridgeConfig {
     /// Create a new bridge config with sensible defaults.
-    pub fn new(config_id: impl Into<String>, name: impl Into<String>, owner: impl Into<String>) -> Self {
+    pub fn new(
+        config_id: impl Into<String>,
+        name: impl Into<String>,
+        owner: impl Into<String>,
+    ) -> Self {
         Self {
             config_id: config_id.into(),
             name: name.into(),
@@ -126,7 +138,11 @@ pub struct RuleConfig {
 
 impl RuleConfig {
     /// Create a new rule config with sensible defaults.
-    pub fn new(config_id: impl Into<String>, name: impl Into<String>, owner: impl Into<String>) -> Self {
+    pub fn new(
+        config_id: impl Into<String>,
+        name: impl Into<String>,
+        owner: impl Into<String>,
+    ) -> Self {
         Self {
             config_id: config_id.into(),
             name: name.into(),

@@ -80,7 +80,11 @@ mod tests {
     fn peer_id_format_prefix() {
         let key = [0u8; 32];
         let pid = public_key_to_peer_id(&key);
-        assert!(pid.starts_with("12D3KooW"), "PeerID should start with 12D3KooW, got: {}", pid);
+        assert!(
+            pid.starts_with("12D3KooW"),
+            "PeerID should start with 12D3KooW, got: {}",
+            pid
+        );
     }
 
     #[test]

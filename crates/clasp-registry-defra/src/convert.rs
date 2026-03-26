@@ -53,15 +53,9 @@ pub fn defra_to_entity(doc: &serde_json::Value) -> std::result::Result<Entity, D
         .and_then(|v| v.as_str())
         .ok_or_else(|| DefraRegistryError::Deserialization("missing publicKey".into()))?;
 
-    let created_at_secs = doc
-        .get("createdAt")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(0);
+    let created_at_secs = doc.get("createdAt").and_then(|v| v.as_i64()).unwrap_or(0);
 
-    let metadata_str = doc
-        .get("metadata")
-        .and_then(|v| v.as_str())
-        .unwrap_or("{}");
+    let metadata_str = doc.get("metadata").and_then(|v| v.as_str()).unwrap_or("{}");
 
     let tags = json_str_array(doc.get("tags"));
     let namespaces = json_str_array(doc.get("namespaces"));
@@ -72,9 +66,8 @@ pub fn defra_to_entity(doc: &serde_json::Value) -> std::result::Result<Entity, D
         .and_then(|v| v.as_str())
         .unwrap_or("active");
 
-    let id = EntityId::parse(entity_id).map_err(|e| {
-        DefraRegistryError::Deserialization(format!("invalid entityId: {e}"))
-    })?;
+    let id = EntityId::parse(entity_id)
+        .map_err(|e| DefraRegistryError::Deserialization(format!("invalid entityId: {e}")))?;
 
     let entity_type = parse_entity_type(entity_type_str).ok_or_else(|| {
         DefraRegistryError::Deserialization(format!("unknown entityType: {entity_type_str}"))
@@ -86,8 +79,7 @@ pub fn defra_to_entity(doc: &serde_json::Value) -> std::result::Result<Entity, D
 
     let created_at = UNIX_EPOCH + Duration::from_secs(created_at_secs as u64);
 
-    let metadata: HashMap<String, String> =
-        serde_json::from_str(metadata_str).unwrap_or_default();
+    let metadata: HashMap<String, String> = serde_json::from_str(metadata_str).unwrap_or_default();
 
     let status = parse_entity_status(status_str);
 
@@ -160,9 +152,9 @@ mod tests {
             entity_type: EntityType::Device,
             name: "test-device".to_string(),
             public_key: vec![
-                0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
-                0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a,
-                0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20,
+                0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+                0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c,
+                0x1d, 0x1e, 0x1f, 0x20,
             ],
             created_at: UNIX_EPOCH + Duration::from_secs(1700000000),
             metadata: {

@@ -14,7 +14,10 @@ fn gql_escape(s: &str) -> String {
 
 /// Serialize a `Vec<String>` to the DefraDB JSON array string format.
 fn vec_to_gql_array(items: &[String]) -> String {
-    let escaped: Vec<String> = items.iter().map(|s| format!(r#""{}""#, gql_escape(s))).collect();
+    let escaped: Vec<String> = items
+        .iter()
+        .map(|s| format!(r#""{}""#, gql_escape(s)))
+        .collect();
     format!("[{}]", escaped.join(", "))
 }
 
@@ -430,19 +433,15 @@ fn str_field(doc: &Value, field: &str) -> Result<String> {
 }
 
 fn int_field(doc: &Value, field: &str) -> Result<i64> {
-    doc.get(field)
-        .and_then(|v| v.as_i64())
-        .ok_or_else(|| {
-            ConfigDefraError::Deserialization(format!("missing or invalid field: {field}"))
-        })
+    doc.get(field).and_then(|v| v.as_i64()).ok_or_else(|| {
+        ConfigDefraError::Deserialization(format!("missing or invalid field: {field}"))
+    })
 }
 
 fn bool_field(doc: &Value, field: &str) -> Result<bool> {
-    doc.get(field)
-        .and_then(|v| v.as_bool())
-        .ok_or_else(|| {
-            ConfigDefraError::Deserialization(format!("missing or invalid field: {field}"))
-        })
+    doc.get(field).and_then(|v| v.as_bool()).ok_or_else(|| {
+        ConfigDefraError::Deserialization(format!("missing or invalid field: {field}"))
+    })
 }
 
 fn str_array_field(doc: &Value, field: &str) -> Vec<String> {
