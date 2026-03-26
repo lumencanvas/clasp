@@ -47,9 +47,13 @@ impl Default for DefraStateConfig {
 /// Cache hit/miss statistics.
 #[derive(Debug, Clone)]
 pub struct CacheStats {
+    /// Number of parameters currently held in the in-memory cache.
     pub cached_params: usize,
+    /// Number of write operations queued but not yet flushed to DefraDB.
     pub pending_writes: usize,
+    /// Total number of cache hits since startup.
     pub cache_hits: u64,
+    /// Total number of cache misses since startup.
     pub cache_misses: u64,
 }
 

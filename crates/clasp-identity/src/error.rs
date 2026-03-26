@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-/// Errors that can occur in identity operations
+/// Errors that can occur in identity operations.
 #[derive(Debug, Error)]
 pub enum IdentityError {
     #[error("invalid key: {0}")]

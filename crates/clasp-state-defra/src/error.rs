@@ -2,6 +2,7 @@
 
 use thiserror::Error;
 
+/// Errors from the DefraDB state store.
 #[derive(Error, Debug)]
 pub enum DefraStateError {
     #[error("DefraDB HTTP error: {0}")]

@@ -28,6 +28,10 @@ anyhow.workspace = true
 toml = "0.8"
 rcgen = "0.13"
 
+# Journal (optional)
+clasp-journal = { workspace = true, optional = true }
+clasp-journal-defra = { workspace = true, optional = true }
+
 [features]
 default = ["bridges", "websocket"]
 bridges = ["clasp-bridge"]
@@ -39,3 +43,7 @@ quic = ["clasp-router/quic", "clasp-transport/quic"]
 tcp = ["clasp-router/tcp", "clasp-transport/tcp"]
 # Full transport support - for VPS/Droplet deployments
 full = ["websocket", "quic", "tcp"]
+# Journal backends
+journal = ["clasp-router/journal", "clasp-journal"]
+journal-sqlite = ["journal", "clasp-journal/sqlite"]
+journal-defra = ["journal", "clasp-journal-defra"]

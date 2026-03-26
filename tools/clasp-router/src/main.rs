@@ -26,6 +26,8 @@ use clap::{Parser, ValueEnum};
 use clasp_core::{CpskValidator, Scope, SecurityMode, TokenInfo};
 use clasp_router::{Router, RouterConfig};
 use std::net::SocketAddr;
+#[cfg(feature = "journal")]
+use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
 
 #[cfg(feature = "bridges")]
@@ -122,6 +124,26 @@ struct Cli {
     /// Enable verbose logging
     #[arg(short, long)]
     verbose: bool,
+
+    /// Enable journal for crash recovery and state persistence
+    #[arg(long)]
+    #[cfg(feature = "journal")]
+    journal: bool,
+
+    /// Journal backend: memory, sqlite, defra
+    #[arg(long, default_value = "memory")]
+    #[cfg(feature = "journal")]
+    journal_backend: String,
+
+    /// Path for SQLite journal database
+    #[arg(long)]
+    #[cfg(feature = "journal-sqlite")]
+    journal_path: Option<String>,
+
+    /// DefraDB URL for journal backend
+    #[arg(long)]
+    #[cfg(feature = "journal-defra")]
+    journal_defra_url: Option<String>,
 }
 
 #[tokio::main]
@@ -232,6 +254,54 @@ async fn main() -> Result<()> {
         tracing::info!("Security mode: Open (no authentication)");
         Router::new(config)
     };
+
+    // Attach journal backend if enabled
+    #[cfg(feature = "journal")]
+    let router = {
+        if cli.journal {
+            let journal: Arc<dyn clasp_journal::Journal> = match cli.journal_backend.as_str() {
+                "memory" => {
+                    tracing::info!("Journal backend: memory");
+                    Arc::new(clasp_journal::MemoryJournal::new(10_000))
+                }
+                #[cfg(feature = "journal-sqlite")]
+                "sqlite" => {
+                    let path = cli.journal_path.as_deref().unwrap_or("clasp-journal.db");
+                    tracing::info!("Journal backend: SQLite at {}", path);
+                    Arc::new(clasp_journal::SqliteJournal::new(path)?)
+                }
+                #[cfg(feature = "journal-defra")]
+                "defra" => {
+                    let url = cli
+                        .journal_defra_url
+                        .as_deref()
+                        .unwrap_or("http://localhost:9181");
+                    tracing::info!("Journal backend: DefraDB at {}", url);
+                    Arc::new(clasp_journal_defra::DefraJournal::connect(url).await?)
+                }
+                other => {
+                    anyhow::bail!(
+                        "Unknown journal backend: {}. Use memory, sqlite, or defra",
+                        other
+                    );
+                }
+            };
+
+            let router = router.with_journal(journal);
+
+            // Attempt recovery from journal
+            if let Ok(recovered) = router.state().recover_from_journal().await {
+                tracing::info!("Recovered {} entries from journal", recovered);
+            }
+
+            router
+        } else {
+            router
+        }
+    };
+
+    #[cfg(not(feature = "journal"))]
+    let router = router;
 
     tracing::info!("Router ready, accepting connections...");
 
