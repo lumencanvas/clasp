@@ -19,7 +19,7 @@
 
 ---
 
-CLASP is a real-time infrastructure layer for connected applications. It provides state synchronization, pub/sub messaging, E2E encryption, device identity, reactive automation, and multi-site federation through a single binary protocol. It also bridges legacy protocols (OSC, MIDI, DMX, Art-Net, MQTT) so existing gear works immediately.
+CLASP is a real-time infrastructure layer for connected devices. It provides state synchronization, pub/sub messaging, E2E encryption, device identity, reactive automation, and multi-site federation through a single binary protocol. It bridges IoT protocols (MQTT, BLE, Serial, HTTP) and creative protocols (OSC, MIDI, DMX, Art-Net) so hardware works immediately.
 
 ## Why CLASP?
 
@@ -31,10 +31,11 @@ Building connected applications is hard. You need state sync, auth, encryption, 
 - **Device Identity**: Ed25519 capability tokens with UCAN-style delegation chains
 - **Rules Engine**: server-side reactive automation: "when X changes, set Y"
 - **Federation**: router-to-router state sharing for multi-site deployments
-- **Protocol Bridges**: OSC, MIDI, DMX, Art-Net, MQTT, WebSocket, HTTP, Socket.IO
+- **Protocol Bridges**: MQTT, BLE, Serial, HTTP, WebSocket, OSC, MIDI, DMX, Art-Net, Socket.IO
+- **Transports**: WebSocket, QUIC, UDP, TCP, BLE, Serial, WebRTC
 - **Discovery**: mDNS/DNS-SD, UDP broadcast, rendezvous server
 
-CLASP started as a protocol bridge for creative applications (lighting, audio, VJ software) and grew into a general-purpose real-time infrastructure protocol. Protocol bridging is still a core feature, but it's one of many.
+CLASP started as a protocol bridge for creative applications (lighting, audio, VJ software) and grew into general-purpose IoT infrastructure. It handles everything from MQTT sensor networks and BLE wearables to stage lighting rigs and browser dashboards.
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
@@ -143,15 +144,11 @@ For lower-level control, use `@clasp-to/core` directly ([docs](docs/sdk/javascri
 
 ## DefraDB Integration
 
-CLASP moves data between devices at microsecond speed but forgets everything when you turn it off. [DefraDB](https://source.network/defradb) remembers everything forever and syncs between devices automatically. Six crates plug them together.
+CLASP state is ephemeral by default. [DefraDB](https://source.network/defradb) is a peer-to-peer document database built on Merkle CRDTs. Six crates connect them so CLASP gets persistent, distributed state without giving up the sub-100us hot path.
 
-When CLASP routes a signal, it can also save it to DefraDB. When DefraDB syncs a change from another device, CLASP broadcasts it as a live signal. The fast path stays fast (sub-100 microseconds from an in-memory cache), and persistence happens in the background.
+Signals route through the in-memory cache as before. Writes flush to DefraDB in the background. DefraDB handles P2P replication between nodes. On restart, state loads back from DefraDB automatically.
 
-**CLASP gets memory.** Router dies, restarts, all state is back. Two routers in different cities converge their state automatically through DefraDB's conflict-free sync.
-
-**DefraDB gets into browsers and hardware.** CLASP tunnels DefraDB's sync protocol over WebSocket, WebRTC, and QUIC. A web app can now participate in DefraDB replication.
-
-**Physical world meets distributed database.** A temperature sensor speaking MQTT, a lighting desk speaking DMX, a phone speaking WebSocket. CLASP already bridges all of those. Now that bridge extends to DefraDB.
+This is primarily a win for CLASP: durable state, multi-router sync, and crash recovery. It may also be useful as a data ingestion path for DefraDB, since CLASP bridges MQTT, BLE, Serial, and HTTP protocols that DefraDB does not speak natively.
 
 ```bash
 clasp-router --journal --journal-backend defra --journal-defra-url http://localhost:9181

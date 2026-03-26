@@ -1,22 +1,24 @@
 # CLASP + DefraDB
 
-CLASP is a real-time signal router. It moves data between devices at microsecond speed but forgets everything when you turn it off.
+CLASP routes signals between devices at microsecond speed but forgets everything on restart. DefraDB is a peer-to-peer document database that persists data and syncs it between nodes via Merkle CRDTs.
 
-DefraDB is a distributed database. It remembers everything forever and syncs between devices automatically, but it has no concept of real-time signals or hardware protocols.
+Six crates connect them. CLASP gets persistent, distributed state. DefraDB gets a potential data ingestion path from IoT protocols it doesn't speak natively (MQTT, BLE, Serial).
 
-CLASP now includes six crates that plug them together.
+## What this does for CLASP
 
-When CLASP routes a signal, it can also save it to DefraDB. When DefraDB syncs a change from another device, CLASP can broadcast it as a live signal. The fast path stays fast (sub-100 microseconds from an in-memory cache), and persistence happens in the background.
+This is primarily a CLASP feature. It solves three real problems:
 
-Three things this makes possible that neither could do alone:
+**State survives restarts.** The write-through cache (`clasp-state-defra`) keeps the sub-100us hot path intact. Writes flush to DefraDB asynchronously. On restart, state loads from DefraDB. No data loss.
 
-**CLASP gets memory.** Router dies, restarts, all state is back. Two routers in different cities converge their state automatically through DefraDB's conflict-free sync. No more single-point-of-failure hub-and-spoke.
+**Multi-router sync without custom federation.** Two CLASP routers backed by peered DefraDB nodes converge state automatically through Merkle CRDTs. DefraDB handles the replication. CLASP handles the real-time routing.
 
-**DefraDB gets into browsers and hardware.** DefraDB uses LibP2P for sync, which barely works in browsers and doesn't work at all on Arduinos or BLE sensors. CLASP tunnels DefraDB's sync protocol over WebSocket, WebRTC, and QUIC: transports that work everywhere. A web app can now participate in DefraDB replication.
+**Queryable signal history.** The journal backend (`clasp-journal-defra`) stores every SET and PUBLISH as a DefraDB document. You can query signal history with GraphQL filters, time ranges, and pattern matching.
 
-**Physical world meets distributed database.** A temperature sensor speaking MQTT, a lighting desk speaking DMX, a phone speaking WebSocket: CLASP already bridges all of those. Now that bridge extends to DefraDB. Hardware data lands in a persistent, P2P-replicated, conflict-free database without anyone writing glue code.
+## What this might do for DefraDB
 
-Short version: CLASP is DefraDB's nervous system. DefraDB is CLASP's long-term memory.
+CLASP bridges MQTT, BLE, Serial, HTTP, and WebSocket. DefraDB speaks HTTP/GraphQL and libp2p. If you have sensors or devices that need to write to DefraDB, CLASP can act as the protocol adapter. This is speculative and depends on whether DefraDB's target users need hardware protocol bridging.
+
+CLASP also tunnels DefraDB sync messages over WebSocket and WebRTC via `clasp-defra-transport`, which could help with browser-based DefraDB peers. DefraDB's browser P2P support is still in development.
 
 ## The Six DefraDB Crates
 

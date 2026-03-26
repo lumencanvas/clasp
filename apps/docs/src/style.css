@@ -529,6 +529,13 @@ a:hover {
   font-family: 'JetBrains Mono', monospace;
 }
 
+/* === DefraDB Sidebar Highlight === */
+
+.sidebar-section[data-key="defra"] .sidebar-section-label {
+  color: var(--accent);
+  opacity: 0.8;
+}
+
 /* === DefraDB Callout === */
 
 .home-callout {

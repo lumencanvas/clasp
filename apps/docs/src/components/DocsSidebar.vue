@@ -219,7 +219,7 @@ function navigate(path) {
 
 <template>
   <aside class="docs-sidebar">
-    <div v-for="section in sections" :key="section.key" class="sidebar-section" :class="{ open: openSections.has(section.key) }">
+    <div v-for="section in sections" :key="section.key" class="sidebar-section" :class="{ open: openSections.has(section.key) }" :data-key="section.key">
       <div class="sidebar-section-label" @click="toggleSection(section.key)">
         {{ section.label }}
       </div>
