@@ -57,4 +57,4 @@ let id2 = Identity::from_bytes(&key_bytes)?;
 
 ## No libp2p Dependency
 
-PeerID encoding is implemented manually to avoid pulling in the full libp2p dependency tree. The crate depends only on `ed25519-dalek`, `bs58`, `sha2`, and `unsigned-varint`.
+PeerID encoding is implemented manually to avoid pulling in the full libp2p dependency tree. Key dependencies: `ed25519-dalek`, `bs58`, `sha2`, `unsigned-varint`, `zeroize`, `serde`, `thiserror`.

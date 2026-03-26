@@ -15,14 +15,12 @@ clasp-core
     |
 clasp-journal ──> clasp-journal-defra (DefraClient, DefraJournal)
     |                      |
-    |          +-----------+------------+-------------+
-    |          |           |            |             |
-    |    clasp-registry  clasp-defra  clasp-config  clasp-state
-    |      -defra        -bridge      -defra        -defra
+    |          +-----------+------------+-------------+-------------+
+    |          |           |            |             |             |
+    |    clasp-registry  clasp-defra  clasp-config  clasp-state  clasp-defra
+    |      -defra        -bridge      -defra        -defra       -transport
     |
 clasp-identity (standalone, no DefraDB dependency)
-    |
-clasp-defra-transport (tunnels DefraDB sync over CLASP)
 ```
 
 ## When to Use Each Crate

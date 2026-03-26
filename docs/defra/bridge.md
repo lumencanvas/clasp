@@ -70,8 +70,8 @@ The bridge depends on `SignalSender` and `SignalReceiver` traits, not `clasp-cli
 ```rust
 #[async_trait]
 pub trait SignalSender: Send + Sync {
-    async fn set(&self, address: &str, value: Value) -> Result<()>;
-    async fn emit(&self, address: &str, value: Value) -> Result<()>;
+    async fn set(&self, address: &str, value: Value) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn emit(&self, address: &str, value: Value) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 ```
 
