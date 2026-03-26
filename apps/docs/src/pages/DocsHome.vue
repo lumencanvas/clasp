@@ -1,13 +1,38 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import manifest from 'virtual:docs-manifest'
+import DocsSidebar from '../components/DocsSidebar.vue'
 
 const sdkCount = computed(() => manifest.filter(p => p.section === 'sdk').length)
 const bridgeCount = computed(() => manifest.filter(p => p.section === 'protocols').length)
 const refCount = computed(() => manifest.filter(p => p.section === 'reference').length)
+
+const sidebarOpen = ref(false)
+function closeSidebar() { sidebarOpen.value = false }
 </script>
 
 <template>
+  <div class="docs-layout">
+    <div
+      class="sidebar-overlay"
+      :class="{ visible: sidebarOpen }"
+      @click="closeSidebar"
+    ></div>
+
+    <DocsSidebar
+      current-path="index"
+      :class="{ 'mobile-open': sidebarOpen }"
+      @navigate="closeSidebar"
+    />
+
+    <button
+      class="sidebar-toggle"
+      @click="sidebarOpen = !sidebarOpen"
+      :aria-label="sidebarOpen ? 'Close navigation' : 'Open navigation'"
+    >
+      {{ sidebarOpen ? '\u2715' : '\u2630' }}
+    </button>
+
   <div class="docs-home">
     <div class="docs-hero">
       <h1>CLASP DOCS</h1>
@@ -67,6 +92,24 @@ client.on('/lights/*', (value, address) =&gt; console.log(address, value))</code
       </router-link>
     </div>
 
+    <div class="home-callout">
+      <router-link to="/defra" class="callout-link">
+        <h2>DEFRADB INTEGRATION</h2>
+        <p class="callout-pitch">
+          CLASP moves data at microsecond speed but forgets everything when you turn it off.
+          DefraDB remembers everything forever and syncs between devices automatically.
+          Six crates plug them together.
+        </p>
+        <div class="callout-features">
+          <span>P2P state persistence</span>
+          <span>Browser sync via WebRTC</span>
+          <span>Config version history</span>
+          <span>Hardware to database</span>
+        </div>
+        <p class="callout-action">Read the DefraDB integration guide &rarr;</p>
+      </router-link>
+    </div>
+
     <div class="home-quickstart">
       <h2>WHAT CLASP PROVIDES</h2>
       <div class="home-sections" style="margin-bottom: 0;">
@@ -115,5 +158,6 @@ client.on('/lights/*', (value, address) =&gt; console.log(address, value))</code
         </div>
       </div>
     </div>
+  </div>
   </div>
 </template>

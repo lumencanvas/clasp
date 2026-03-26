@@ -529,6 +529,60 @@ a:hover {
   font-family: 'JetBrains Mono', monospace;
 }
 
+/* === DefraDB Callout === */
+
+.home-callout {
+  margin: 2rem 0;
+}
+
+.callout-link {
+  display: block;
+  border: 1px solid var(--accent);
+  padding: 2rem;
+  text-decoration: none;
+  color: var(--ink);
+  transition: background 0.15s;
+}
+
+.callout-link:hover {
+  background: rgba(94, 234, 212, 0.04);
+  text-decoration: none;
+}
+
+.callout-link h2 {
+  font-size: 0.8rem;
+  letter-spacing: 0.2em;
+  margin: 0 0 1rem;
+  color: var(--accent);
+}
+
+.callout-pitch {
+  margin: 0 0 1rem;
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+
+.callout-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.callout-features span {
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--border);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.callout-action {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--accent);
+}
+
 /* === Footer === */
 
 footer {
