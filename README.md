@@ -65,23 +65,51 @@ CLASP started as a protocol bridge for creative applications (lighting, audio, V
 cargo install clasp-cli
 ```
 
-### Libraries
+### Packages
+
+**Client Libraries**
 
 | Platform | Package | Install |
 |----------|---------|---------|
-| **Rust** | [clasp-core](https://crates.io/crates/clasp-core) | `cargo add clasp-core` |
-| **Rust** | [clasp-client](https://crates.io/crates/clasp-client) | `cargo add clasp-client` |
-| **Rust** | [clasp-bridge](https://crates.io/crates/clasp-bridge) | `cargo add clasp-bridge` |
-| **Rust** | [clasp-crypto](https://crates.io/crates/clasp-crypto) | `cargo add clasp-crypto` |
-| **Rust** | [clasp-identity](https://crates.io/crates/clasp-identity) | `cargo add clasp-identity` |
-| **Rust** | [clasp-journal-defra](https://crates.io/crates/clasp-journal-defra) | `cargo add clasp-journal-defra` |
-| **Rust** | [clasp-state-defra](https://crates.io/crates/clasp-state-defra) | `cargo add clasp-state-defra` |
-| **JavaScript** | [@clasp-to/core](https://www.npmjs.com/package/@clasp-to/core) | `npm install @clasp-to/core` |
 | **JavaScript** | [@clasp-to/sdk](https://www.npmjs.com/package/@clasp-to/sdk) | `npm install @clasp-to/sdk` |
-| **JavaScript** | [@clasp-to/relay](https://www.npmjs.com/package/@clasp-to/relay) | `npm install @clasp-to/relay` |
+| **JavaScript** | [@clasp-to/core](https://www.npmjs.com/package/@clasp-to/core) | `npm install @clasp-to/core` |
 | **JavaScript** | [@clasp-to/crypto](https://www.npmjs.com/package/@clasp-to/crypto) | `npm install @clasp-to/crypto` |
 | **Python** | [clasp-to](https://pypi.org/project/clasp-to/) | `pip install clasp-to` |
 | **Arduino** | [Clasp](https://github.com/lumencanvas/clasp/tree/main/bindings/arduino/Clasp) | Arduino Library Manager |
+
+**Rust Crates -- Core**
+
+| Crate | Description | Install |
+|-------|-------------|---------|
+| [clasp-core](https://crates.io/crates/clasp-core) | Types, codec, state management | `cargo add clasp-core` |
+| [clasp-client](https://crates.io/crates/clasp-client) | High-level async client | `cargo add clasp-client` |
+| [clasp-router](https://crates.io/crates/clasp-router) | Message routing and pattern matching | `cargo add clasp-router` |
+| [clasp-transport](https://crates.io/crates/clasp-transport) | WebSocket, QUIC, TCP, BLE, Serial | `cargo add clasp-transport` |
+| [clasp-bridge](https://crates.io/crates/clasp-bridge) | Protocol bridges (OSC, MIDI, MQTT, etc.) | `cargo add clasp-bridge` |
+| [clasp-crypto](https://crates.io/crates/clasp-crypto) | E2E encryption (AES-256-GCM, ECDH) | `cargo add clasp-crypto` |
+| [clasp-identity](https://crates.io/crates/clasp-identity) | Unified Ed25519 identity (EntityId + DID + PeerID) | `cargo add clasp-identity` |
+
+**Rust Crates -- Infrastructure**
+
+| Crate | Description | Install |
+|-------|-------------|---------|
+| [clasp-caps](https://crates.io/crates/clasp-caps) | Delegatable Ed25519 capability tokens | `cargo add clasp-caps` |
+| [clasp-registry](https://crates.io/crates/clasp-registry) | Persistent entity identity registry | `cargo add clasp-registry` |
+| [clasp-journal](https://crates.io/crates/clasp-journal) | Append-only event journal | `cargo add clasp-journal` |
+| [clasp-rules](https://crates.io/crates/clasp-rules) | Server-side reactive rules engine | `cargo add clasp-rules` |
+| [clasp-federation](https://crates.io/crates/clasp-federation) | Router-to-router federation | `cargo add clasp-federation` |
+| [clasp-discovery](https://crates.io/crates/clasp-discovery) | mDNS/DNS-SD device discovery | `cargo add clasp-discovery` |
+
+**Rust Crates -- DefraDB Integration** ([docs](docs/defra/) | [DEFRA.md](DEFRA.md))
+
+| Crate | Description | Install |
+|-------|-------------|---------|
+| [clasp-journal-defra](https://crates.io/crates/clasp-journal-defra) | DefraDB journal backend with P2P sync | `cargo add clasp-journal-defra` |
+| [clasp-state-defra](https://crates.io/crates/clasp-state-defra) | Write-through cache with DefraDB persistence | `cargo add clasp-state-defra` |
+| [clasp-defra-bridge](https://crates.io/crates/clasp-defra-bridge) | Bidirectional DefraDB/CLASP signal bridge | `cargo add clasp-defra-bridge` |
+| [clasp-config-defra](https://crates.io/crates/clasp-config-defra) | P2P config sync with version history | `cargo add clasp-config-defra` |
+| [clasp-registry-defra](https://crates.io/crates/clasp-registry-defra) | DefraDB entity store with P2P identity sync | `cargo add clasp-registry-defra` |
+| [clasp-defra-transport](https://crates.io/crates/clasp-defra-transport) | DefraDB sync over CLASP transports | `cargo add clasp-defra-transport` |
 
 ### Desktop App
 
@@ -600,7 +628,7 @@ journal.append(entry).await?;
 let history = journal.query("/lights/**", None, None, Some(100), &[]).await?;
 ```
 
-See [DefraDB integration docs](.internal/HANDOFF-DEFRA-INTEGRATION.md) for architecture details, ADRs, and the full testing strategy.
+See [DEFRA.md](DEFRA.md) for the full integration guide, architecture decisions, and testing strategy. Detailed docs at [docs/defra/](docs/defra/).
 
 ## Documentation
 
@@ -609,33 +637,9 @@ Visit **[clasp.to](https://clasp.to)** for full documentation.
 - [Getting Started](https://clasp.to/docs/getting-started)
 - [Protocol Specification](https://clasp.to/docs/protocol)
 - [API Reference](https://clasp.to/docs/api)
+- [DefraDB Integration](docs/defra/) | [DEFRA.md](DEFRA.md)
 - [E2E Encryption](docs/auth/e2e-encryption.md)
 - [Examples](https://clasp.to/docs/examples)
-
-## Crates
-
-| Crate | Description |
-|-------|-------------|
-| [clasp-core](https://crates.io/crates/clasp-core) | Core types, codec, state management |
-| [clasp-transport](https://crates.io/crates/clasp-transport) | WebSocket, QUIC, TCP transports |
-| [clasp-client](https://crates.io/crates/clasp-client) | High-level async client |
-| [clasp-router](https://crates.io/crates/clasp-router) | Message routing and pattern matching |
-| [clasp-bridge](https://crates.io/crates/clasp-bridge) | Protocol bridges (OSC, MIDI, MQTT, etc.) |
-| [clasp-discovery](https://crates.io/crates/clasp-discovery) | mDNS/DNS-SD device discovery |
-| [clasp-caps](https://crates.io/crates/clasp-caps) | Delegatable Ed25519 capability tokens |
-| [clasp-registry](https://crates.io/crates/clasp-registry) | Persistent entity identity registry |
-| [clasp-journal](https://crates.io/crates/clasp-journal) | Append-only event journal for persistence |
-| [clasp-rules](https://crates.io/crates/clasp-rules) | Server-side reactive rules engine |
-| [clasp-federation](https://crates.io/crates/clasp-federation) | Router-to-router federation |
-| [clasp-crypto](https://crates.io/crates/clasp-crypto) | E2E encryption (AES-256-GCM, ECDH, TOFU) |
-| [clasp-cli](https://crates.io/crates/clasp-cli) | Command-line interface |
-| [clasp-identity](https://crates.io/crates/clasp-identity) | Unified Ed25519 identity (EntityId + DID + PeerID) |
-| [clasp-journal-defra](https://crates.io/crates/clasp-journal-defra) | DefraDB journal backend with P2P sync |
-| [clasp-registry-defra](https://crates.io/crates/clasp-registry-defra) | DefraDB entity store with P2P identity sync |
-| [clasp-defra-bridge](https://crates.io/crates/clasp-defra-bridge) | Bidirectional DefraDB/CLASP signal bridge |
-| [clasp-config-defra](https://crates.io/crates/clasp-config-defra) | DefraDB config persistence with snapshots |
-| [clasp-defra-transport](https://crates.io/crates/clasp-defra-transport) | DefraDB sync tunneled over CLASP transports |
-| [clasp-state-defra](https://crates.io/crates/clasp-state-defra) | Write-through cache state store backed by DefraDB |
 
 ## Building from Source
 

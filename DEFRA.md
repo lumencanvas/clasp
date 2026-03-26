@@ -1,8 +1,22 @@
-# CLASP + DefraDB: P2P State Sync for Real-Time Applications
+# CLASP + DefraDB
 
-CLASP is a real-time signal router. DefraDB is a peer-to-peer document database. Together they form a complete edge-first stack: sub-100us signal routing with persistent, distributed, conflict-free storage.
+CLASP is a real-time signal router. It moves data between devices at microsecond speed but forgets everything when you turn it off.
 
-CLASP handles the nervous system (routing signals between OSC surfaces, MIDI controllers, DMX fixtures, web dashboards, IoT sensors). DefraDB handles the memory (storing state as documents that replicate peer-to-peer via Merkle CRDTs without central coordination).
+DefraDB is a distributed database. It remembers everything forever and syncs between devices automatically, but it has no concept of real-time signals or hardware protocols.
+
+CLASP now includes six crates that plug them together.
+
+When CLASP routes a signal, it can also save it to DefraDB. When DefraDB syncs a change from another device, CLASP can broadcast it as a live signal. The fast path stays fast (sub-100 microseconds from an in-memory cache), and persistence happens in the background.
+
+Three things this makes possible that neither could do alone:
+
+**CLASP gets memory.** Router dies, restarts, all state is back. Two routers in different cities converge their state automatically through DefraDB's conflict-free sync. No more single-point-of-failure hub-and-spoke.
+
+**DefraDB gets into browsers and hardware.** DefraDB uses LibP2P for sync, which barely works in browsers and doesn't work at all on Arduinos or BLE sensors. CLASP tunnels DefraDB's sync protocol over WebSocket, WebRTC, and QUIC -- transports that work everywhere. A web app can now participate in DefraDB replication.
+
+**Physical world meets distributed database.** A temperature sensor speaking MQTT, a lighting desk speaking DMX, a phone speaking WebSocket -- CLASP already bridges all of those. Now that bridge extends to DefraDB. Hardware data lands in a persistent, P2P-replicated, conflict-free database without anyone writing glue code.
+
+Short version: CLASP is DefraDB's nervous system. DefraDB is CLASP's long-term memory.
 
 ## The Six DefraDB Crates
 

@@ -34,6 +34,7 @@ client.on('/lights/*', (value, address) => console.log(address, value));
 | **State Management** | Revisions, conflict resolution, late-joiner sync |
 | **Auth** | CPSK tokens, Ed25519 capability delegation, entity registry |
 | **Server Features** | Rules engine, journal persistence, app config |
+| **DefraDB Integration** | P2P state persistence, distributed config, browser sync |
 | **Deployment** | Federation, discovery, Docker, cloud |
 
 ## Start Here
@@ -43,6 +44,7 @@ client.on('/lights/*', (value, address) => console.log(address, value));
 | New to CLASP? | [First Connection](getting-started/first-connection.md) |
 | Building a client? | [JavaScript SDK](sdk/javascript.md) / [Python SDK](sdk/python.md) / [Rust SDK](sdk/rust.md) |
 | Deploying to production? | [Relay Server](deployment/relay.md) |
+| Adding P2P persistence? | [DefraDB Integration](defra/) |
 | Understanding the protocol? | [Architecture](concepts/architecture.md) |
 
 ## Choose Your Path

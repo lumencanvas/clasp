@@ -6,16 +6,17 @@ order: 3
 
 # Persistence
 
-By default, CLASP state lives in memory and is lost when the relay restarts. Persistence lets you survive restarts and, optionally, query historical data. Two levels are available, from simple snapshots to a full append-only journal.
+By default, CLASP state lives in memory and is lost when the relay restarts. Persistence lets you survive restarts and, optionally, query historical data. Three levels are available:
 
-## Two Levels of Persistence
+## Three Levels of Persistence
 
 | Level | Flag | Feature Required | What It Does |
 |-------|------|------------------|--------------|
 | Snapshots | `--persist ./state.db` | None | Periodic state dumps, restored on restart |
-| Journal | `--journal ./journal.db` | `--features journal` | Append-only event log, REPLAY queries, full history |
+| Journal (SQLite) | `--journal --journal-backend sqlite` | `--features journal-sqlite` | Append-only event log, REPLAY queries, full history |
+| Journal (DefraDB) | `--journal --journal-backend defra` | `--features journal-defra` | Everything above + P2P replication via Merkle CRDTs |
 
-Start with snapshots if you just need state to survive restarts. Add the journal when you need historical queries, audit trails, or replay.
+Start with snapshots if you just need state to survive restarts. Use the SQLite journal for single-node historical queries. Use DefraDB when you need multi-node state sync. See [DefraDB Integration](../defra/) for the full guide.
 
 ## State Snapshots
 
