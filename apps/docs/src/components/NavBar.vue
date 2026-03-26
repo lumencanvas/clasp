@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import ThemeToggle from './ThemeToggle.vue'
 import ClaspLogo from './ClaspLogo.vue'
@@ -7,6 +7,16 @@ import ClaspLogo from './ClaspLogo.vue'
 const router = useRouter()
 const route = useRoute()
 const menuOpen = ref(false)
+
+// Close mobile menu on outside click
+function handleOutsideClick(e) {
+  if (menuOpen.value && !e.target.closest('.topnav')) {
+    menuOpen.value = false
+  }
+}
+
+onMounted(() => document.addEventListener('click', handleOutsideClick))
+onUnmounted(() => document.removeEventListener('click', handleOutsideClick))
 
 function goHome() {
   if (route.path !== '/') {
