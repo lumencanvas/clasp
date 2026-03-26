@@ -73,6 +73,9 @@ cargo install clasp-cli
 | **Rust** | [clasp-client](https://crates.io/crates/clasp-client) | `cargo add clasp-client` |
 | **Rust** | [clasp-bridge](https://crates.io/crates/clasp-bridge) | `cargo add clasp-bridge` |
 | **Rust** | [clasp-crypto](https://crates.io/crates/clasp-crypto) | `cargo add clasp-crypto` |
+| **Rust** | [clasp-identity](https://crates.io/crates/clasp-identity) | `cargo add clasp-identity` |
+| **Rust** | [clasp-journal-defra](https://crates.io/crates/clasp-journal-defra) | `cargo add clasp-journal-defra` |
+| **Rust** | [clasp-state-defra](https://crates.io/crates/clasp-state-defra) | `cargo add clasp-state-defra` |
 | **JavaScript** | [@clasp-to/core](https://www.npmjs.com/package/@clasp-to/core) | `npm install @clasp-to/core` |
 | **JavaScript** | [@clasp-to/sdk](https://www.npmjs.com/package/@clasp-to/sdk) | `npm install @clasp-to/sdk` |
 | **JavaScript** | [@clasp-to/relay](https://www.npmjs.com/package/@clasp-to/relay) | `npm install @clasp-to/relay` |
@@ -315,6 +318,7 @@ CLASP clients in different languages can seamlessly communicate:
 - **Rules Engine**: Server-side reactive automation (triggers, conditions, transforms)
 - **Federation**: Router-to-router state sharing for multi-site deployments
 - **Desktop App**: Visual protocol configuration and signal monitoring
+- **DefraDB Integration**: P2P persistent storage via Merkle CRDTs, zero-config multi-node sync
 - **CLI Tool**: Start routers and protocol connections from the command line
 - **Embeddable**: Rust crates, WASM module, Python, JavaScript
 
@@ -376,6 +380,7 @@ CLASP: [SET][flags][len][addr][value][rev]             → 31 bytes
 | Delegatable auth (Ed25519) | ✅ | ❌ | ❌ |
 | Router-to-router federation | ✅ | ❌ | ❌ |
 | Server-side rules engine | ✅ | ❌ | ❌ |
+| P2P state persistence (CRDTs) | ✅ | ❌ | ❌ |
 
 ### Timing Guarantees
 
@@ -551,6 +556,52 @@ clasp server --port 7331 \
     --federation-namespaces "/site-a/**"
 ```
 
+### DefraDB Integration (P2P State Sync)
+
+CLASP integrates with [DefraDB](https://source.network/defradb), a peer-to-peer document database built on Merkle CRDTs, for persistent storage with automatic multi-node replication. No central database server required -- data syncs directly between peers.
+
+```
+┌──────────────┐     ┌──────────────┐
+│  CLASP       │     │  CLASP       │
+│  Router A    │     │  Router B    │
+│  (port 7330) │     │  (port 7331) │
+└──────┬───────┘     └──────┬───────┘
+       │                    │
+       ▼                    ▼
+┌──────────────┐     ┌──────────────┐
+│  DefraDB     │◄───►│  DefraDB     │
+│  Node 1      │ P2P │  Node 2      │
+└──────────────┘     └──────────────┘
+```
+
+What this enables:
+
+- **P2P Journal Sync** -- router state mutations replicate across nodes via Merkle CRDTs. No federation protocol needed
+- **Unified Identity** -- one Ed25519 keypair produces a CLASP EntityId, a W3C DID, and a libp2p PeerID
+- **Real-Time Bridge** -- DefraDB document changes become CLASP signals; CLASP SETs update DefraDB documents
+- **Config Sync** -- router/bridge/connection configs sync P2P with version history and rollback
+- **Persistent State Store** -- write-through DashMap cache (sub-100us hot path) with async DefraDB persistence
+- **Browser P2P** -- tunnel DefraDB sync over CLASP's WebSocket/WebRTC transports
+
+```bash
+# Start router with DefraDB journal backend
+clasp-router --journal --journal-backend defra --journal-defra-url http://localhost:9181
+```
+
+```rust
+use clasp_journal_defra::DefraJournal;
+use clasp_journal::Journal;
+
+// Connect to DefraDB -- schemas provisioned automatically
+let journal = DefraJournal::connect("http://localhost:9181").await?;
+
+// Use as any Journal backend -- P2P sync happens automatically
+journal.append(entry).await?;
+let history = journal.query("/lights/**", None, None, Some(100), &[]).await?;
+```
+
+See [DefraDB integration docs](.internal/HANDOFF-DEFRA-INTEGRATION.md) for architecture details, ADRs, and the full testing strategy.
+
 ## Documentation
 
 Visit **[clasp.to](https://clasp.to)** for full documentation.
@@ -578,6 +629,13 @@ Visit **[clasp.to](https://clasp.to)** for full documentation.
 | [clasp-federation](https://crates.io/crates/clasp-federation) | Router-to-router federation |
 | [clasp-crypto](https://crates.io/crates/clasp-crypto) | E2E encryption (AES-256-GCM, ECDH, TOFU) |
 | [clasp-cli](https://crates.io/crates/clasp-cli) | Command-line interface |
+| [clasp-identity](https://crates.io/crates/clasp-identity) | Unified Ed25519 identity (EntityId + DID + PeerID) |
+| [clasp-journal-defra](https://crates.io/crates/clasp-journal-defra) | DefraDB journal backend with P2P sync |
+| [clasp-registry-defra](https://crates.io/crates/clasp-registry-defra) | DefraDB entity store with P2P identity sync |
+| [clasp-defra-bridge](https://crates.io/crates/clasp-defra-bridge) | Bidirectional DefraDB/CLASP signal bridge |
+| [clasp-config-defra](https://crates.io/crates/clasp-config-defra) | DefraDB config persistence with snapshots |
+| [clasp-defra-transport](https://crates.io/crates/clasp-defra-transport) | DefraDB sync tunneled over CLASP transports |
+| [clasp-state-defra](https://crates.io/crates/clasp-state-defra) | Write-through cache state store backed by DefraDB |
 
 ## Building from Source
 
@@ -634,6 +692,7 @@ CLASP builds on the shoulders of giants:
 - [rosc](https://github.com/klingtnet/rosc) - OSC codec
 - [midir](https://github.com/Boddlnagg/midir) - MIDI I/O
 - [rumqttc](https://github.com/bytebeamio/rumqtt) - MQTT client
+- [DefraDB](https://github.com/sourcenetwork/defradb) - P2P document database (Merkle CRDTs)
 
 ---
 
