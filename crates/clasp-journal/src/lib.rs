@@ -7,6 +7,7 @@
 //!
 //! - [`MemoryJournal`] -- in-memory ring buffer for dev/testing
 //! - [`SqliteJournal`] -- persistent SQLite storage (requires `sqlite` feature)
+//! - `DefraJournal` -- DefraDB P2P backend via Merkle CRDTs (see `clasp-journal-defra` crate)
 
 pub mod entry;
 pub mod error;

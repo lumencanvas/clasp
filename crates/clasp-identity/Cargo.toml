@@ -1,0 +1,21 @@
+[package]
+name = "clasp-identity"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Unified identity for CLASP, DID, and libp2p - one Ed25519 keypair, three identity systems"
+
+[dependencies]
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+rand = "0.8"
+bs58 = "0.5"
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = "0.10"
+unsigned-varint = "0.8"
+zeroize = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }

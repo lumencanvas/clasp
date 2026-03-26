@@ -1,0 +1,57 @@
+name: DefraDB Integration Tests
+
+on:
+  push:
+    paths:
+      - 'crates/clasp-journal-defra/**'
+      - 'crates/clasp-identity/**'
+      - 'tests/defra/**'
+  pull_request:
+    paths:
+      - 'crates/clasp-journal-defra/**'
+      - 'crates/clasp-identity/**'
+      - 'tests/defra/**'
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p clasp-identity
+      - run: cargo test -p clasp-journal-defra
+
+  integration-tests:
+    name: Integration Tests (DefraDB)
+    runs-on: ubuntu-latest
+    services:
+      defra1:
+        image: sourcenetwork/defradb:v1.0.0-rc1
+        ports:
+          - 9181:9181
+        options: >-
+          --health-cmd "wget --spider -q http://localhost:9181/api/v0/ || exit 1"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      defra2:
+        image: sourcenetwork/defradb:v1.0.0-rc1
+        ports:
+          - 9182:9181
+        options: >-
+          --health-cmd "wget --spider -q http://localhost:9181/api/v0/ || exit 1"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run integration tests
+        env:
+          DEFRA_URL_1: http://localhost:9181
+          DEFRA_URL_2: http://localhost:9182
+        run: |
+          cargo test -p clasp-journal-defra -- --ignored --test-threads=1

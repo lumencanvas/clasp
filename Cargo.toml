@@ -17,6 +17,13 @@ members = [
     "crates/clasp-caps",
     "crates/clasp-rules",
     "crates/clasp-crypto",
+    "crates/clasp-identity",
+    "crates/clasp-journal-defra",
+    "crates/clasp-defra-bridge",
+    "crates/clasp-defra-transport",
+    "crates/clasp-registry-defra",
+    "crates/clasp-config-defra",
+    "crates/clasp-state-defra",
     "tools/clasp-service",
     "tools/clasp-router",
     "clasp-e2e",
@@ -106,6 +113,15 @@ clasp-federation = { version = "4.0", path = "crates/clasp-federation" }
 clasp-caps = { version = "4.0", path = "crates/clasp-caps" }
 clasp-rules = { version = "4.0", path = "crates/clasp-rules" }
 clasp-crypto = { version = "4.0", path = "crates/clasp-crypto" }
+clasp-identity = { version = "4.0", path = "crates/clasp-identity" }
+clasp-journal-defra = { version = "4.0", path = "crates/clasp-journal-defra" }
+clasp-defra-bridge = { version = "4.0", path = "crates/clasp-defra-bridge" }
+clasp-defra-transport = { version = "4.0", path = "crates/clasp-defra-transport" }
+clasp-registry-defra = { version = "4.0", path = "crates/clasp-registry-defra" }
+clasp-config-defra = { version = "4.0", path = "crates/clasp-config-defra" }
+clasp-state-defra = { version = "4.0", path = "crates/clasp-state-defra" }
+reqwest = { version = "0.12", features = ["json"] }
+chrono = { version = "0.4", features = ["serde"] }
 
 [profile.release]
 lto = true

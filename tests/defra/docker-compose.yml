@@ -1,0 +1,40 @@
+# DefraDB test nodes for CLASP integration testing
+# Usage: docker compose up -d
+# Health check: curl http://localhost:9181/api/v0/
+services:
+  defra1:
+    image: sourcenetwork/defradb:v1.0.0-rc1
+    container_name: clasp-defra-1
+    ports:
+      - "9181:9181"
+      - "9171:9171"
+    command: start --url 0.0.0.0:9181 --p2paddr /ip4/0.0.0.0/tcp/9171 --no-keyring
+    volumes:
+      - defra1-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9181/api/v0/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  defra2:
+    image: sourcenetwork/defradb:v1.0.0-rc1
+    container_name: clasp-defra-2
+    ports:
+      - "9182:9181"
+      - "9172:9171"
+    command: start --url 0.0.0.0:9181 --p2paddr /ip4/0.0.0.0/tcp/9171 --no-keyring
+    volumes:
+      - defra2-data:/data
+    depends_on:
+      defra1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9181/api/v0/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  defra1-data:
+  defra2-data:
