@@ -98,7 +98,11 @@ async function startClaspServer(config) {
   }
   if (config.journalEnabled) {
     args.push('--journal');
+    if (config.journalBackend) {
+      args.push('--journal-backend', config.journalBackend);
+    }
     if (config.journalPath) args.push('--journal-path', config.journalPath);
+    if (config.journalDefraUrl) args.push('--journal-defra-url', config.journalDefraUrl);
     if (config.journalMemory) args.push('--journal-memory');
   }
 

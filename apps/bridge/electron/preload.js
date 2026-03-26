@@ -55,6 +55,11 @@ const api = {
   writeFile: (path, content) => ipcRenderer.invoke('write-file', { path, content }),
   readFile: (path) => ipcRenderer.invoke('read-file', path),
 
+  // DefraDB sync
+  defraHealthCheck: (url) => ipcRenderer.invoke('defra-health-check', url),
+  defraConfigExport: (url) => ipcRenderer.invoke('defra-config-export', url),
+  defraConfigImport: (url, config) => ipcRenderer.invoke('defra-config-import', { defraUrl: url, config }),
+
   // Events
   onDeviceFound: (callback) => {
     ipcRenderer.on('device-found', (event, device) => callback(device));

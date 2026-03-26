@@ -48,12 +48,111 @@ CLASP_SCHEMA='type ClaspParam {
     ttlSecs: Int
 }'
 
-echo "Provisioning ClaspParam schema on both nodes..."
-docker exec clasp-defra-1 /defradb client collection add \
-    --url http://localhost:9181 --no-keyring "$CLASP_SCHEMA" > /dev/null 2>&1 || true
-docker exec clasp-defra-2 /defradb client collection add \
-    --url http://localhost:9181 --no-keyring "$CLASP_SCHEMA" > /dev/null 2>&1 || true
-echo "  Schema provisioned"
+JOURNAL_ENTRY_SCHEMA='type ClaspJournalEntry {
+    seq: Int @index
+    timestamp: Int
+    author: String
+    address: String @index
+    signalType: Int
+    value: String
+    revision: Int
+    msgType: Int
+}'
+
+PARAM_SNAPSHOT_SCHEMA='type ClaspParamSnapshot {
+    address: String @index
+    value: String
+    revision: Int
+    writer: String
+    timestamp: Int
+    snapshotSeq: Int @index
+}'
+
+ROUTER_CONFIG_SCHEMA='type ClaspRouterConfig {
+    configId: String @index
+    name: String
+    host: String
+    port: Int
+    transports: [String]
+    securityMode: String
+    maxSessions: Int
+    paramTtlSecs: Int
+    features: [String]
+    owner: String @index
+    updatedAt: Int
+    version: Int
+}'
+
+CONNECTION_CONFIG_SCHEMA='type ClaspConnectionConfig {
+    configId: String @index
+    name: String
+    routerUrl: String
+    transport: String
+    token: String
+    reconnect: Boolean
+    features: [String]
+    owner: String @index
+    updatedAt: Int
+    version: Int
+}'
+
+BRIDGE_CONFIG_SCHEMA='type ClaspBridgeConfig {
+    configId: String @index
+    name: String
+    protocol: String
+    sourceAddr: String
+    targetAddr: String
+    mappings: String
+    active: Boolean
+    owner: String @index
+    updatedAt: Int
+    version: Int
+}'
+
+RULE_CONFIG_SCHEMA='type ClaspRuleConfig {
+    configId: String @index
+    name: String
+    trigger: String
+    conditions: String
+    actions: String
+    cooldownSecs: Int
+    enabled: Boolean
+    owner: String @index
+    updatedAt: Int
+    version: Int
+}'
+
+CONFIG_SNAPSHOT_SCHEMA='type ClaspConfigSnapshot {
+    snapshotId: String @index
+    name: String
+    description: String
+    routers: String
+    connections: String
+    bridges: String
+    rules: String
+    owner: String @index
+    createdAt: Int
+}'
+
+ALL_SCHEMAS=(
+    "$CLASP_SCHEMA"
+    "$JOURNAL_ENTRY_SCHEMA"
+    "$PARAM_SNAPSHOT_SCHEMA"
+    "$ROUTER_CONFIG_SCHEMA"
+    "$CONNECTION_CONFIG_SCHEMA"
+    "$BRIDGE_CONFIG_SCHEMA"
+    "$RULE_CONFIG_SCHEMA"
+    "$CONFIG_SNAPSHOT_SCHEMA"
+)
+
+echo "Provisioning schemas on both nodes..."
+for schema in "${ALL_SCHEMAS[@]}"; do
+    docker exec clasp-defra-1 /defradb client collection add \
+        --url http://localhost:9181 --no-keyring "$schema" > /dev/null 2>&1 || true
+    docker exec clasp-defra-2 /defradb client collection add \
+        --url http://localhost:9181 --no-keyring "$schema" > /dev/null 2>&1 || true
+done
+echo "  All schemas provisioned (ClaspParam, JournalEntry, ParamSnapshot, RouterConfig, ConnectionConfig, BridgeConfig, RuleConfig, ConfigSnapshot)"
 
 # ---------------------------------------------------------------------------
 # Set up P2P replication between the two nodes.
@@ -103,22 +202,37 @@ fi
 echo "  defra1 addr: $DEFRA1_ADDR"
 echo "  defra2 addr: $DEFRA2_ADDR"
 
+REPL_COLLECTIONS=(
+    "ClaspParam"
+    "ClaspJournalEntry"
+    "ClaspParamSnapshot"
+    "ClaspRouterConfig"
+    "ClaspConnectionConfig"
+    "ClaspBridgeConfig"
+    "ClaspRuleConfig"
+    "ClaspConfigSnapshot"
+)
+
 # Node 1 pushes to node 2 (so writes on node 1 appear on node 2)
-if docker exec clasp-defra-1 /defradb client p2p replicator add \
-    --url http://localhost:9181 --no-keyring \
-    -c ClaspParam "$DEFRA2_ADDR" 2>/dev/null; then
-    echo "  defra1 -> defra2 replicator: OK"
-else
-    echo "  WARNING: Failed to add defra1 -> defra2 replicator"
-fi
+for coll in "${REPL_COLLECTIONS[@]}"; do
+    if docker exec clasp-defra-1 /defradb client p2p replicator add \
+        --url http://localhost:9181 --no-keyring \
+        -c "$coll" "$DEFRA2_ADDR" 2>/dev/null; then
+        echo "  defra1 -> defra2 replicator ($coll): OK"
+    else
+        echo "  WARNING: Failed to add defra1 -> defra2 replicator for $coll"
+    fi
+done
 
 # Node 2 pushes to node 1 (bidirectional, so writes on node 2 appear on node 1)
-if docker exec clasp-defra-2 /defradb client p2p replicator add \
-    --url http://localhost:9181 --no-keyring \
-    -c ClaspParam "$DEFRA1_ADDR" 2>/dev/null; then
-    echo "  defra2 -> defra1 replicator: OK"
-else
-    echo "  WARNING: Failed to add defra2 -> defra1 replicator"
-fi
+for coll in "${REPL_COLLECTIONS[@]}"; do
+    if docker exec clasp-defra-2 /defradb client p2p replicator add \
+        --url http://localhost:9181 --no-keyring \
+        -c "$coll" "$DEFRA1_ADDR" 2>/dev/null; then
+        echo "  defra2 -> defra1 replicator ($coll): OK"
+    else
+        echo "  WARNING: Failed to add defra2 -> defra1 replicator for $coll"
+    fi
+done
 
 echo "P2P peering setup complete"

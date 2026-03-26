@@ -122,7 +122,8 @@ impl DefraJournal {
         let timestamp = doc
             .get("timestamp")
             .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+            .unwrap_or(0)
+            * 1_000_000; // Stored as seconds, convert back to microseconds
         let author = doc
             .get("author")
             .and_then(|v| v.as_str())
@@ -202,7 +203,8 @@ impl DefraJournal {
         let timestamp = doc
             .get("timestamp")
             .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+            .unwrap_or(0)
+            * 1_000_000; // Stored as seconds, convert back to microseconds
 
         Ok(ParamSnapshot {
             address,
@@ -252,7 +254,7 @@ impl Journal for DefraJournal {
                 }}
             }}"#,
             seq = seq,
-            timestamp = entry.timestamp,
+            timestamp = entry.timestamp / 1_000_000, // Store as seconds (DefraDB Int32)
             author = author,
             address = address,
             signal_type_int = signal_type_int,
@@ -284,17 +286,19 @@ impl Journal for DefraJournal {
         // Build filter components
         let mut filters = vec![format!(r#"address: {{_like: "{like_escaped}"}}"#)];
 
-        if let Some(from_ts) = from {
+        // Convert microsecond timestamps to seconds for DefraDB queries
+        let from_secs = from.map(|ts| ts / 1_000_000);
+        let to_secs = to.map(|ts| ts / 1_000_000);
+
+        if let Some(from_ts) = from_secs {
             filters.push(format!("timestamp: {{_gte: {from_ts}}}"));
         }
-        if let Some(to_ts) = to {
-            // If we already have a timestamp filter, merge them
-            if from.is_some() {
-                // Remove the last filter and replace with combined
+        if let Some(to_ts) = to_secs {
+            if from_secs.is_some() {
                 let _ = filters.pop();
                 filters.push(format!(
                     "timestamp: {{_gte: {}, _lte: {}}}",
-                    from.unwrap(),
+                    from_secs.unwrap(),
                     to_ts
                 ));
             } else {
@@ -402,7 +406,7 @@ impl Journal for DefraJournal {
                 value_escaped = value_escaped,
                 revision = param.revision,
                 writer = writer,
-                timestamp = param.timestamp,
+                timestamp = param.timestamp / 1_000_000, // Store as seconds
                 snapshot_seq = snapshot_seq,
             );
 

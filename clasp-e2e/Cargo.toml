@@ -21,6 +21,10 @@ clasp-discovery = { workspace = true, features = ["rendezvous"] }
 clasp-embedded.workspace = true
 clasp-test-utils.workspace = true
 clasp-crypto = { workspace = true, features = ["client"] }
+clasp-journal = { workspace = true }
+clasp-journal-defra = { workspace = true }
+clasp-state-defra = { workspace = true }
+clasp-config-defra = { workspace = true }
 
 # Real protocol libraries for integration testing
 rosc.workspace = true
@@ -228,6 +232,11 @@ path = "src/bin/crypto_client_tests.rs"
 [[bin]]
 name = "crypto-e2e-tests"
 path = "src/bin/crypto_e2e_tests.rs"
+
+# DefraDB Sync Tests
+[[bin]]
+name = "defra-sync-tests"
+path = "src/bin/defra_sync_tests.rs"
 
 # Benchmark harness
 [[bench]]

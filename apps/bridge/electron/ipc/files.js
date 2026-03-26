@@ -215,6 +215,78 @@ function registerFileHandlers() {
       return { success: false, error: e.message };
     }
   });
+
+  // DefraDB config sync
+  ipcMain.handle('defra-config-export', async (event, defraUrl) => {
+    try {
+      const resp = await fetch(`${defraUrl}/api/v0/graphql`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `{
+            ClaspRouterConfig { configId name host port transports securityMode maxSessions paramTtlSecs features owner updatedAt version }
+            ClaspConnectionConfig { configId name routerUrl transport token reconnect features owner updatedAt version }
+            ClaspBridgeConfig { configId name protocol sourceAddr targetAddr mappings active owner updatedAt version }
+            ClaspRuleConfig { configId name trigger conditions actions cooldownSecs enabled owner updatedAt version }
+          }`
+        })
+      });
+      const result = await resp.json();
+      return { success: true, data: result.data };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('defra-config-import', async (event, { defraUrl, config }) => {
+    try {
+      const mutations = [];
+
+      if (config.routers) {
+        for (const r of config.routers) {
+          mutations.push(`add_ClaspRouterConfig(input: {
+            configId: "${r.configId || r.config_id}", name: "${r.name}",
+            host: "${r.host || '0.0.0.0'}", port: ${r.port || 7330},
+            transports: ${JSON.stringify(r.transports || ['websocket']).replace(/"/g, '"')},
+            securityMode: "${r.securityMode || r.security_mode || 'open'}",
+            maxSessions: ${r.maxSessions || r.max_sessions || 1000},
+            paramTtlSecs: ${r.paramTtlSecs || r.param_ttl_secs || 3600},
+            features: ${JSON.stringify(r.features || []).replace(/"/g, '"')},
+            owner: "${r.owner || 'local'}",
+            updatedAt: ${Math.floor(Date.now() / 1000)},
+            version: ${r.version || 1}
+          }) { _docID }`);
+        }
+      }
+
+      if (mutations.length > 0) {
+        const query = `mutation { ${mutations.join('\n')} }`;
+        const resp = await fetch(`${defraUrl}/api/v0/graphql`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query })
+        });
+        const result = await resp.json();
+        if (result.errors) {
+          return { success: false, error: result.errors.map(e => e.message).join('; ') };
+        }
+      }
+
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('defra-health-check', async (event, defraUrl) => {
+    try {
+      const resp = await fetch(`${defraUrl}/health-check`);
+      const text = await resp.text();
+      return { healthy: text.includes('Healthy'), url: defraUrl };
+    } catch (e) {
+      return { healthy: false, url: defraUrl, error: e.message };
+    }
+  });
 }
 
 module.exports = { registerFileHandlers };
