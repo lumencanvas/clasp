@@ -1,6 +1,6 @@
 {
   "name": "@clasp-to/crypto",
-  "version": "4.2.0",
+  "version": "4.3.0",
   "description": "E2E encryption add-on for CLASP protocol clients - AES-256-GCM, ECDH P-256, ECDSA signing, TOFU verification",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
