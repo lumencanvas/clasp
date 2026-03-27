@@ -236,6 +236,9 @@ function registerFileHandlers() {
           }`
         })
       });
+      if (!resp.ok) {
+        return { success: false, error: `HTTP ${resp.status}: ${resp.statusText}` };
+      }
       const result = await resp.json();
       return { success: true, data: result.data };
     } catch (e) {
@@ -271,6 +274,9 @@ function registerFileHandlers() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query })
         });
+        if (!resp.ok) {
+          return { success: false, error: `HTTP ${resp.status}: ${resp.statusText}` };
+        }
         const result = await resp.json();
         if (result.errors) {
           return { success: false, error: result.errors.map(e => e.message).join('; ') };

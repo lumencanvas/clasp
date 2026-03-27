@@ -248,28 +248,38 @@ function registerDiagnosticsHandlers() {
       const wsUrl = address.startsWith('ws://') ? address : `ws://${address}`;
       let ws;
       let timeout;
+      let resolved = false;
 
       try {
         ws = new WebSocket(wsUrl);
 
         timeout = setTimeout(() => {
+          if (resolved) return;
+          resolved = true;
           if (ws) ws.terminate();
           resolve({ success: false, error: 'Connection timeout' });
         }, 5000);
 
         ws.on('open', () => {
+          if (resolved) return;
+          resolved = true;
           clearTimeout(timeout);
           ws.close();
           resolve({ success: true });
         });
 
         ws.on('error', (err) => {
+          if (resolved) return;
+          resolved = true;
           clearTimeout(timeout);
           resolve({ success: false, error: err.message });
         });
       } catch (e) {
-        if (timeout) clearTimeout(timeout);
-        resolve({ success: false, error: e.message });
+        if (!resolved) {
+          resolved = true;
+          if (timeout) clearTimeout(timeout);
+          resolve({ success: false, error: e.message });
+        }
       }
     });
   });
