@@ -48,8 +48,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Start DefraDB instances
         run: |
-          docker run -d --name defra1 -p 9181:9181 sourcenetwork/defradb:latest start --no-keyring
-          docker run -d --name defra2 -p 9182:9181 sourcenetwork/defradb:latest start --no-keyring
+          docker run -d --name defra1 -p 9181:9181 sourcenetwork/defradb:latest start --no-keyring --url 0.0.0.0:9181
+          docker run -d --name defra2 -p 9182:9181 sourcenetwork/defradb:latest start --no-keyring --url 0.0.0.0:9181
       - name: Wait for DefraDB to be ready
         run: |
           for i in $(seq 1 30); do
