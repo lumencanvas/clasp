@@ -984,6 +984,7 @@ mod tests {
     async fn test_load_from_defra() {
         // Insert directly into DefraDB, then load
         let client = DefraClient::new("http://localhost:9181");
+        client.add_schema(CLASP_PARAM_SCHEMA).await.unwrap();
         let unique_addr = format!(
             "/integration/load-test/{}",
             std::time::SystemTime::now()
