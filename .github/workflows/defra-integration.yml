@@ -42,29 +42,29 @@ jobs:
   integration-tests:
     name: Integration Tests (DefraDB)
     runs-on: ubuntu-latest
-    services:
-      defra1:
-        image: sourcenetwork/defradb:latest
-        ports:
-          - 9181:9181
-        options: >-
-          --health-cmd "bash -c 'echo > /dev/tcp/localhost/9181'"
-          --health-interval 3s
-          --health-timeout 2s
-          --health-retries 15
-      defra2:
-        image: sourcenetwork/defradb:latest
-        ports:
-          - 9182:9181
-        options: >-
-          --health-cmd "bash -c 'echo > /dev/tcp/localhost/9181'"
-          --health-interval 3s
-          --health-timeout 2s
-          --health-retries 15
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Start DefraDB instances
+        run: |
+          docker run -d --name defra1 -p 9181:9181 sourcenetwork/defradb:latest start
+          docker run -d --name defra2 -p 9182:9181 sourcenetwork/defradb:latest start
+      - name: Wait for DefraDB to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if bash -c 'echo > /dev/tcp/localhost/9181' 2>/dev/null && \
+               bash -c 'echo > /dev/tcp/localhost/9182' 2>/dev/null; then
+              echo "Both DefraDB instances are ready"
+              exit 0
+            fi
+            echo "Waiting for DefraDB... ($i/30)"
+            sleep 2
+          done
+          echo "DefraDB failed to start"
+          docker logs defra1
+          docker logs defra2
+          exit 1
       - name: Run integration tests
         env:
           DEFRA_URL_1: http://localhost:9181
@@ -75,3 +75,8 @@ jobs:
           cargo test -p clasp-config-defra -- --ignored --test-threads=1
           cargo test -p clasp-defra-transport -- --ignored --test-threads=1
           cargo test -p clasp-state-defra -- --ignored --test-threads=1
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop defra1 defra2 2>/dev/null || true
+          docker rm defra1 defra2 2>/dev/null || true
