@@ -53,8 +53,8 @@ jobs:
       - name: Wait for DefraDB to be ready
         run: |
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:9181/api/v0 >/dev/null 2>&1 && \
-               curl -sf http://localhost:9182/api/v0 >/dev/null 2>&1; then
+            if curl -sf http://localhost:9181/api/v0/graphql -X POST -H 'Content-Type: application/json' -d '{"query":"{ __typename }"}' >/dev/null 2>&1 && \
+               curl -sf http://localhost:9182/api/v0/graphql -X POST -H 'Content-Type: application/json' -d '{"query":"{ __typename }"}' >/dev/null 2>&1; then
               echo "Both DefraDB instances are ready"
               exit 0
             fi
@@ -68,8 +68,8 @@ jobs:
       - name: Verify DefraDB is still running
         run: |
           docker ps
-          curl -sf http://localhost:9181/api/v0 || (echo "defra1 died"; docker logs defra1; exit 1)
-          curl -sf http://localhost:9182/api/v0 || (echo "defra2 died"; docker logs defra2; exit 1)
+          curl -sf http://localhost:9181/api/v0/graphql -X POST -H 'Content-Type: application/json' -d '{"query":"{ __typename }"}' || (echo "defra1 died"; docker logs defra1; exit 1)
+          curl -sf http://localhost:9182/api/v0/graphql -X POST -H 'Content-Type: application/json' -d '{"query":"{ __typename }"}' || (echo "defra2 died"; docker logs defra2; exit 1)
       - name: Run integration tests
         env:
           DEFRA_URL_1: http://localhost:9181
