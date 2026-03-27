@@ -48,8 +48,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Start DefraDB instances
         run: |
-          docker run -d --name defra1 -p 9181:9181 sourcenetwork/defradb:latest start --no-keyring --url 0.0.0.0:9181
-          docker run -d --name defra2 -p 9182:9181 sourcenetwork/defradb:latest start --no-keyring --url 0.0.0.0:9181
+          docker network create defra-net
+          docker run -d --name defra1 --network defra-net -p 9181:9181 sourcenetwork/defradb:latest start --no-keyring --url 0.0.0.0:9181
+          docker run -d --name defra2 --network defra-net -p 9182:9181 sourcenetwork/defradb:latest start --no-keyring --url 0.0.0.0:9181
       - name: Wait for DefraDB to be ready
         run: |
           for i in $(seq 1 30); do
@@ -65,11 +66,20 @@ jobs:
           docker logs defra1
           docker logs defra2
           exit 1
-      - name: Verify DefraDB is still running
+      - name: Verify DefraDB and configure P2P peering
         run: |
           docker ps
           curl -sf http://localhost:9181/api/v0/graphql -X POST -H 'Content-Type: application/json' -d '{"query":"{ __typename }"}' || (echo "defra1 died"; docker logs defra1; exit 1)
           curl -sf http://localhost:9182/api/v0/graphql -X POST -H 'Content-Type: application/json' -d '{"query":"{ __typename }"}' || (echo "defra2 died"; docker logs defra2; exit 1)
+          # Peer node 2 with node 1 for P2P sync tests
+          PEER1_INFO=$(docker exec defra1 defradb client p2p info --no-keyring 2>/dev/null | grep -o '/ip4/[^"]*') || true
+          if [ -n "$PEER1_INFO" ]; then
+            # Rewrite IP to use Docker network hostname
+            PEER1_ID=$(echo "$PEER1_INFO" | grep -oP '12D3\w+' | head -1)
+            docker exec defra2 defradb client p2p add "/dns4/defra1/tcp/9171/p2p/${PEER1_ID}" --no-keyring 2>/dev/null || echo "P2P peering skipped (may not affect non-sync tests)"
+          else
+            echo "Could not get peer info from defra1, P2P sync tests may fail"
+          fi
       - name: Run integration tests
         env:
           DEFRA_URL_1: http://localhost:9181
@@ -85,3 +95,4 @@ jobs:
         run: |
           docker stop defra1 defra2 2>/dev/null || true
           docker rm defra1 defra2 2>/dev/null || true
+          docker network rm defra-net 2>/dev/null || true
