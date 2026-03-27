@@ -67,6 +67,7 @@ async function connectBridgeToRouter(bridgeId, routerId = null) {
     ws.binaryType = 'nodebuffer';
     let connected = false;
     let welcomed = false;
+    let resolved = false;
 
     const connection = {
       ws,
@@ -107,7 +108,7 @@ async function connectBridgeToRouter(bridgeId, routerId = null) {
               routerAddress: router.address,
             });
           }
-          resolve(true);
+          if (!resolved) { resolved = true; resolve(true); }
           return;
         }
 
@@ -125,7 +126,7 @@ async function connectBridgeToRouter(bridgeId, routerId = null) {
                 error: `Authentication failed: ${errorMessage}`,
               });
             }
-            resolve(false);
+            if (!resolved) { resolved = true; resolve(false); }
             return;
           }
         }
@@ -147,13 +148,13 @@ async function connectBridgeToRouter(bridgeId, routerId = null) {
             error: err.message,
           });
         }
-        resolve(false);
+        if (!resolved) { resolved = true; resolve(false); }
       }
     });
 
     ws.on('close', () => {
       const existingConn = bridgeRouterConnections.get(bridgeId);
-      if (existingConn && existingConn.routerId === router.id) {
+      if (existingConn && existingConn.ws === ws) {
         bridgeRouterConnections.delete(bridgeId);
         const mainWindow = getMainWindow();
         if (mainWindow) {
@@ -228,7 +229,9 @@ async function connectBridgeToRouter(bridgeId, routerId = null) {
     });
 
     setTimeout(() => {
+      if (resolved) return;
       if (!connected || !welcomed) {
+        resolved = true;
         if (ws) ws.terminate();
         bridgeRouterConnections.delete(bridgeId);
         const mainWindow = getMainWindow();

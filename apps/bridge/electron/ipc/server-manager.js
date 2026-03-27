@@ -25,6 +25,11 @@ function createServerStats() {
 }
 
 async function startClaspServer(config) {
+  const existing = runningServers.get(config.id);
+  if (existing && existing.status !== 'stopped') {
+    return existing.status === 'running';
+  }
+
   const routerPath = getBinaryPath('clasp-router');
   const [host, port] = (config.address || 'localhost:7330').split(':');
 

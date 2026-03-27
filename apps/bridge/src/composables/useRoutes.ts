@@ -101,6 +101,7 @@ function processSignal(signal: Signal): void {
 
     const value = extractValue(signal, route.source)
     const transformed = applyTransform(value, route.transform)
+    if (!Number.isFinite(transformed)) continue
     const targetAddress = route.target.address || signal.address || '/*'
 
     api.sendSignal(signal.bridgeId || '', targetAddress, transformed)

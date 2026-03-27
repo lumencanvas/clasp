@@ -6,7 +6,7 @@ import { useLearnMode } from '../../composables/useLearnMode'
 import { useNotifications } from '../../composables/useNotifications'
 import { allProtocols, protocolNames, transformTypes, defaultAddresses } from '../../lib/constants'
 
-const { add, edit: editRoute } = useRoutes()
+const { add, edit: editRoute, routes } = useRoutes()
 const learn = useLearnMode()
 const { notify } = useNotifications()
 
@@ -275,9 +275,10 @@ function close() {
 
 function save() {
   try {
+    const existingRoute = isEdit.value ? routes.value.find(r => r.id === editId.value) : null
     const route: SignalRoute = {
       id: isEdit.value ? editId.value : Date.now().toString(),
-      enabled: true,
+      enabled: existingRoute?.enabled ?? true,
       source: buildSource(),
       target: buildTarget(),
       transform: buildTransform(),
