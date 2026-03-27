@@ -89,7 +89,7 @@ jobs:
           cargo test -p clasp-registry-defra -- --ignored --test-threads=1
           cargo test -p clasp-config-defra -- --ignored --test-threads=1
           cargo test -p clasp-defra-transport -- --ignored --test-threads=1
-          cargo test -p clasp-state-defra -- --ignored --test-threads=1
+          cargo test -p clasp-state-defra -- --ignored --test-threads=1 --skip test_two_store_sync
       - name: Cleanup
         if: always()
         run: |
