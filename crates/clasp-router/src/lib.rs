@@ -108,7 +108,7 @@ pub use p2p::{analyze_address, P2PAddressType, P2PCapabilities};
 #[cfg(feature = "quic")]
 pub use router::QuicServerConfig;
 pub use router::{
-    MultiProtocolConfig, Router, RouterConfig, RouterConfigBuilder, SnapshotFilter,
+    MultiProtocolConfig, Router, RouterConfig, RouterConfigBuilder, SignalTransform, SnapshotFilter,
     TransportConfig, WriteValidator,
 };
 pub use session::{Session, SessionId};

@@ -2,6 +2,10 @@
 //!
 //! Start protocol servers, bridges, and manage CLASP signals from the command line.
 
+mod crypto;
+mod entity;
+mod identity;
+mod journal;
 mod server;
 mod tokens;
 
@@ -173,11 +177,28 @@ enum Commands {
         action: LensAction,
     },
 
-    /// Identity derivation tools
-    #[cfg(feature = "identity-defra")]
+    /// Identity tools: show all formats from a key, generate new identities
     Identity {
         #[command(subcommand)]
         action: IdentityAction,
+    },
+
+    /// Entity registry operations (via relay REST API)
+    Entity {
+        #[command(subcommand)]
+        action: EntityApiAction,
+    },
+
+    /// Journal query operations (via relay REST API)
+    Journal {
+        #[command(subcommand)]
+        action: JournalAction,
+    },
+
+    /// Cryptographic key management (ECDH P-256)
+    Crypto {
+        #[command(subcommand)]
+        action: CryptoAction,
     },
 }
 
@@ -287,15 +308,155 @@ pub enum LensAction {
     },
 }
 
-/// Identity derivation actions
-#[cfg(feature = "identity-defra")]
+/// Identity actions
 #[derive(Subcommand)]
 enum IdentityAction {
+    /// Show all identity formats derived from an Ed25519 key file
+    Show {
+        /// Path to Ed25519 signing key file (hex-encoded 32 bytes)
+        key_file: PathBuf,
+    },
+
+    /// Generate a new Ed25519 identity key and display all derived formats
+    Generate {
+        /// Output file path (hex-encoded signing key)
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+    },
+
     /// Derive a secp256k1 key from an Ed25519 signing key for DefraDB ACP
+    #[cfg(feature = "identity-defra")]
     DeriveDefra {
         /// Path to Ed25519 signing key file (hex-encoded 32 bytes)
         #[arg(short, long)]
         key: PathBuf,
+    },
+}
+
+/// Entity registry API actions
+#[derive(Subcommand)]
+enum EntityApiAction {
+    /// List all entities from the relay registry
+    List {
+        /// Relay URL (e.g., http://localhost:3000)
+        #[arg(long, env = "CLASP_RELAY_URL")]
+        relay: String,
+    },
+
+    /// Get a single entity by ID
+    Get {
+        /// Entity ID
+        id: String,
+
+        /// Relay URL (e.g., http://localhost:3000)
+        #[arg(long, env = "CLASP_RELAY_URL")]
+        relay: String,
+    },
+
+    /// Create a new entity in the registry
+    Create {
+        /// Entity name
+        #[arg(long)]
+        name: String,
+
+        /// Entity type (device, user, service, router)
+        #[arg(long, default_value = "device")]
+        r#type: String,
+
+        /// Relay URL (e.g., http://localhost:3000)
+        #[arg(long, env = "CLASP_RELAY_URL")]
+        relay: String,
+    },
+}
+
+/// Journal query actions
+#[derive(Subcommand)]
+enum JournalAction {
+    /// Query journal entries by address pattern
+    Query {
+        /// Address pattern (e.g., /sensors/**)
+        pattern: String,
+
+        /// Start timestamp (microseconds since epoch)
+        #[arg(long)]
+        from: Option<u64>,
+
+        /// End timestamp (microseconds since epoch)
+        #[arg(long)]
+        to: Option<u64>,
+
+        /// Maximum entries to return
+        #[arg(long, default_value = "100")]
+        limit: Option<u32>,
+
+        /// Signal types filter (comma-separated: param,event,stream)
+        #[arg(long)]
+        types: Option<String>,
+
+        /// Admin token for authentication
+        #[arg(long, env = "CLASP_ADMIN_TOKEN")]
+        token: Option<String>,
+
+        /// Relay URL
+        #[arg(long, env = "CLASP_RELAY_URL")]
+        relay: String,
+    },
+
+    /// Get entries since a sequence number
+    Since {
+        /// Sequence number
+        seq: u64,
+
+        /// Maximum entries to return
+        #[arg(long)]
+        limit: Option<u32>,
+
+        /// Admin token for authentication
+        #[arg(long, env = "CLASP_ADMIN_TOKEN")]
+        token: Option<String>,
+
+        /// Relay URL
+        #[arg(long, env = "CLASP_RELAY_URL")]
+        relay: String,
+    },
+
+    /// Get the latest sequence number
+    Latest {
+        /// Admin token for authentication
+        #[arg(long, env = "CLASP_ADMIN_TOKEN")]
+        token: Option<String>,
+
+        /// Relay URL
+        #[arg(long, env = "CLASP_RELAY_URL")]
+        relay: String,
+    },
+
+    /// Load the most recent state snapshot
+    Snapshot {
+        /// Admin token for authentication
+        #[arg(long, env = "CLASP_ADMIN_TOKEN")]
+        token: Option<String>,
+
+        /// Relay URL
+        #[arg(long, env = "CLASP_RELAY_URL")]
+        relay: String,
+    },
+}
+
+/// Crypto key management actions
+#[derive(Subcommand)]
+enum CryptoAction {
+    /// Generate an ECDH P-256 keypair
+    EcdhKeygen {
+        /// Output file for private key
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
+    /// Compute SHA-256 fingerprint of a public key
+    Fingerprint {
+        /// Public key (hex string or file path)
+        key: String,
     },
 }
 
@@ -671,18 +832,35 @@ async fn main() -> Result<()> {
             lens::handle_lens_command(action)?;
         }
 
-        #[cfg(feature = "identity-defra")]
         Commands::Identity { action } => {
             handle_identity_command(action)?;
+        }
+
+        Commands::Entity { action } => {
+            handle_entity_api_command(action).await?;
+        }
+
+        Commands::Journal { action } => {
+            handle_journal_command(action).await?;
+        }
+
+        Commands::Crypto { action } => {
+            handle_crypto_command(action)?;
         }
     }
 
     Ok(())
 }
 
-#[cfg(feature = "identity-defra")]
 fn handle_identity_command(action: IdentityAction) -> Result<()> {
     match action {
+        IdentityAction::Show { key_file } => {
+            identity::handle_show(&key_file)?;
+        }
+        IdentityAction::Generate { out } => {
+            identity::handle_generate(out.as_deref())?;
+        }
+        #[cfg(feature = "identity-defra")]
         IdentityAction::DeriveDefra { key } => {
             use clasp_identity::{DefraIdentity, Identity};
 
@@ -696,9 +874,76 @@ fn handle_identity_command(action: IdentityAction) -> Result<()> {
                 "{} Derived secp256k1 key for DefraDB ACP",
                 "OK".green().bold()
             );
-            Ok(())
         }
     }
+    Ok(())
+}
+
+async fn handle_entity_api_command(action: EntityApiAction) -> Result<()> {
+    match action {
+        EntityApiAction::List { relay } => {
+            entity::handle_list(&relay).await?;
+        }
+        EntityApiAction::Get { id, relay } => {
+            entity::handle_get(&relay, &id).await?;
+        }
+        EntityApiAction::Create { name, r#type, relay } => {
+            entity::handle_create(&relay, &name, &r#type).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn handle_journal_command(action: JournalAction) -> Result<()> {
+    match action {
+        JournalAction::Query {
+            pattern,
+            from,
+            to,
+            limit,
+            types,
+            token,
+            relay,
+        } => {
+            journal::handle_query(
+                &relay,
+                &pattern,
+                from,
+                to,
+                limit,
+                types.as_deref(),
+                token.as_deref(),
+            )
+            .await?;
+        }
+        JournalAction::Since {
+            seq,
+            limit,
+            token,
+            relay,
+        } => {
+            journal::handle_since(&relay, seq, limit, token.as_deref()).await?;
+        }
+        JournalAction::Latest { token, relay } => {
+            journal::handle_latest(&relay, token.as_deref()).await?;
+        }
+        JournalAction::Snapshot { token, relay } => {
+            journal::handle_snapshot(&relay, token.as_deref()).await?;
+        }
+    }
+    Ok(())
+}
+
+fn handle_crypto_command(action: CryptoAction) -> Result<()> {
+    match action {
+        CryptoAction::EcdhKeygen { out } => {
+            crypto::handle_keygen(out.as_deref())?;
+        }
+        CryptoAction::Fingerprint { key } => {
+            crypto::handle_fingerprint(&key)?;
+        }
+    }
+    Ok(())
 }
 
 fn setup_logging(level: &str, json: bool) -> Result<()> {
@@ -965,7 +1210,7 @@ async fn subscribe_pattern(
 // Key management
 // =========================================================================
 
-fn load_signing_key(path: &std::path::Path) -> Result<SigningKey> {
+pub(crate) fn load_signing_key(path: &std::path::Path) -> Result<SigningKey> {
     let hex_str = std::fs::read_to_string(path)
         .with_context(|| format!("Failed to read key file: {}", path.display()))?;
     let hex_str = hex_str.trim();
@@ -980,11 +1225,11 @@ fn load_signing_key(path: &std::path::Path) -> Result<SigningKey> {
     Ok(SigningKey::from_bytes(&key_bytes))
 }
 
-fn hex_encode(bytes: &[u8]) -> String {
+pub(crate) fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
-fn hex_decode(s: &str) -> Result<Vec<u8>> {
+pub(crate) fn hex_decode(s: &str) -> Result<Vec<u8>> {
     anyhow::ensure!(s.len().is_multiple_of(2), "Odd-length hex string");
     (0..s.len())
         .step_by(2)
@@ -994,7 +1239,7 @@ fn hex_decode(s: &str) -> Result<Vec<u8>> {
 
 /// Write a file with restrictive permissions (0o600 on Unix) atomically,
 /// avoiding the TOCTOU window of write() + set_permissions().
-fn write_secret_file(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
+pub(crate) fn write_secret_file(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
     #[cfg(unix)]
     {
         use std::io::Write;

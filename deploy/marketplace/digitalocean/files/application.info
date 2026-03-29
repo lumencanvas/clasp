@@ -1,0 +1,9 @@
+CLASP Relay
+Real-time infrastructure for connected devices. State synchronization, protocol
+bridging, E2E encryption, and reactive automation in a single binary.
+
+  https://clasp.to
+  https://docs.clasp.to
+  https://github.com/lumencanvas/clasp
+
+First-time setup: run 'clasp-setup' as root.

@@ -105,23 +105,52 @@ pub async fn run(config: RelayConfig) -> Result<()> {
 
     // Wire journal if configured
     #[cfg(feature = "journal")]
+    let journal_for_api: Option<Arc<dyn clasp_journal::Journal>>;
+    #[cfg(feature = "journal")]
     {
-        if let Some(ref path) = config.journal {
-            let journal = std::sync::Arc::new(
-                clasp_journal::SqliteJournal::new(
-                    path.to_str().expect("journal path must be valid UTF-8"),
-                )
-                .expect("Failed to open journal database"),
-            );
-            router = router.with_journal(journal);
-            tracing::info!("Journal: {}", path.display());
+        let journal_arc: Option<Arc<dyn clasp_journal::Journal>> = if let Some(ref path) = config.journal {
+            if config.journal_backend == "defra" {
+                #[cfg(feature = "defra")]
+                {
+                    let defra_url = config.defra_url.as_deref()
+                        .unwrap_or("http://localhost:9181");
+                    let journal = Arc::new(
+                        clasp_journal_defra::DefraJournal::new(defra_url)
+                            .await
+                            .expect("Failed to connect to DefraDB")
+                    );
+                    tracing::info!("Journal: DefraDB at {}", defra_url);
+                    Some(journal)
+                }
+                #[cfg(not(feature = "defra"))]
+                {
+                    anyhow::bail!("DefraDB journal backend requires the 'defra' feature. Rebuild with --features defra");
+                }
+            } else {
+                let journal = Arc::new(
+                    clasp_journal::SqliteJournal::new(
+                        path.to_str().expect("journal path must be valid UTF-8"),
+                    )
+                    .expect("Failed to open journal database"),
+                );
+                tracing::info!("Journal: SQLite at {}", path.display());
+                Some(journal)
+            }
         } else if config.journal_memory {
-            let journal = std::sync::Arc::new(
+            let journal = Arc::new(
                 clasp_journal::SqliteJournal::in_memory()
                     .expect("Failed to create in-memory journal"),
             );
-            router = router.with_journal(journal);
             tracing::info!("Journal: in-memory");
+            Some(journal)
+        } else {
+            None
+        };
+
+        journal_for_api = journal_arc.as_ref().map(Arc::clone);
+
+        if let Some(journal) = journal_arc {
+            router = router.with_journal(journal);
         }
     }
 
@@ -165,6 +194,20 @@ pub async fn run(config: RelayConfig) -> Result<()> {
                 interval_rules.len()
             );
         }
+    }
+
+    // Wire LensVM transforms if configured
+    #[cfg(feature = "lens")]
+    if let Some(ref lenses_path) = config.lenses {
+        let json = std::fs::read_to_string(lenses_path)
+            .with_context(|| format!("Failed to read lenses file {}", lenses_path.display()))?;
+
+        let lens_configs: Vec<crate::lens::LensConfigEntry> = serde_json::from_str(&json)
+            .with_context(|| format!("Failed to parse lenses JSON from {}", lenses_path.display()))?;
+
+        let transform = Arc::new(crate::lens::LensTransformPipeline::from_configs(&lens_configs)?);
+        tracing::info!("LensVM: {} transform(s) from {}", lens_configs.len(), lenses_path.display());
+        router = router.with_transforms(transform);
     }
 
     // Set up write validation and snapshot filtering.
@@ -412,6 +455,17 @@ pub async fn run(config: RelayConfig) -> Result<()> {
             auth_app = auth_app.merge(crate::registry::registry_router(reg_state));
             tracing::info!("Entity REST API mounted at /api/entities (admin auth required)");
             tracing::info!("Trust anchors API mounted at /api/trust-anchors (public)");
+        }
+
+        // Mount journal query REST routes if journal is configured
+        #[cfg(feature = "journal")]
+        if let Some(ref journal) = journal_for_api {
+            let journal_state = Arc::new(crate::journal_api::JournalApiState {
+                journal: Arc::clone(journal),
+                validator: Arc::clone(&cpsk_validator),
+            });
+            auth_app = auth_app.merge(crate::journal_api::journal_router(journal_state));
+            tracing::info!("Journal REST API mounted at /api/journal/* (admin auth required)");
         }
 
         let auth_addr: SocketAddr = format!("{}:{}", config.host, auth_port).parse()?;

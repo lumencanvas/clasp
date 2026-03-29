@@ -42,6 +42,10 @@ pub mod cpsk;
 #[cfg(feature = "federation")]
 pub mod federation;
 pub mod health;
+#[cfg(feature = "lens")]
+pub mod lens;
+#[cfg(feature = "journal")]
+pub mod journal_api;
 #[cfg(feature = "registry")]
 pub mod registry;
 pub mod server;

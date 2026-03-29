@@ -1,6 +1,6 @@
 {
   "name": "@clasp-to/sdk",
-  "version": "4.1.0",
+  "version": "4.4.0",
   "description": "Human-level SDK for CLASP - devices, rooms, rules, bridges in 1-5 lines",
   "main": "dist/index.js",
   "module": "dist/index.mjs",

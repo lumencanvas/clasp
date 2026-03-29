@@ -1,22 +1,10 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import ThemeToggle from './ThemeToggle.vue'
 import ClaspLogo from './ClaspLogo.vue'
 
 const router = useRouter()
 const route = useRoute()
-const menuOpen = ref(false)
-
-// Close mobile menu on outside click
-function handleOutsideClick(e) {
-  if (menuOpen.value && !e.target.closest('.topnav')) {
-    menuOpen.value = false
-  }
-}
-
-onMounted(() => document.addEventListener('click', handleOutsideClick))
-onUnmounted(() => document.removeEventListener('click', handleOutsideClick))
 
 function goHome() {
   if (route.path !== '/') {
@@ -27,7 +15,6 @@ function goHome() {
 }
 
 function openSearch() {
-  // Trigger Cmd+K programmatically
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))
 }
 </script>
@@ -39,6 +26,14 @@ function openSearch() {
       <span class="brand-text">CLASP</span>
       <span class="brand-docs">DOCS</span>
     </a>
+    <div class="navlinks">
+      <router-link to="/">Home</router-link>
+      <router-link to="/getting-started/first-connection">Tutorials</router-link>
+      <router-link to="/reference">Reference</router-link>
+      <router-link to="/tools/relay-configurator">Tools</router-link>
+      <a href="https://clasp.to" class="site-link">clasp.to</a>
+      <a href="https://github.com/lumencanvas/clasp" target="_blank">GitHub</a>
+    </div>
     <div class="nav-actions">
       <button class="search-trigger" @click="openSearch">
         <span class="search-trigger-icon">&#x2315;</span>
@@ -46,17 +41,6 @@ function openSearch() {
         <kbd class="search-trigger-kbd">&#x2318;K</kbd>
       </button>
       <ThemeToggle />
-      <button class="nav-toggle" @click="menuOpen = !menuOpen" aria-label="Toggle navigation">
-        {{ menuOpen ? '\u2715' : '\u2630' }}
-      </button>
-    </div>
-    <div class="navlinks" :class="{ open: menuOpen }">
-      <router-link to="/" @click="menuOpen = false">Home</router-link>
-      <router-link to="/getting-started/first-connection" @click="menuOpen = false">Tutorials</router-link>
-      <router-link to="/reference" @click="menuOpen = false">Reference</router-link>
-      <router-link to="/tools/relay-configurator" @click="menuOpen = false">Tools</router-link>
-      <a href="https://clasp.to" class="site-link" @click="menuOpen = false">clasp.to</a>
-      <a href="https://github.com/lumencanvas/clasp" target="_blank" @click="menuOpen = false">GitHub</a>
     </div>
   </nav>
 </template>
@@ -84,48 +68,15 @@ function openSearch() {
   gap: 0.5rem;
 }
 
-.nav-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  background: none;
-  border: none;
-  color: #fff;
-  font-size: 1.2rem;
-  cursor: pointer;
-  padding: 0;
-}
-
 .navlinks {
   display: none;
-  position: absolute;
-  top: var(--nav-height);
-  left: 0;
-  right: 0;
-  background: rgba(26,26,26,0.96);
-  backdrop-filter: blur(8px);
-  flex-direction: column;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-  z-index: 49;
-}
-
-.navlinks.open {
-  display: flex;
 }
 
 .navlinks a {
-  padding: 0.75rem 1.5rem;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
   text-decoration: none;
   color: #fff;
   opacity: 0.75;
   letter-spacing: 0.08em;
-  font-size: 0.7rem;
   cursor: pointer;
   transition: opacity 0.15s;
 }
@@ -171,22 +122,13 @@ function openSearch() {
 }
 
 @media (min-width: 768px) {
-  .nav-toggle {
-    display: none;
-  }
-
   .nav-actions {
     order: 2;
   }
 
   .navlinks {
     display: flex;
-    position: static;
     flex-direction: row;
-    background: none;
-    backdrop-filter: none;
-    padding: 0;
-    border-bottom: none;
     gap: 0.8rem;
     flex: 1;
     justify-content: flex-end;
@@ -194,9 +136,6 @@ function openSearch() {
   }
 
   .navlinks a {
-    padding: 0;
-    min-height: 0;
-    display: inline;
     font-size: 0.75rem;
     letter-spacing: 0.12em;
   }

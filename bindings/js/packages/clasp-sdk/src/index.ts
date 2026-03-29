@@ -40,3 +40,8 @@ export type {
   TimelineKeyframe,
 } from './types'
 export { QoS } from './types'
+export { RegistryClient } from './registry'
+export type { Entity, RegistryClientOptions } from './registry'
+export { JournalClient } from './journal'
+export type { JournalEntry, ParamSnapshot, JournalQueryOptions, JournalClientOptions } from './journal'
+export { toEntityId, toDid } from './identity'

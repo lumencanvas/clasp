@@ -26,7 +26,7 @@ use tracing::{debug, info, warn, Instrument};
 use crate::{
     gesture::GestureRegistry,
     p2p::P2PCapabilities,
-    router::{RouterConfig, SnapshotFilter, WriteValidator},
+    router::{RouterConfig, SignalTransform, SnapshotFilter, WriteValidator},
     session::{Session, SessionId},
     state::RouterState,
     subscription::SubscriptionManager,
@@ -59,6 +59,7 @@ pub(crate) struct HandlerContext<'a> {
     pub gesture_registry: &'a Option<Arc<GestureRegistry>>,
     pub write_validator: &'a Option<Arc<dyn WriteValidator>>,
     pub snapshot_filter: &'a Option<Arc<dyn SnapshotFilter>>,
+    pub transforms: &'a Option<Arc<dyn SignalTransform>>,
     #[cfg(feature = "rules")]
     pub rules_engine: &'a Option<Arc<parking_lot::Mutex<RulesEngine>>>,
 }

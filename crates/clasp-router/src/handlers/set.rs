@@ -75,6 +75,22 @@ pub(crate) async fn handle(
         }
     }
 
+    // Apply signal transforms if configured (LensVM WASM transforms)
+    let transformed;
+    let set = if let Some(ref transforms) = ctx.transforms {
+        if let Some(new_value) = transforms.transform(&set.address, &set.value) {
+            transformed = clasp_core::SetMessage {
+                value: new_value,
+                ..set.clone()
+            };
+            &transformed
+        } else {
+            set
+        }
+    } else {
+        set
+    };
+
     match ctx.state.apply_set(set, &session.id) {
         Ok(revision) => {
             let subscribers = ctx

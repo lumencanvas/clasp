@@ -1,12 +1,15 @@
 # Publishing CLASP to Package Managers
 
-This guide covers publishing CLASP to Cargo (crates.io) and npm.
-
 ## Pre-Publishing Checklist
 
-- [x] Rename GitHub repo from `signalflow` to `clasp`
-- [ ] Run `cargo test --workspace` to verify everything builds
-- [ ] Run `cargo clippy --workspace` to check for warnings
+- [ ] `cargo test --workspace` passes
+- [ ] `cargo test --features full` passes in `deploy/relay/`
+- [ ] `cargo clippy --workspace` clean (or acceptable warnings)
+- [ ] `cargo fmt --all -- --check` passes
+- [ ] Version bumped in root `Cargo.toml` (workspace version)
+- [ ] Version bumped in `deploy/relay/Cargo.toml` + dep pins match workspace
+- [ ] Version bumped in `bindings/js/packages/clasp-sdk/package.json`
+- [ ] CHANGELOG updated (if maintained)
 
 ---
 
@@ -14,41 +17,53 @@ This guide covers publishing CLASP to Cargo (crates.io) and npm.
 
 ### Setup (One-time)
 
-1. Create account at https://crates.io (login with GitHub)
-2. Get API token from https://crates.io/settings/tokens
-3. Login locally:
-   ```bash
-   cargo login <your-api-token>
-   ```
+```bash
+cargo login <your-api-token>
+```
+
+Get token from https://crates.io/settings/tokens
 
 ### Publish Order
 
-Publish in this order (dependencies first). Wait ~1 minute between each for crates.io to index.
+Publish in dependency order. Wait ~1 minute between each for crates.io to index.
 
 ```bash
-# 1. Core (no dependencies on other clasp crates)
+# Layer 0: No internal dependencies
 cargo publish -p clasp-core
 
-# 2. Transport (depends on clasp-core)
+# Layer 1: Depends on clasp-core only
 cargo publish -p clasp-transport
-
-# 3. Discovery (depends on clasp-core)
 cargo publish -p clasp-discovery
-
-# 4. Router (depends on clasp-core)
-cargo publish -p clasp-router
-
-# 5. Client (depends on clasp-core, clasp-transport)
-cargo publish -p clasp-client
-
-# 6. Bridge (depends on clasp-core)
+cargo publish -p clasp-journal
 cargo publish -p clasp-bridge
+cargo publish -p clasp-crypto
+cargo publish -p clasp-identity
+cargo publish -p clasp-caps
+cargo publish -p clasp-registry
+cargo publish -p clasp-rules
+cargo publish -p clasp-lens
+cargo publish -p clasp-embedded
 
-# 7. CLI (depends on clasp-core, clasp-bridge, clasp-transport)
+# Layer 2: Depends on Layer 0-1
+cargo publish -p clasp-router
+cargo publish -p clasp-client
+cargo publish -p clasp-federation
+cargo publish -p clasp-test-utils
+
+# Layer 3: DefraDB crates (depend on Layer 1)
+cargo publish -p clasp-journal-defra
+cargo publish -p clasp-state-defra
+cargo publish -p clasp-defra-bridge
+cargo publish -p clasp-defra-transport
+cargo publish -p clasp-registry-defra
+cargo publish -p clasp-config-defra
+
+# Layer 4: Bindings
+cargo publish -p clasp-wasm
 cargo publish -p clasp-cli
 ```
 
-### Dry Run (Test without publishing)
+### Dry Run
 
 ```bash
 cargo publish -p clasp-core --dry-run
@@ -56,82 +71,113 @@ cargo publish -p clasp-core --dry-run
 
 ---
 
-## npm
+## npm (@clasp-to)
 
 ### Setup (One-time)
 
-1. Create account at https://npmjs.com
-2. Create organization `@clasp-to` at https://www.npmjs.com/org/create
-3. Login locally:
-   ```bash
-   npm login
-   ```
+```bash
+npm login
+# Must be a member of the @clasp-to org on npmjs.com
+```
 
 ### Publish
 
 ```bash
+# Core protocol
 cd bindings/js/packages/clasp-core
+npm run build
+npm publish --access public
+
+# Encryption
+cd ../clasp-crypto
+npm run build
+npm publish --access public
+
+# High-level SDK (includes registry, journal, identity clients)
+cd ../clasp-sdk
+npm run build
+npm publish --access public
+
+# Relay wrapper
+cd ../clasp-relay
 npm run build
 npm publish --access public
 ```
 
-**Package name:** `@clasp-to/core`
-
 ---
 
-## PyPI
-
-### Setup (One-time)
-
-1. Create account at https://pypi.org
-2. Create API token at https://pypi.org/manage/account/token/
-3. Configure credentials:
-   ```bash
-   pip install build twine
-   ```
-
-### Publish
+## PyPI (clasp-to)
 
 ```bash
 cd bindings/python
+pip install build twine
 python -m build
 twine upload dist/*
 ```
 
-**Package name:** `clasp-to`
+---
+
+## Docker Image (ghcr.io)
+
+```bash
+cd deploy/relay
+docker build --build-arg FEATURES=full -t ghcr.io/lumencanvas/clasp-relay:4.4.0 .
+docker tag ghcr.io/lumencanvas/clasp-relay:4.4.0 ghcr.io/lumencanvas/clasp-relay:latest
+docker push ghcr.io/lumencanvas/clasp-relay:4.4.0
+docker push ghcr.io/lumencanvas/clasp-relay:latest
+```
 
 ---
 
-## Package Names Summary
+## Relay Binary (clasp-relay)
 
-| Manager | Package | Install Command |
-|---------|---------|-----------------|
+The relay is a standalone binary at `deploy/relay/`, not part of the cargo workspace. Publish separately:
+
+```bash
+cd deploy/relay
+cargo publish
+```
+
+Note: The relay's `[patch.crates-io]` section must be removed before publishing. The `Cargo.toml` dep pins (e.g., `clasp-core = "4.4"`) must match published versions.
+
+---
+
+## DigitalOcean Marketplace Image
+
+```bash
+cd deploy/marketplace/digitalocean
+export DIGITALOCEAN_TOKEN="your-token"
+packer init .
+packer build template.pkr.hcl
+```
+
+See `deploy/marketplace/digitalocean/README.md` for the full submission process.
+
+---
+
+## GitHub Release
+
+```bash
+git tag v4.4.0
+git push --tags
+```
+
+The CI workflow builds and attaches desktop app binaries (macOS, Windows, Linux) to the release automatically.
+
+---
+
+## Package Names
+
+| Manager | Package | Install |
+|---------|---------|---------|
 | Cargo | `clasp-cli` | `cargo install clasp-cli` |
-| Cargo | `clasp-core` | `clasp-core = "0.1"` in Cargo.toml |
-| Cargo | `clasp-bridge` | `clasp-bridge = "0.1"` in Cargo.toml |
+| Cargo | `clasp-core` | `cargo add clasp-core` |
+| Cargo | `clasp-router` | `cargo add clasp-router` |
+| Cargo | `clasp-lens` | `cargo add clasp-lens` |
+| Cargo | `clasp-relay` | `cargo install clasp-relay` |
 | npm | `@clasp-to/core` | `npm install @clasp-to/core` |
+| npm | `@clasp-to/sdk` | `npm install @clasp-to/sdk` |
 | npm | `@clasp-to/crypto` | `npm install @clasp-to/crypto` |
 | PyPI | `clasp-to` | `pip install clasp-to` |
-
----
-
-## After Publishing
-
-1. Create a GitHub release with tag `v0.1.0`
-2. The release workflow will automatically build and attach:
-   - Desktop app binaries (macOS, Windows, Linux)
-   - CLI binaries for all platforms
-3. Update the website download links if needed
-
----
-
-## Troubleshooting
-
-### "crate already exists"
-Someone else published a crate with that name. Check https://crates.io/crates/<name>
-
-### "dependency not found"
-Wait a minute after publishing dependencies before publishing dependent crates.
-
-### "missing field"
-Run `cargo package -p <crate-name>` to see what's missing.
+| Docker | `ghcr.io/lumencanvas/clasp-relay` | `docker pull ghcr.io/lumencanvas/clasp-relay` |
+| DO Marketplace | CLASP Relay | 1-Click Droplet |

@@ -626,19 +626,18 @@ footer {
 .sidebar-toggle {
   display: flex;
   position: fixed;
-  bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
-  left: max(1.5rem, env(safe-area-inset-left, 0px));
-  z-index: 40;
-  width: 44px;
-  height: 44px;
-  border: 1px solid var(--border);
-  background: var(--paper);
-  color: var(--ink);
+  top: 0;
+  left: 0;
+  z-index: 51;
+  width: var(--nav-height);
+  height: var(--nav-height);
+  border: none;
+  background: none;
+  color: #fff;
   font-size: 1.2rem;
   cursor: pointer;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 
 .sidebar-overlay {

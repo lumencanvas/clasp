@@ -104,6 +104,15 @@ pub trait SnapshotFilter: Send + Sync {
     ) -> Vec<clasp_core::ParamValue>;
 }
 
+/// Signal transform applied to SET values before storage.
+///
+/// Transforms are matched by address pattern and applied in order.
+/// Used by LensVM to run WASM transforms on the router's hot path.
+pub trait SignalTransform: Send + Sync {
+    /// Transform a value for the given address. Return None to pass through unchanged.
+    fn transform(&self, address: &str, value: &clasp_core::Value) -> Option<clasp_core::Value>;
+}
+
 /// Timeout for clients to complete the handshake (send Hello message)
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -307,6 +316,8 @@ pub struct Router {
     write_validator: Option<Arc<dyn WriteValidator>>,
     /// Application-specific snapshot filter
     snapshot_filter: Option<Arc<dyn SnapshotFilter>>,
+    /// Signal transform pipeline for SET values
+    transforms: Option<Arc<dyn SignalTransform>>,
     /// Rules engine for server-side automation
     #[cfg(feature = "rules")]
     rules_engine: Option<Arc<parking_lot::Mutex<RulesEngine>>>,
@@ -336,6 +347,7 @@ impl Router {
             gesture_registry,
             write_validator: None,
             snapshot_filter: None,
+            transforms: None,
             #[cfg(feature = "rules")]
             rules_engine: None,
         }
@@ -370,6 +382,15 @@ impl Router {
     /// Set the snapshot filter from a pre-wrapped `Arc` (for library embedding).
     pub fn set_snapshot_filter_arc(&mut self, filter: Arc<dyn SnapshotFilter>) {
         self.snapshot_filter = Some(filter);
+    }
+
+    /// Add a signal transform pipeline for processing SET values.
+    ///
+    /// Transforms run after write validation and before state storage.
+    /// Used by LensVM to apply WASM transforms on the router's hot path.
+    pub fn with_transforms(mut self, transforms: Arc<dyn SignalTransform>) -> Self {
+        self.transforms = Some(transforms);
+        self
     }
 
     /// Create a router with a journal for state persistence.
@@ -941,6 +962,7 @@ impl Router {
             gesture_registry: self.gesture_registry.clone(),
             write_validator: self.write_validator.clone(),
             snapshot_filter: self.snapshot_filter.clone(),
+            transforms: self.transforms.clone(),
             #[cfg(feature = "rules")]
             rules_engine: self.rules_engine.clone(),
         }
@@ -972,6 +994,7 @@ impl Router {
         let gesture_registry = self.gesture_registry.clone();
         let write_validator = self.write_validator.clone();
         let snapshot_filter = self.snapshot_filter.clone();
+        let transforms = self.transforms.clone();
         #[cfg(feature = "rules")]
         let rules_engine = self.rules_engine.clone();
 
@@ -1052,6 +1075,7 @@ impl Router {
                         gesture_registry: &gesture_registry,
                         write_validator: &write_validator,
                         snapshot_filter: &snapshot_filter,
+                        transforms: &transforms,
                         #[cfg(feature = "rules")]
                         rules_engine: &rules_engine,
                     };
@@ -1131,6 +1155,7 @@ impl Router {
                                         gesture_registry: &gesture_registry,
                                         write_validator: &write_validator,
                                         snapshot_filter: &snapshot_filter,
+                                        transforms: &transforms,
                                         #[cfg(feature = "rules")]
                                         rules_engine: &rules_engine,
                                     };
@@ -1710,5 +1735,224 @@ mod federation_tests {
     fn test_request_shorter_than_declared() {
         // Request /a doesn't match declared /a/b (request must be within declared scope)
         assert!(!federation_pattern_covered_by("/a", "/a/b"));
+    }
+}
+
+#[cfg(test)]
+mod transform_tests {
+    use super::*;
+    use clasp_core::Value;
+
+    /// A test transform that doubles numeric values for /sensors/** addresses.
+    struct DoubleTransform;
+
+    impl SignalTransform for DoubleTransform {
+        fn transform(&self, address: &str, value: &Value) -> Option<Value> {
+            if clasp_core::address::glob_match("/sensors/**", address) {
+                match value {
+                    Value::Float(f) => Some(Value::Float(f * 2.0)),
+                    Value::Int(i) => Some(Value::Int(i * 2)),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        }
+    }
+
+    /// A transform that always returns None (passthrough / no-op).
+    struct PassthroughTransform;
+
+    impl SignalTransform for PassthroughTransform {
+        fn transform(&self, _address: &str, _value: &Value) -> Option<Value> {
+            None
+        }
+    }
+
+    /// A transform that clamps floats into [0.0, 1.0].
+    struct ClampTransform;
+
+    impl SignalTransform for ClampTransform {
+        fn transform(&self, _address: &str, value: &Value) -> Option<Value> {
+            match value {
+                Value::Float(f) => {
+                    let clamped = f.clamp(0.0, 1.0);
+                    if (clamped - f).abs() > f64::EPSILON {
+                        Some(Value::Float(clamped))
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        }
+    }
+
+    // -- Transform trait logic tests --
+
+    #[test]
+    fn transform_applied_to_matching_address() {
+        let t = DoubleTransform;
+        let result = t.transform("/sensors/temp", &Value::Float(22.5));
+        assert_eq!(result, Some(Value::Float(45.0)));
+    }
+
+    #[test]
+    fn transform_applied_to_int_value() {
+        let t = DoubleTransform;
+        let result = t.transform("/sensors/pressure", &Value::Int(50));
+        assert_eq!(result, Some(Value::Int(100)));
+    }
+
+    #[test]
+    fn transform_skips_non_matching_address() {
+        let t = DoubleTransform;
+        let result = t.transform("/lights/brightness", &Value::Float(0.5));
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn transform_handles_nested_glob_pattern() {
+        let t = DoubleTransform;
+        // ** should match multiple path segments
+        let result = t.transform("/sensors/room1/temp", &Value::Int(20));
+        assert_eq!(result, Some(Value::Int(40)));
+    }
+
+    #[test]
+    fn transform_returns_none_for_non_numeric_on_match() {
+        let t = DoubleTransform;
+        // Address matches but value type is string -- transform returns None (passthrough)
+        let result = t.transform("/sensors/name", &Value::String("probe-1".into()));
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn passthrough_transform_always_returns_none() {
+        let t = PassthroughTransform;
+        assert_eq!(t.transform("/anything", &Value::Float(1.0)), None);
+        assert_eq!(t.transform("/sensors/temp", &Value::Int(42)), None);
+        assert_eq!(
+            t.transform("/a/b/c", &Value::String("hello".into())),
+            None
+        );
+    }
+
+    #[test]
+    fn clamp_transform_caps_high_value() {
+        let t = ClampTransform;
+        assert_eq!(
+            t.transform("/vol", &Value::Float(1.5)),
+            Some(Value::Float(1.0))
+        );
+    }
+
+    #[test]
+    fn clamp_transform_floors_low_value() {
+        let t = ClampTransform;
+        assert_eq!(
+            t.transform("/vol", &Value::Float(-0.3)),
+            Some(Value::Float(0.0))
+        );
+    }
+
+    #[test]
+    fn clamp_transform_passes_through_in_range() {
+        let t = ClampTransform;
+        // Value already in [0, 1] -- returns None (no change)
+        assert_eq!(t.transform("/vol", &Value::Float(0.5)), None);
+    }
+
+    #[test]
+    fn clamp_transform_ignores_non_float() {
+        let t = ClampTransform;
+        assert_eq!(t.transform("/vol", &Value::Int(5)), None);
+    }
+
+    // -- First-match-wins: simulates the SET handler's transform selection --
+
+    /// A chain of transforms where the first match wins, mirroring set.rs logic:
+    ///   if let Some(new_value) = transforms.transform(addr, val) { use new_value }
+    ///   else { use original }
+    struct ChainTransform {
+        inner: Vec<Arc<dyn SignalTransform>>,
+    }
+
+    impl SignalTransform for ChainTransform {
+        fn transform(&self, address: &str, value: &Value) -> Option<Value> {
+            for t in &self.inner {
+                if let Some(v) = t.transform(address, value) {
+                    return Some(v);
+                }
+            }
+            None
+        }
+    }
+
+    #[test]
+    fn chain_first_match_wins() {
+        // ClampTransform fires first (clamps 5.0 to 1.0),
+        // DoubleTransform would double it but never runs
+        let chain = ChainTransform {
+            inner: vec![Arc::new(ClampTransform), Arc::new(DoubleTransform)],
+        };
+        let result = chain.transform("/sensors/level", &Value::Float(5.0));
+        assert_eq!(result, Some(Value::Float(1.0)));
+    }
+
+    #[test]
+    fn chain_falls_through_to_second() {
+        // For a non-sensor address, DoubleTransform returns None.
+        // ClampTransform returns None for in-range values.
+        // Put DoubleTransform first: it skips /lights, then ClampTransform fires.
+        let chain = ChainTransform {
+            inner: vec![Arc::new(DoubleTransform), Arc::new(ClampTransform)],
+        };
+        let result = chain.transform("/lights/dim", &Value::Float(2.0));
+        assert_eq!(result, Some(Value::Float(1.0)));
+    }
+
+    #[test]
+    fn chain_all_passthrough() {
+        let chain = ChainTransform {
+            inner: vec![Arc::new(PassthroughTransform), Arc::new(PassthroughTransform)],
+        };
+        let result = chain.transform("/any", &Value::Float(42.0));
+        assert_eq!(result, None);
+    }
+
+    // -- Router structural tests --
+
+    #[test]
+    fn router_accepts_transform() {
+        let config = RouterConfig::default();
+        let router = Router::new(config).with_transforms(Arc::new(DoubleTransform));
+        assert!(router.transforms.is_some());
+    }
+
+    #[test]
+    fn router_without_transform_has_none() {
+        let config = RouterConfig::default();
+        let router = Router::new(config);
+        assert!(router.transforms.is_none());
+    }
+
+    #[test]
+    fn router_state_set_bypasses_transform() {
+        // Verify that calling state().set() directly does NOT apply transforms.
+        // This documents the important design fact: transforms only run in the
+        // SET message handler (handlers/set.rs), not in the state store.
+        let config = RouterConfig::default();
+        let router = Router::new(config).with_transforms(Arc::new(DoubleTransform));
+        let writer = "test-session".to_string();
+
+        router
+            .state()
+            .set("/sensors/temp", Value::Float(22.5), &writer, None, false, false, None)
+            .unwrap();
+
+        // Value is 22.5, NOT 45.0 -- state.set() bypasses the transform pipeline
+        let stored = router.state().get("/sensors/temp").unwrap();
+        assert_eq!(stored, Value::Float(22.5));
     }
 }

@@ -21,7 +21,11 @@ clasp-transport = { workspace = true, features = ["websocket", "udp", "quic"] }
 clasp-caps = { workspace = true, optional = true }
 clasp-registry = { workspace = true, optional = true }
 clasp-lens = { workspace = true, optional = true }
-clasp-identity = { workspace = true, optional = true, features = ["secp256k1"] }
+clasp-identity = { workspace = true }
+clasp-crypto = { workspace = true }
+
+# HTTP client (entity registry API)
+reqwest = { workspace = true, features = ["json"] }
 
 # Certificate generation for QUIC dev mode
 rcgen = "0.12"
@@ -60,4 +64,4 @@ default = ["caps", "registry"]
 caps = ["dep:clasp-caps"]
 registry = ["dep:clasp-registry"]
 lens = ["dep:clasp-lens", "clasp-bridge/lens"]
-identity-defra = ["dep:clasp-identity"]
+identity-defra = ["clasp-identity/secp256k1"]

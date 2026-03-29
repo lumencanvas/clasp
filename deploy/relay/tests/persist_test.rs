@@ -33,11 +33,11 @@ fn snapshot_contains_set_values() {
 
     router
         .state()
-        .set("/test/a", Value::String("hello".into()), &writer, None, false, false)
+        .set("/test/a", Value::String("hello".into()), &writer, None, false, false, None)
         .unwrap();
     router
         .state()
-        .set("/test/b", Value::Int(42), &writer, None, false, false)
+        .set("/test/b", Value::Int(42), &writer, None, false, false, None)
         .unwrap();
 
     let snapshot = router.state().full_snapshot();
@@ -57,7 +57,7 @@ fn snapshot_serializes_to_valid_json() {
 
     router
         .state()
-        .set("/json/test", Value::String("data".into()), &writer, None, false, false)
+        .set("/json/test", Value::String("data".into()), &writer, None, false, false, None)
         .unwrap();
 
     let snapshot = router.state().full_snapshot();
@@ -78,19 +78,19 @@ fn snapshot_restore_into_fresh_router() {
 
     source
         .state()
-        .set("/room/1/name", Value::String("General".into()), &admin, None, false, false)
+        .set("/room/1/name", Value::String("General".into()), &admin, None, false, false, None)
         .unwrap();
 
     let mut meta = HashMap::new();
     meta.insert("encrypted".to_string(), Value::Bool(true));
     source
         .state()
-        .set("/room/1/meta", Value::Map(meta), &admin, None, false, false)
+        .set("/room/1/meta", Value::Map(meta), &admin, None, false, false, None)
         .unwrap();
 
     source
         .state()
-        .set("/user/count", Value::Int(5), &system, None, false, false)
+        .set("/user/count", Value::Int(5), &system, None, false, false, None)
         .unwrap();
 
     // Take snapshot and serialize
@@ -104,7 +104,7 @@ fn snapshot_restore_into_fresh_router() {
 
     for pv in &restored.params {
         dest.state()
-            .set(&pv.address, pv.value.clone(), &restore_writer, Some(pv.revision), false, false)
+            .set(&pv.address, pv.value.clone(), &restore_writer, Some(pv.revision), false, false, None)
             .unwrap();
     }
 

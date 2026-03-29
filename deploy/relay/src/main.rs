@@ -34,6 +34,10 @@ mod cpsk;
 #[cfg(feature = "federation")]
 mod federation;
 mod health;
+#[cfg(feature = "lens")]
+mod lens;
+#[cfg(feature = "journal")]
+mod journal_api;
 #[cfg(feature = "registry")]
 mod registry;
 mod server;

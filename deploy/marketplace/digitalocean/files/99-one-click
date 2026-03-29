@@ -1,0 +1,30 @@
+#!/bin/bash
+
+cat <<'MOTD'
+
+  ================================================================
+   CLASP Relay
+   Real-time infrastructure for connected devices
+  ================================================================
+
+   Get started:    clasp-setup
+   Documentation:  https://docs.clasp.to
+   Source:         https://github.com/lumencanvas/clasp
+
+MOTD
+
+# Show status if already configured
+if [ -f /opt/clasp/docker-compose.yml ]; then
+  if docker compose -f /opt/clasp/docker-compose.yml ps --format '{{.Status}}' 2>/dev/null | grep -q "Up"; then
+    echo "   Status: RUNNING"
+    DOMAIN=$(grep -oP 'name.*"\K[^"]+' /opt/clasp/docker-compose.yml 2>/dev/null || echo "unknown")
+    echo "   Relay:  wss://${DOMAIN}"
+  else
+    echo "   Status: STOPPED"
+    echo "   Start:  docker compose -f /opt/clasp/docker-compose.yml up -d"
+  fi
+else
+  echo "   Status: NOT CONFIGURED"
+  echo "   Run:    clasp-setup"
+fi
+echo ""

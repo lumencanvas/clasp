@@ -135,6 +135,14 @@ pub struct Cli {
     #[arg(long)]
     pub journal_memory: bool,
 
+    /// Journal backend: sqlite (default) or defra
+    #[arg(long = "journal-backend", default_value = "sqlite")]
+    pub journal_backend: String,
+
+    /// DefraDB GraphQL endpoint URL (required when --journal-backend=defra)
+    #[arg(long = "defra-url")]
+    pub defra_url: Option<String>,
+
     // -- Capability Tokens --
 
     /// Trust anchor public key file(s) for capability tokens (32-byte Ed25519, repeatable)
@@ -156,6 +164,13 @@ pub struct Cli {
     /// JSON file containing rule definitions
     #[arg(long)]
     pub rules: Option<PathBuf>,
+
+    // -- LensVM Transforms --
+
+    /// JSON file defining WASM lens transform mappings.
+    /// Format: [{"address": "/sensors/*/temp", "wasm": "/path/to/lowpass.wasm", "params": {"alpha": 0.3}}]
+    #[arg(long)]
+    pub lenses: Option<PathBuf>,
 
     // -- App Config --
 
@@ -283,6 +298,8 @@ pub struct RelayConfig {
     // -- Journal --
     pub journal: Option<PathBuf>,
     pub journal_memory: bool,
+    pub journal_backend: String,
+    pub defra_url: Option<String>,
 
     // -- Capability Tokens --
     pub trust_anchor: Vec<PathBuf>,
@@ -293,6 +310,9 @@ pub struct RelayConfig {
 
     // -- Rules --
     pub rules: Option<PathBuf>,
+
+    // -- Lenses --
+    pub lenses: Option<PathBuf>,
 
     // -- App Config --
     pub app_config: Option<crate::app_config::AppConfig>,
@@ -349,10 +369,13 @@ impl Default for RelayConfig {
             admin_token: None,
             journal: None,
             journal_memory: false,
+            journal_backend: "sqlite".into(),
+            defra_url: None,
             trust_anchor: Vec::new(),
             cap_max_depth: 5,
             registry_db: None,
             rules: None,
+            lenses: None,
             app_config: None,
             federation_hub: None,
             federation_id: None,
@@ -430,10 +453,13 @@ impl From<Cli> for RelayConfig {
             admin_token: cli.admin_token,
             journal: cli.journal,
             journal_memory: cli.journal_memory,
+            journal_backend: cli.journal_backend,
+            defra_url: cli.defra_url,
             trust_anchor: cli.trust_anchor,
             cap_max_depth: cli.cap_max_depth,
             registry_db: cli.registry_db,
             rules: cli.rules,
+            lenses: cli.lenses,
             app_config,
             federation_hub: cli.federation_hub,
             federation_id: cli.federation_id,
@@ -446,5 +472,242 @@ impl From<Cli> for RelayConfig {
             write_validator: None,
             snapshot_filter: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_defaults_journal_backend_sqlite() {
+        let config = RelayConfig::default();
+        assert_eq!(config.journal_backend, "sqlite");
+    }
+
+    #[test]
+    fn config_defaults_defra_url_none() {
+        let config = RelayConfig::default();
+        assert!(config.defra_url.is_none());
+    }
+
+    #[test]
+    fn config_defaults_lenses_none() {
+        let config = RelayConfig::default();
+        assert!(config.lenses.is_none());
+    }
+
+    #[test]
+    fn config_defaults_app_config_none() {
+        let config = RelayConfig::default();
+        assert!(config.app_config.is_none());
+    }
+
+    #[test]
+    fn config_defaults_network() {
+        let config = RelayConfig::default();
+        assert_eq!(config.ws_port, 7330);
+        assert_eq!(config.host, "0.0.0.0");
+        assert_eq!(config.name, "CLASP Relay");
+        assert!(!config.no_websocket);
+        assert!(config.auth_port.is_none());
+        assert!(config.health_port.is_none());
+    }
+
+    #[test]
+    fn config_defaults_sessions() {
+        let config = RelayConfig::default();
+        assert_eq!(config.max_sessions, 1000);
+        assert_eq!(config.session_timeout, 300);
+    }
+
+    #[test]
+    fn config_defaults_ttl() {
+        let config = RelayConfig::default();
+        assert!(!config.no_ttl);
+        assert_eq!(config.param_ttl, 3600);
+        assert_eq!(config.signal_ttl, 3600);
+    }
+
+    #[test]
+    fn config_defaults_persistence() {
+        let config = RelayConfig::default();
+        assert!(config.persist.is_none());
+        assert_eq!(config.persist_interval, 30);
+        assert!(!config.journal_memory);
+        assert!(config.journal.is_none());
+    }
+
+    #[test]
+    fn config_defaults_federation() {
+        let config = RelayConfig::default();
+        assert!(config.federation_hub.is_none());
+        assert!(config.federation_id.is_none());
+        assert!(config.federation_namespace.is_empty());
+        assert!(config.federation_token.is_none());
+    }
+
+    #[test]
+    fn config_defaults_caps() {
+        let config = RelayConfig::default();
+        assert!(config.trust_anchor.is_empty());
+        assert_eq!(config.cap_max_depth, 5);
+    }
+
+    #[test]
+    fn config_defaults_rendezvous() {
+        let config = RelayConfig::default();
+        assert_eq!(config.rendezvous_port, 7340);
+        assert_eq!(config.rendezvous_ttl, 300);
+    }
+
+    #[test]
+    fn config_defaults_drain_timeout() {
+        let config = RelayConfig::default();
+        assert_eq!(config.drain_timeout, Duration::from_secs(30));
+    }
+
+    #[test]
+    fn config_defaults_mqtt_osc_namespaces() {
+        let config = RelayConfig::default();
+        assert_eq!(config.mqtt_namespace, "/mqtt");
+        assert_eq!(config.osc_namespace, "/osc");
+        assert!(config.mqtt_port.is_none());
+        assert!(config.osc_port.is_none());
+    }
+
+    #[test]
+    fn config_defaults_no_validators() {
+        let config = RelayConfig::default();
+        assert!(config.write_validator.is_none());
+        assert!(config.snapshot_filter.is_none());
+    }
+
+    #[test]
+    fn config_override_fields() {
+        let config = RelayConfig {
+            ws_port: 9000,
+            auth_port: Some(9001),
+            journal_backend: "defra".into(),
+            defra_url: Some("http://localhost:9181".into()),
+            no_ttl: true,
+            drain_timeout: Duration::from_secs(60),
+            ..Default::default()
+        };
+        assert_eq!(config.ws_port, 9000);
+        assert_eq!(config.auth_port, Some(9001));
+        assert_eq!(config.journal_backend, "defra");
+        assert_eq!(config.defra_url.as_deref(), Some("http://localhost:9181"));
+        assert!(config.no_ttl);
+        assert_eq!(config.drain_timeout, Duration::from_secs(60));
+        // Other fields retain defaults
+        assert_eq!(config.host, "0.0.0.0");
+        assert_eq!(config.max_sessions, 1000);
+    }
+
+    #[test]
+    fn cli_parses_defaults() {
+        let cli = Cli::parse_from(["clasp-relay"]);
+        assert_eq!(cli.ws_port, 7330);
+        assert_eq!(cli.host, "0.0.0.0");
+        assert_eq!(cli.journal_backend, "sqlite");
+        assert!(cli.defra_url.is_none());
+        assert!(cli.lenses.is_none());
+        assert!(!cli.verbose);
+        assert!(!cli.no_websocket);
+        assert!(!cli.no_ttl);
+    }
+
+    #[test]
+    fn cli_parses_custom_ports() {
+        let cli = Cli::parse_from([
+            "clasp-relay",
+            "--ws-port", "9000",
+            "--auth-port", "9001",
+            "--mqtt-port", "1883",
+            "--osc-port", "9000",
+        ]);
+        assert_eq!(cli.ws_port, 9000);
+        assert_eq!(cli.auth_port, Some(9001));
+        assert_eq!(cli.mqtt_port, Some(1883));
+        assert_eq!(cli.osc_port, Some(9000));
+    }
+
+    #[test]
+    fn cli_parses_journal_backend_defra() {
+        let cli = Cli::parse_from([
+            "clasp-relay",
+            "--journal-backend", "defra",
+            "--defra-url", "http://defra:9181",
+        ]);
+        assert_eq!(cli.journal_backend, "defra");
+        assert_eq!(cli.defra_url.as_deref(), Some("http://defra:9181"));
+    }
+
+    #[test]
+    fn cli_parses_lenses_path() {
+        let cli = Cli::parse_from([
+            "clasp-relay",
+            "--lenses", "/etc/clasp/lenses.json",
+        ]);
+        assert_eq!(cli.lenses, Some(PathBuf::from("/etc/clasp/lenses.json")));
+    }
+
+    #[test]
+    fn cli_parses_federation_flags() {
+        let cli = Cli::parse_from([
+            "clasp-relay",
+            "--federation-hub", "ws://hub:7330",
+            "--federation-id", "leaf-1",
+            "--federation-namespace", "/audio/**",
+            "--federation-namespace", "/video/**",
+            "--federation-token", "secret",
+        ]);
+        assert_eq!(cli.federation_hub.as_deref(), Some("ws://hub:7330"));
+        assert_eq!(cli.federation_id.as_deref(), Some("leaf-1"));
+        assert_eq!(cli.federation_namespace, vec!["/audio/**", "/video/**"]);
+        assert_eq!(cli.federation_token.as_deref(), Some("secret"));
+    }
+
+    #[test]
+    fn cli_parses_boolean_flags() {
+        let cli = Cli::parse_from([
+            "clasp-relay",
+            "--verbose",
+            "--no-websocket",
+            "--no-ttl",
+            "--journal-memory",
+        ]);
+        assert!(cli.verbose);
+        assert!(cli.no_websocket);
+        assert!(cli.no_ttl);
+        assert!(cli.journal_memory);
+    }
+
+    #[test]
+    fn cli_to_relay_config_preserves_fields() {
+        let cli = Cli::parse_from([
+            "clasp-relay",
+            "--ws-port", "8000",
+            "--name", "Test Relay",
+            "--no-ttl",
+            "--journal-backend", "defra",
+            "--defra-url", "http://localhost:9181",
+            "--drain-timeout", "60",
+        ]);
+        let config = RelayConfig::from(cli);
+        assert_eq!(config.ws_port, 8000);
+        assert_eq!(config.name, "Test Relay");
+        assert!(config.no_ttl);
+        assert_eq!(config.journal_backend, "defra");
+        assert_eq!(config.defra_url.as_deref(), Some("http://localhost:9181"));
+        assert_eq!(config.drain_timeout, Duration::from_secs(60));
+    }
+
+    #[test]
+    fn cli_port_alias_works() {
+        // --port is an alias for --ws-port
+        let cli = Cli::parse_from(["clasp-relay", "--port", "9999"]);
+        assert_eq!(cli.ws_port, 9999);
     }
 }
