@@ -10,7 +10,10 @@ import ExplainerTiming from '../components/explainer/ExplainerTiming.vue'
 import ExplainerLatency from '../components/explainer/ExplainerLatency.vue'
 import ExplainerBridges from '../components/explainer/ExplainerBridges.vue'
 import ExplainerTransports from '../components/explainer/ExplainerTransports.vue'
+import ExplainerEncryption from '../components/explainer/ExplainerEncryption.vue'
+import ExplainerDefra from '../components/explainer/ExplainerDefra.vue'
 import ExplainerCrossLang from '../components/explainer/ExplainerCrossLang.vue'
+import ExplainerUseCases from '../components/explainer/ExplainerUseCases.vue'
 import EcosystemSection from '../components/EcosystemSection.vue'
 import DownloadsSection from '../components/DownloadsSection.vue'
 import ExplainerCta from '../components/explainer/ExplainerCta.vue'
@@ -30,7 +33,10 @@ import FooterSection from '../components/FooterSection.vue'
   <ExplainerLatency />
   <ExplainerBridges />
   <ExplainerTransports />
+  <ExplainerEncryption />
+  <ExplainerDefra />
   <ExplainerCrossLang />
+  <ExplainerUseCases />
   <EcosystemSection />
   <DownloadsSection />
   <ExplainerCta />

@@ -171,7 +171,7 @@ function pColor(proto) {
         </template>
       </div>
 
-      <p class="note fade-in">N tools, N bridges &mdash; not N&sup2; translations.</p>
+      <p class="note fade-in">N tools, N bridges. Not N&sup2; translations.</p>
     </div>
   </section>
 </template>

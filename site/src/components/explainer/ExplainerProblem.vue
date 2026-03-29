@@ -24,9 +24,9 @@ function randomRotation() {
 <template>
   <section class="explainer-section problem-section" id="problem" ref="sectionRef">
     <div class="explainer-inner">
-      <h2 class="fade-in">Creative Tools Speak Different Languages</h2>
+      <h2 class="fade-in">Connected Devices Speak Different Languages</h2>
       <p class="subtitle fade-in">
-        Every protocol was designed for a single domain. Connecting them means writing glue code for every pair.
+        Every protocol was designed for a single domain. Factories, stages, buildings, sensor networks: connecting them means writing glue code for every pair.
       </p>
       <div class="protocol-grid">
         <div

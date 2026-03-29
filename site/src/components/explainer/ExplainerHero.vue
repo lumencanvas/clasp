@@ -11,8 +11,8 @@ import ClaspLogo from '../ClaspLogo.vue'
       <h1>CLASP</h1>
       <p class="tagline">Creative Low-Latency Application Streaming Protocol</p>
       <p class="meta">
-        One protocol to connect every creative tool.<br>
-        Real-time. Sub-millisecond. Open.
+        Real-time infrastructure for connected devices.<br>
+        State sync, protocol bridging, encryption, automation. One binary.
       </p>
       <div class="scroll-hint" aria-hidden="true">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

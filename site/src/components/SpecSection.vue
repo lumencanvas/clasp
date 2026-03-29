@@ -583,7 +583,7 @@ const benchmarks = {
         >
           <h3 @click="toggleSection(specSections[1])">1. What is CLASP?</h3>
           <div class="spec-content">
-            <p>CLASP is a <b>universal protocol bridge</b> for creative applications. It connects everything: MIDI controllers, OSC apps, DMX lights, Art-Net fixtures, MQTT sensors, and WebSocket interfaces through a single unified address space.</p>
+            <p>CLASP is a <b>universal protocol bridge</b> for connected devices. It connects everything: MIDI controllers, OSC apps, DMX lights, Art-Net fixtures, MQTT sensors, and WebSocket interfaces through a single unified address space.</p>
 
             <p style="margin-top: 1rem;">Under the hood, it's a <b>pub/sub protocol</b> (like MQTT) optimized for real-time media. But the killer feature is that it <b>bridges all your existing gear</b>: your TouchOSC tablet can control your DMX lights while your MIDI controller adjusts your VJ software, all through CLASP.</p>
 
@@ -937,7 +937,7 @@ const benchmarks = {
         >
           <h3 @click="toggleSection(specSections[16])">16. Benchmarks</h3>
           <div class="spec-content">
-            <p class="bench-intro"><b>Why CLASP when MQTT and OSC are faster?</b> Because raw serialization speed isn't everything. CLASP trades some encoding speed for features that matter in real-time creative applications:</p>
+            <p class="bench-intro"><b>Why CLASP when MQTT and OSC are faster?</b> Because raw serialization speed isn't everything. CLASP trades some encoding speed for features that matter in real-time applications:</p>
 
             <div class="feature-table">
               <div class="feature-row header">

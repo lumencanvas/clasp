@@ -19,23 +19,23 @@
 
 ---
 
-CLASP is a real-time infrastructure layer for connected devices. It provides state synchronization, pub/sub messaging, E2E encryption, device identity, reactive automation, and multi-site federation through a single binary protocol. It bridges IoT protocols (MQTT, BLE, Serial, HTTP) and creative protocols (OSC, MIDI, DMX, Art-Net) so hardware works immediately.
+CLASP is a real-time infrastructure layer for connected devices. One binary protocol handles state synchronization, pub/sub messaging, E2E encryption, device identity, programmable transforms, reactive automation, and multi-site federation. Bridges for MQTT, BLE, Serial, HTTP, OSC, MIDI, DMX, and Art-Net make existing hardware work together immediately.
 
 ## Why CLASP?
 
-Building connected applications is hard. You need state sync, auth, encryption, discovery, automation, and multi-site coordination, and every project reinvents the wheel. CLASP gives you all of this out of the box:
+Building connected applications means solving the same problems every time: state sync, auth, encryption, discovery, automation, multi-site coordination. Every project reinvents this from scratch. CLASP provides all of it in one system.
 
-- **State Sync**: set a value anywhere, read it everywhere, late-joiners get current state automatically
-- **Pub/Sub**: wildcard subscriptions (`*`, `**`), rate limiting, epsilon filtering
-- **E2E Encryption**: AES-256-GCM with ECDH key exchange, TOFU, auto-rotation. The server never sees plaintext
-- **Device Identity**: Ed25519 capability tokens with UCAN-style delegation chains
-- **Rules Engine**: server-side reactive automation: "when X changes, set Y"
-- **Federation**: router-to-router state sharing for multi-site deployments
-- **Protocol Bridges**: MQTT, BLE, Serial, HTTP, WebSocket, OSC, MIDI, DMX, Art-Net, Socket.IO
-- **Transports**: WebSocket, QUIC, UDP, TCP, BLE, Serial, WebRTC
-- **Discovery**: mDNS/DNS-SD, UDP broadcast, rendezvous server
+Five things set it apart from generic pub/sub:
 
-CLASP started as a protocol bridge for creative applications (lighting, audio, VJ software) and grew into general-purpose IoT infrastructure. It handles everything from MQTT sensor networks and BLE wearables to stage lighting rigs and browser dashboards.
+**Semantic signal types.** The router distinguishes Params (stateful, conflict-resolved, persisted, delivered to late-joiners), Events (confirmed, ephemeral), Streams (best-effort, droppable under congestion), Gestures (phased lifecycle with begin/update/end), and Timelines (keyframed automation with easing). The infrastructure layer makes routing decisions that other systems push to application code.
+
+**Protocol bridging as architecture.** MQTT, OSC, MIDI, DMX, Art-Net, sACN, HTTP, WebSocket, Socket.IO, BLE, Serial. Each protocol gets one bridge. Any device on any protocol can read and write state from any other device on any other protocol, through one router. N bridges, not N-squared adapters.
+
+**Late-joiner state sync.** New clients receive a snapshot of all current Param state the instant they subscribe. Five conflict strategies (LWW, Max, Min, Lock, Merge) with optimistic concurrency via revision numbers. This eliminates an entire class of "initial state" bugs that plague every real-time system.
+
+**Server-side rules engine.** Reactive automation evaluated on every state change: thresholds, pattern-matched triggers, conditions, transforms, cooldowns. Zero application code. The router becomes a programmable edge compute node.
+
+**Federation with namespace ownership.** Hub-leaf topology where each site owns its namespace prefix. No distributed consensus needed. DefraDB integration adds Merkle CRDT-based persistent state that survives restarts and syncs across sites automatically.
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
@@ -376,7 +376,7 @@ We believe in transparent benchmarking with honest methodology.
 
 ### Codec Benchmarks (In-Memory, Single Core)
 
-These measure raw encode/decode speed—the **theoretical ceiling**, not system throughput:
+These measure raw encode/decode speed, the **theoretical ceiling**, not system throughput:
 
 | Protocol | Encode | Decode | Size | Notes |
 |----------|--------|--------|------|-------|
@@ -428,6 +428,7 @@ CLASP: [SET][flags][len][addr][value][rev]             → 31 bytes
 | Delegatable auth (Ed25519) | ✅ | ❌ | ❌ |
 | Router-to-router federation | ✅ | ❌ | ❌ |
 | Server-side rules engine | ✅ | ❌ | ❌ |
+| Programmable transforms (WASM) | ✅ | ❌ | ❌ |
 | P2P state persistence (CRDTs) | ✅ | ❌ | ❌ |
 
 ### Timing Guarantees
@@ -436,7 +437,7 @@ CLASP: [SET][flags][len][addr][value][rev]             → 31 bytes
 - **WiFi**: Target ±5-10ms clock sync accuracy
 - **Not suitable for**: Hard realtime, safety-critical, industrial control systems
 
-CLASP is designed for **soft realtime** creative applications: VJ software, stage lighting, music production, interactive installations.
+CLASP is designed for **soft realtime** applications: live performance, IoT control, interactive installations, sensor networks, collaborative tools.
 
 ## Supported Protocols
 
@@ -480,61 +481,7 @@ cargo add clasp-transport --features "websocket,quic,serial"
 
 ## CLASP Chat
 
-[CLASP Chat](apps/chat/) is a fully-featured encrypted chat application built entirely on top of CLASP. It demonstrates what happens when you push the protocol to its limits: a real-time chat app with E2E encryption, video calling, namespaces, and a plugin system running on a **generic CLASP relay that has zero knowledge of chat**.
-
-### No Chat Server
-
-Traditional chat apps require a dedicated server with REST endpoints, message databases, and chat-specific logic. CLASP Chat has none of that. The relay is a dumb pub/sub router. Every chat concept — messages, rooms, presence, typing indicators, friend requests, admin actions — is expressed as a CLASP address:
-
-```
-/chat/room/{roomId}/messages          → EMIT (ephemeral messages)
-/chat/room/{roomId}/presence/{userId} → SET  (who's online, persisted)
-/chat/room/{roomId}/typing/{userId}   → SET  (typing indicators, auto-expire)
-/chat/room/{roomId}/meta              → SET  (room name, type, settings)
-/chat/registry/rooms/{roomId}         → SET  (public room discovery)
-/chat/user/{userId}/profile           → SET  (display name, avatar)
-/chat/user/{userId}/friends/{friendId}→ SET  (friend list)
-/chat/requests/{targetId}             → EMIT (friend request handshake)
-```
-
-Messages are `EMIT` (fire-and-forget events), while presence and metadata are `SET` (persisted state that late-joiners receive automatically). Clients subscribe with wildcards (`/chat/room/*/presence/*`) and receive updates instantly — no polling, no REST calls.
-
-### End-to-End Encryption
-
-Encryption is layered on top of the same relay paths. When a room is encrypted:
-
-1. Each member publishes an ECDH public key to `/chat/room/{roomId}/crypto/pubkey/{userId}`
-2. Existing members derive a shared secret and send the AES-256-GCM room key via `/chat/room/{roomId}/crypto/keyex/{peerId}`
-3. All messages are encrypted client-side before emit — the relay only sees ciphertext
-4. Messages are signed with ECDSA (P-256) for authenticity verification
-5. Banning a user triggers key rotation — the banned peer's cached key is pruned and a new room key is distributed to remaining members
-
-### Video Calling via CLASP Signaling
-
-WebRTC video calls use the same relay as a signaling channel:
-
-```
-/chat/room/{roomId}/video/presence/{sessionId} → SET  (who's in the call)
-/chat/room/{roomId}/video/signal/{recipientId} → EMIT (offer/answer/ICE)
-```
-
-The relay carries only tiny signaling messages. Actual audio/video streams go peer-to-peer via WebRTC. No media server required.
-
-### Namespaces
-
-Rooms are organized into hierarchical namespaces (similar to Discord servers), stored as nested CLASP paths:
-
-```
-/chat/registry/ns/gaming/minecraft/{roomId}     → room in gaming/minecraft
-/chat/registry/ns-meta/gaming/minecraft         → namespace metadata
-/chat/registry/ns-meta/gaming/minecraft/__auth   → password gate (hidden from wildcards)
-```
-
-Wildcard subscriptions (`/chat/registry/ns/gaming/**`) let clients discover all rooms in a namespace tree with a single subscribe.
-
-### Why This Matters
-
-The relay never needs to be updated for new chat features. Admin controls, friend requests, typing indicators, key rotation — all are client-side logic over generic pub/sub paths. Scaling the chat means scaling the relay, which knows nothing about chat. Any CLASP relay can serve any CLASP Chat instance out of the box.
+[CLASP Chat](apps/chat/) is a production chat application built on a generic CLASP relay. Rooms, DMs, friend lists, video calling, E2E encryption, and namespace-based organization, all expressed as pub/sub addresses on a router that knows nothing about chat. The relay never needs to be updated for new features. See **[CHAT.md](CHAT.md)** for the full architecture breakdown.
 
 ## Distributed Infrastructure
 
@@ -588,6 +535,25 @@ Server-side reactive automation with triggers, conditions, and transforms:
   "cooldown": { "secs": 5, "nanos": 0 }
 }
 ```
+
+### LensVM Transforms
+
+Programmable WASM signal transforms that run on the router. Write a filter in Rust, compile to `wasm32-unknown-unknown`, load it at runtime. Lenses are bidirectional (forward + inverse) and configurable via parameters.
+
+Three bundled lenses ship with CLASP: `lowpass` (IIR filter), `hysteresis` (Schmitt trigger for debouncing), and `moving-average`. Custom lenses are typically 30-100KB compiled.
+
+```bash
+# Build a lens
+cd lenses/lowpass
+cargo build --target wasm32-unknown-unknown --release
+
+# Validate and test it
+clasp lens validate ./target/wasm32-unknown-unknown/release/lowpass.wasm
+clasp lens test ./target/wasm32-unknown-unknown/release/lowpass.wasm \
+    --input '0.5' --params '{"alpha": 0.3}'
+```
+
+See [docs/transforms/authoring-lenses.md](docs/transforms/authoring-lenses.md) for the authoring guide.
 
 ### Federation
 

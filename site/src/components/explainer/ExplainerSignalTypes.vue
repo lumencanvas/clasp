@@ -71,7 +71,7 @@ const signals = [
     <div class="explainer-inner">
       <h2 class="fade-in">Five Signal Types, One Address Space</h2>
       <p class="subtitle fade-in">
-        Every message type creative tools need, unified under a single path-based addressing system.
+        Every message type connected devices need, unified under a single path-based addressing system.
       </p>
       <div class="signal-grid">
         <div
