@@ -42,6 +42,11 @@ const SECTION_CONFIG = [
     basePath: 'protocols'
   },
   {
+    key: 'transforms',
+    label: 'TRANSFORMS',
+    basePath: 'transforms'
+  },
+  {
     key: 'deployment',
     label: 'DEPLOYMENT',
     basePath: 'deployment'

@@ -21,6 +21,7 @@ mqtt = ["rumqttc"]
 websocket = ["tokio-tungstenite"]
 socketio = ["rust_socketio"]
 http = ["axum", "tower", "tower-http", "reqwest"]
+lens = ["clasp-lens"]
 
 [dependencies]
 clasp-core = { workspace = true }
@@ -56,6 +57,9 @@ axum = { version = "0.7", optional = true, features = ["json", "macros"] }
 tower = { version = "0.4", optional = true }
 tower-http = { version = "0.5", optional = true, features = ["cors", "trace"] }
 reqwest = { version = "0.12", optional = true, default-features = false, features = ["json", "rustls-tls"] }
+
+# LensVM WASM transforms
+clasp-lens = { workspace = true, optional = true }
 
 # Utils
 bytes = { workspace = true }

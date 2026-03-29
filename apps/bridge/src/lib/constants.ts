@@ -78,6 +78,7 @@ export const transformTypes: { value: TransformType; label: string }[] = [
   { value: 'power', label: 'Power (x^n)' },
   { value: 'expression', label: 'Expression (math)' },
   { value: 'javascript', label: 'JavaScript (custom)' },
+  { value: 'wasm', label: 'WASM (LensVM module)' },
 ]
 
 export const curveTypes = [

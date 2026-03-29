@@ -22,6 +22,7 @@
 
 mod convert;
 mod error;
+pub mod policy;
 mod schema;
 mod store;
 mod types;

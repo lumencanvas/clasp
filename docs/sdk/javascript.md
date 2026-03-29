@@ -282,6 +282,42 @@ Or as an ES module:
 </script>
 ```
 
+## WASM Transforms
+
+The bridge app supports custom signal transforms via LensVM WASM modules. Lenses are loaded in the Electron renderer process and applied to signal routes.
+
+### Loading a Lens
+
+```javascript
+import { WasmTransformHost } from './lib/wasm-transform'
+
+const response = await fetch('/lenses/lowpass.wasm')
+const bytes = await response.arrayBuffer()
+const host = await WasmTransformHost.load(bytes)
+host.setParams({ alpha: 0.8 })
+
+const output = await host.transform({ value: 0.5 })
+```
+
+### In Route Configuration
+
+Set the transform type to `wasm` on any signal route:
+
+```javascript
+const route = {
+  source: { protocol: 'osc', address: '/sensor/raw' },
+  target: { protocol: 'clasp', address: '/sensor/filtered' },
+  transform: {
+    type: 'wasm',
+    wasmModuleId: 'lowpass',
+    wasmModuleName: 'Low-Pass Filter',
+    wasmParams: '{"alpha": 0.8}'
+  }
+}
+```
+
+Bundled lenses: `lowpass`, `hysteresis`, `moving-average`. See [WASM Transforms](../transforms/wasm-transforms.md) for details and [Authoring Lenses](../transforms/authoring-lenses.md) for writing custom modules.
+
 ## Value Types
 
 All CLASP value types are mapped to JavaScript types:

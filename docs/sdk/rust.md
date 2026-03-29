@@ -395,11 +395,30 @@ let plaintext = session.decrypt(&envelope).await?;
 
 Enable the `client` feature for the `CryptoClient` wrapper that handles encryption transparently over a `Clasp` instance. See [E2E Encryption](../auth/e2e-encryption.md) for the full protocol description.
 
+## WASM Transforms
+
+The `clasp-lens` crate provides a LensVM host for loading custom signal transforms as WASM modules. Enable the `lens` feature on `clasp-bridge` to use `Transform::Wasm` in signal routes.
+
+```rust
+use clasp_lens::LensHost;
+use serde_json::json;
+
+let wasm_bytes = std::fs::read("lowpass-filter.wasm")?;
+let mut host = LensHost::new(&wasm_bytes)?;
+host.set_params(json!({"alpha": 0.8}));
+
+let output = host.transform(&json!({"value": 0.5}))?;
+```
+
+See [WASM Transforms](../transforms/wasm-transforms.md) for the full guide and [Authoring Lenses](../transforms/authoring-lenses.md) for writing custom modules.
+
 ## Next Steps
 
 - [Core Concepts](../concepts/architecture.md) -- understand signals, state, and the router model
 - [Protocol Bridges](../protocols/README.md) -- connect CLASP to OSC, MIDI, MQTT, and more
+- [WASM Transforms](../transforms/wasm-transforms.md) -- custom signal transforms via WebAssembly
 - [Auth & E2E Encryption](../auth/README.md) -- CPSK tokens, capability delegation, and E2E encryption
+- [DefraDB Integration](../defra/README.md) -- peer-to-peer config sync and access control
 - [P2P & WebRTC](../core/p2p.md) -- direct peer-to-peer connections
 - [Embedded SDK](embedded.md) -- run CLASP on microcontrollers
 - [JavaScript SDK](javascript.md) -- build CLASP clients with JavaScript

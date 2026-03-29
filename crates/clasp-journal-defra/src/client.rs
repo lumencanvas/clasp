@@ -60,6 +60,21 @@ impl DefraClient {
         query: &str,
         variables: Option<serde_json::Value>,
     ) -> Result<serde_json::Value> {
+        self.graphql_with_identity(query, variables, None).await
+    }
+
+    /// Execute a GraphQL query or mutation with an optional ACP identity.
+    ///
+    /// When `identity` is provided (secp256k1 hex private key or JWT),
+    /// it is sent as an `Authorization: bearer` header for DefraDB ACP
+    /// enforcement. Without identity, the request is unauthenticated
+    /// (documents are public).
+    pub async fn graphql_with_identity(
+        &self,
+        query: &str,
+        variables: Option<serde_json::Value>,
+        identity: Option<&str>,
+    ) -> Result<serde_json::Value> {
         let url = format!("{}/api/v0/graphql", self.base_url);
 
         let mut body = json!({ "query": query });
@@ -67,7 +82,7 @@ impl DefraClient {
             body["variables"] = vars.clone();
         }
 
-        debug!(url = %url, "DefraDB GraphQL request");
+        debug!(url = %url, has_identity = identity.is_some(), "DefraDB GraphQL request");
 
         let mut last_err = None;
         for attempt in 0..=self.max_retries {
@@ -81,7 +96,12 @@ impl DefraClient {
                 tokio::time::sleep(delay).await;
             }
 
-            let resp = match self.http.post(&url).json(&body).send().await {
+            let mut req = self.http.post(&url).json(&body);
+            if let Some(id) = identity {
+                req = req.header("Authorization", format!("bearer {}", id));
+            }
+
+            let resp = match req.send().await {
                 Ok(r) => r,
                 Err(e) => {
                     // Network error -- retryable
@@ -124,6 +144,137 @@ impl DefraClient {
         }
 
         Err(last_err.unwrap_or_else(|| DefraError::GraphQL("max retries exceeded".into())))
+    }
+
+    /// Register an ACP policy with DefraDB.
+    ///
+    /// The policy must be in DefraDB Policy Interface (DPI) YAML format.
+    /// Returns the policy ID (SHA-256 hash) on success.
+    ///
+    /// Requires ACP to be enabled on the DefraDB instance. If ACP is
+    /// disabled, this will return an error.
+    pub async fn add_policy(&self, policy_yaml: &str, identity: &str) -> Result<String> {
+        let url = format!("{}/api/v0/acp/policy", self.base_url);
+
+        debug!(url = %url, "DefraDB ACP policy registration");
+
+        let resp = self
+            .http
+            .post(&url)
+            .header("Content-Type", "text/yaml")
+            .header("Authorization", format!("bearer {}", identity))
+            .body(policy_yaml.to_string())
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(DefraError::GraphQL(format!(
+                "policy registration failed ({status}): {text}"
+            )));
+        }
+
+        let payload: serde_json::Value = resp.json().await?;
+        let policy_id = payload
+            .get("PolicyID")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .ok_or_else(|| DefraError::GraphQL("missing PolicyID in response".into()))?;
+
+        debug!(policy_id = %policy_id, "ACP policy registered");
+        Ok(policy_id)
+    }
+
+    /// Add a relationship tuple for ACP access control.
+    ///
+    /// Grants `actor` the specified `relation` on `doc_id` in `collection`.
+    /// The caller must be the document owner.
+    pub async fn add_relationship(
+        &self,
+        collection: &str,
+        doc_id: &str,
+        relation: &str,
+        actor: &str,
+        identity: &str,
+    ) -> Result<bool> {
+        let url = format!("{}/api/v0/acp/relationship", self.base_url);
+
+        let body = json!({
+            "collection": collection,
+            "docID": doc_id,
+            "relation": relation,
+            "actor": actor,
+        });
+
+        let resp = self
+            .http
+            .post(&url)
+            .header("Authorization", format!("bearer {}", identity))
+            .json(&body)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(DefraError::GraphQL(format!(
+                "add relationship failed ({status}): {text}"
+            )));
+        }
+
+        let payload: serde_json::Value = resp.json().await?;
+        let existed = payload
+            .get("ExistedAlready")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        Ok(!existed)
+    }
+
+    /// Delete a relationship tuple for ACP access control.
+    ///
+    /// Revokes `actor`'s `relation` on `doc_id` in `collection`.
+    pub async fn delete_relationship(
+        &self,
+        collection: &str,
+        doc_id: &str,
+        relation: &str,
+        actor: &str,
+        identity: &str,
+    ) -> Result<bool> {
+        let url = format!("{}/api/v0/acp/relationship", self.base_url);
+
+        let body = json!({
+            "collection": collection,
+            "docID": doc_id,
+            "relation": relation,
+            "actor": actor,
+        });
+
+        let resp = self
+            .http
+            .delete(&url)
+            .header("Authorization", format!("bearer {}", identity))
+            .json(&body)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(DefraError::GraphQL(format!(
+                "delete relationship failed ({status}): {text}"
+            )));
+        }
+
+        let payload: serde_json::Value = resp.json().await?;
+        let found = payload
+            .get("RecordFound")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        Ok(found)
     }
 
     /// Add a GraphQL SDL schema to DefraDB.

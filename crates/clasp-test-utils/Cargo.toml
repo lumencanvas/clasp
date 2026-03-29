@@ -6,6 +6,10 @@ license.workspace = true
 repository.workspace = true
 description = "Test utilities for CLASP protocol crates"
 
+[features]
+default = []
+lens = ["dep:clasp-lens", "dep:serde_json"]
+
 [dependencies]
 # Async runtime
 tokio = { workspace = true }
@@ -14,6 +18,10 @@ tokio = { workspace = true }
 clasp-core = { workspace = true }
 clasp-router = { workspace = true }
 clasp-client = { workspace = true }
+
+# Optional: LensVM test helpers
+clasp-lens = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 
 # Utilities
 parking_lot = { workspace = true }

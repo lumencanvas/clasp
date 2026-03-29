@@ -20,6 +20,8 @@ clasp-bridge = { workspace = true, features = ["osc", "midi", "artnet", "mqtt", 
 clasp-transport = { workspace = true, features = ["websocket", "udp", "quic"] }
 clasp-caps = { workspace = true, optional = true }
 clasp-registry = { workspace = true, optional = true }
+clasp-lens = { workspace = true, optional = true }
+clasp-identity = { workspace = true, optional = true, features = ["secp256k1"] }
 
 # Certificate generation for QUIC dev mode
 rcgen = "0.12"
@@ -57,3 +59,5 @@ dirs = "5.0"
 default = ["caps", "registry"]
 caps = ["dep:clasp-caps"]
 registry = ["dep:clasp-registry"]
+lens = ["dep:clasp-lens", "clasp-bridge/lens"]
+identity-defra = ["dep:clasp-identity"]

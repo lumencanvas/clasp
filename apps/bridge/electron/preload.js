@@ -60,6 +60,12 @@ const api = {
   defraConfigExport: (url) => ipcRenderer.invoke('defra-config-export', url),
   defraConfigImport: (url, config) => ipcRenderer.invoke('defra-config-import', { defraUrl: url, config }),
 
+  // ACP (access control) -- active only when DefraDB is connected
+  acpAddRelationship: (collection, docId, relation, actor, identity) =>
+    ipcRenderer.invoke('acp-add-relationship', { collection, docId, relation, actor, identity }),
+  acpDeleteRelationship: (collection, docId, relation, actor, identity) =>
+    ipcRenderer.invoke('acp-delete-relationship', { collection, docId, relation, actor, identity }),
+
   // Events
   onDeviceFound: (callback) => {
     ipcRenderer.on('device-found', (event, device) => callback(device));

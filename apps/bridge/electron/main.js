@@ -7,6 +7,7 @@ const { stopAllServers } = require('./ipc/server-manager');
 const { registerFileHandlers } = require('./ipc/files');
 const { registerHardwareHandlers } = require('./ipc/hardware');
 const { registerDiagnosticsHandlers, startStatsBroadcast, stopStatsBroadcast } = require('./ipc/diagnostics');
+const { registerAcpHandlers } = require('./ipc/acp');
 
 let mainWindow;
 
@@ -57,6 +58,7 @@ function createWindow() {
 registerFileHandlers();
 registerHardwareHandlers();
 registerDiagnosticsHandlers();
+registerAcpHandlers();
 
 app.whenReady().then(() => {
   console.log('App ready, initializing...');

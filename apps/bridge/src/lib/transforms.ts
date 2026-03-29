@@ -62,6 +62,10 @@ export function applyTransform(value: number, config: TransformConfig): number {
       return -value
     case 'power':
       return Math.pow(value, config.powerExponent ?? 2)
+    case 'wasm':
+      // WASM transforms are async and handled by WasmTransformHost.
+      // In synchronous preview context, pass through.
+      return value
     default:
       return value
   }
@@ -134,6 +138,7 @@ export function formatTransformBadge(config: TransformConfig): string {
     case 'power': return `x^${config.powerExponent ?? 2}`
     case 'expression': return 'f(x)'
     case 'javascript': return 'JS'
+    case 'wasm': return config.wasmModuleName || 'WASM'
     default: return '->'
   }
 }

@@ -31,10 +31,11 @@ client.on('/lights/*', (value, address) => console.log(address, value));
 |---|---|
 | **Protocol Bridges** | OSC, MIDI, MQTT, DMX, Art-Net, sACN, HTTP, WebSocket |
 | **Signal Types** | Param, Event, Stream, Gesture, Timeline |
+| **Transforms** | 18 built-in types + custom WASM modules via LensVM |
 | **State Management** | Revisions, conflict resolution, late-joiner sync |
 | **Auth** | CPSK tokens, Ed25519 capability delegation, entity registry |
 | **Server Features** | Rules engine, journal persistence, app config |
-| **DefraDB Integration** | P2P state persistence, distributed config, browser sync |
+| **DefraDB Integration** | P2P state, distributed config, Zanzibar-style access control |
 | **Deployment** | Federation, discovery, Docker, cloud |
 
 ## Start Here

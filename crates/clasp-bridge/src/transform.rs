@@ -112,6 +112,15 @@ pub enum Transform {
         operation: BitwiseOp,
         operand: Option<i64>,
     },
+
+    /// LensVM WASM transform (requires `lens` feature).
+    /// The `module_id` references a pre-loaded WASM module by hash or name.
+    /// Parameters are passed to the lens via `set_param()`.
+    #[cfg(feature = "lens")]
+    Wasm {
+        module_id: String,
+        params: Option<serde_json::Value>,
+    },
 }
 
 /// Curve types for non-linear transforms
@@ -543,6 +552,15 @@ impl Transform {
                 } else {
                     value.clone()
                 }
+            }
+
+            #[cfg(feature = "lens")]
+            Transform::Wasm { module_id, .. } => {
+                // WASM transforms are handled externally by the LensHost.
+                // If we reach this point, the caller did not resolve the module_id
+                // to a LensHost instance before calling apply(). Log and pass through.
+                warn!(module_id = %module_id, "WASM transform not resolved; passing value through");
+                value.clone()
             }
         }
     }

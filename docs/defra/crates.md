@@ -85,6 +85,8 @@ let bridge = DefraBridge::new("http://localhost:9181", vec!["User".into()]);
 
 **Key type**: `DefraConfigStore` with CRUD for 5 config types + snapshot management.
 
+**ACP module**: `policy.rs` provides the CLASP ACP policy definition (DPI YAML format), `@policy`-annotated schema variants, and policy ID resolution. See [Access Control (ACP)](acp.md) for details.
+
 ```rust
 use clasp_config_defra::{DefraConfigStore, RouterConfig};
 let store = DefraConfigStore::new("http://localhost:9181").await?;
@@ -125,10 +127,20 @@ let tunnel = DefraTunnel::new("http://localhost:9181", "my-peer-id");
 
 **Key type**: `Identity`
 
+**secp256k1 feature**: Enable `secp256k1` for DefraDB ACP identity support. Provides `DefraIdentity` which can be derived deterministically from an Ed25519 `Identity` via HKDF, or generated independently.
+
 ```rust
 use clasp_identity::Identity;
 let id = Identity::generate();
 println!("{} / {} / {}", id.entity_id(), id.did(), id.peer_id());
+
+// With secp256k1 feature:
+#[cfg(feature = "secp256k1")]
+{
+    use clasp_identity::DefraIdentity;
+    let defra_id = DefraIdentity::derive_from(&id).unwrap();
+    println!("DefraDB identity: {}", defra_id.to_hex());
+}
 ```
 
-**Install**: `cargo add clasp-identity`
+**Install**: `cargo add clasp-identity` (add `--features secp256k1` for DefraDB ACP)

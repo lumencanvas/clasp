@@ -341,3 +341,56 @@ impl Default for ValueCollector {
         Self::new()
     }
 }
+
+// ============================================================================
+// LensVM Test Helpers (requires `lens` feature)
+// ============================================================================
+
+#[cfg(feature = "lens")]
+pub mod lens_helpers {
+    use clasp_lens::LensHost;
+    use serde_json::Value;
+
+    /// Load a pre-compiled WASM lens from the `lenses/` directory.
+    ///
+    /// Expects the lens to have been built with:
+    /// `cargo build --target wasm32-unknown-unknown --release`
+    ///
+    /// Panics if the file is not found or the module is invalid.
+    pub fn load_test_lens(name: &str) -> LensHost {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let workspace_root = std::path::Path::new(manifest_dir)
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap();
+        let wasm_name = format!("lens_{}", name.replace('-', "_"));
+        let wasm_path = workspace_root
+            .join("lenses")
+            .join(name)
+            .join("target/wasm32-unknown-unknown/release")
+            .join(format!("{}.wasm", wasm_name));
+        let bytes = std::fs::read(&wasm_path).unwrap_or_else(|e| {
+            panic!(
+                "Failed to load test lens '{}' at {}: {}",
+                name,
+                wasm_path.display(),
+                e
+            )
+        });
+        LensHost::new(&bytes)
+            .unwrap_or_else(|e| panic!("Failed to create LensHost for '{}': {}", name, e))
+    }
+
+    /// Assert that a lens transform produces the expected JSON output.
+    pub fn assert_lens_transform(host: &LensHost, input: &Value, expected: &Value) {
+        let actual = host
+            .transform(input)
+            .unwrap_or_else(|e| panic!("Transform failed on input {}: {}", input, e));
+        assert_eq!(
+            &actual, expected,
+            "Lens transform mismatch.\n  Input:    {}\n  Expected: {}\n  Actual:   {}",
+            input, expected, actual
+        );
+    }
+}

@@ -60,6 +60,39 @@ jobs:
       - name: Run integration tests
         run: cargo test --workspace --test '*'
 
+  # Optional Feature Tests (lens, secp256k1)
+  feature-tests:
+    name: Feature Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ubuntu-cargo-features-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Test clasp-lens (WASM transforms)
+        run: cargo test -p clasp-lens
+
+      - name: Test clasp-bridge with lens feature
+        run: cargo test -p clasp-bridge --features lens --lib
+
+      - name: Test clasp-identity with secp256k1 feature
+        run: cargo test -p clasp-identity --features secp256k1
+
   # Protocol Conformance Suite
   conformance:
     name: Conformance Tests

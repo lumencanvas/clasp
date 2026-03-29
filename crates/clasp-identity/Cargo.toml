@@ -6,6 +6,10 @@ license.workspace = true
 repository.workspace = true
 description = "Unified identity for CLASP, DID, and libp2p - one Ed25519 keypair, three identity systems"
 
+[features]
+default = []
+secp256k1 = ["k256"]
+
 [dependencies]
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 rand = "0.8"
@@ -16,6 +20,7 @@ serde_json = { workspace = true }
 sha2 = "0.10"
 unsigned-varint = "0.8"
 zeroize = { version = "1", features = ["derive"] }
+k256 = { version = "0.13", features = ["ecdsa"], optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }

@@ -17,6 +17,9 @@ use crate::types::*;
 /// Merkle CRDTs.
 pub struct DefraConfigStore {
     client: DefraClient,
+    /// Optional secp256k1 identity for ACP-protected mutations.
+    /// When set, all mutations include an Authorization header.
+    identity: Option<String>,
 }
 
 impl DefraConfigStore {
@@ -36,7 +39,58 @@ impl DefraConfigStore {
         }
 
         debug!("Config schemas provisioned");
-        Ok(Self { client })
+        Ok(Self {
+            client,
+            identity: None,
+        })
+    }
+
+    /// Set the secp256k1 identity for ACP-protected operations.
+    ///
+    /// When set, all mutations and queries include this identity in the
+    /// Authorization header. Documents created with an identity are
+    /// private to the creator by default (ACP enforcement).
+    pub fn set_identity(&mut self, identity: String) {
+        self.identity = Some(identity);
+    }
+
+    /// Clear the ACP identity. Subsequent operations are unauthenticated.
+    pub fn clear_identity(&mut self) {
+        self.identity = None;
+    }
+
+    /// Create a config store with ACP-protected schemas.
+    ///
+    /// Registers the CLASP ACP policy with DefraDB and provisions
+    /// the @policy-annotated schemas. The identity must be a secp256k1
+    /// hex private key for DefraDB ACP authentication.
+    ///
+    /// Schemas are provisioned idempotently.
+    pub async fn new_with_acp(defra_url: &str, identity: &str) -> Result<Self> {
+        let client = DefraClient::new(defra_url);
+
+        // Register the ACP policy
+        let policy_id = client
+            .add_policy(crate::policy::CLASP_ACP_POLICY, identity)
+            .await
+            .map_err(|e| ConfigDefraError::Schema(format!("policy registration failed: {e}")))?;
+
+        debug!(policy_id = %policy_id, "ACP policy registered");
+
+        // Provision ACP-enabled schemas with the policy ID substituted
+        for schema_template in crate::policy::ALL_SCHEMAS_ACP {
+            let sdl = crate::policy::resolve_policy_id(schema_template, &policy_id);
+            client
+                .add_schema(&sdl)
+                .await
+                .map_err(|e| ConfigDefraError::Schema(e.to_string()))?;
+        }
+
+        debug!("ACP-enabled config schemas provisioned");
+        Ok(Self {
+            client,
+            identity: Some(identity.to_string()),
+        })
     }
 
     // -- Router configs -------------------------------------------------------
@@ -550,7 +604,7 @@ impl DefraConfigStore {
     /// Execute a GraphQL query against DefraDB.
     async fn execute_query(&self, query: &str) -> Result<serde_json::Value> {
         self.client
-            .graphql(query, None)
+            .graphql_with_identity(query, None, self.identity.as_deref())
             .await
             .map_err(|e| ConfigDefraError::GraphQL(e.to_string()))
     }
@@ -558,7 +612,7 @@ impl DefraConfigStore {
     /// Execute a GraphQL mutation against DefraDB.
     async fn execute_mutation(&self, mutation: &str) -> Result<serde_json::Value> {
         self.client
-            .graphql(mutation, None)
+            .graphql_with_identity(mutation, None, self.identity.as_deref())
             .await
             .map_err(|e| ConfigDefraError::GraphQL(e.to_string()))
     }

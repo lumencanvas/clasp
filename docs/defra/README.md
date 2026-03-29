@@ -43,3 +43,4 @@ Each CLASP router connects to a local DefraDB instance. The hot path (SET/GET) s
 6. [Transport Tunnel](transport.md): DefraDB sync over CLASP transports
 7. [Identity](identity.md): unified Ed25519 identity across systems
 8. [Testing](testing.md): Docker setup, integration tests, E2E tests
+9. [Access Control (ACP)](acp.md): Zanzibar-style relationship-based access control for config documents

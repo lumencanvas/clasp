@@ -5,6 +5,9 @@
 mod server;
 mod tokens;
 
+#[cfg(feature = "lens")]
+mod lens;
+
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use colored::Colorize;
@@ -162,6 +165,20 @@ enum Commands {
         #[command(subcommand)]
         action: TokenAction,
     },
+
+    /// WASM lens module tools (validate, inspect, test)
+    #[cfg(feature = "lens")]
+    Lens {
+        #[command(subcommand)]
+        action: LensAction,
+    },
+
+    /// Identity derivation tools
+    #[cfg(feature = "identity-defra")]
+    Identity {
+        #[command(subcommand)]
+        action: IdentityAction,
+    },
 }
 
 /// Key management actions
@@ -237,6 +254,48 @@ enum TokenAction {
     Entity {
         #[command(subcommand)]
         action: EntityAction,
+    },
+}
+
+/// Lens module actions
+#[cfg(feature = "lens")]
+#[derive(Subcommand)]
+pub enum LensAction {
+    /// Validate a WASM lens module (check required exports)
+    Validate {
+        /// Path to the .wasm file
+        file: PathBuf,
+    },
+    /// Show lens module information (size, exports, capabilities)
+    Info {
+        /// Path to the .wasm file
+        file: PathBuf,
+    },
+    /// Run a transform on a JSON input value
+    Test {
+        /// Path to the .wasm file
+        file: PathBuf,
+        /// Input JSON value (e.g. '{"value": 0.5}')
+        #[arg(long)]
+        input: String,
+        /// Parameters JSON (e.g. '{"scale_factor": 2.0}')
+        #[arg(long)]
+        params: Option<String>,
+        /// Run inverse instead of forward transform
+        #[arg(long)]
+        inverse: bool,
+    },
+}
+
+/// Identity derivation actions
+#[cfg(feature = "identity-defra")]
+#[derive(Subcommand)]
+enum IdentityAction {
+    /// Derive a secp256k1 key from an Ed25519 signing key for DefraDB ACP
+    DeriveDefra {
+        /// Path to Ed25519 signing key file (hex-encoded 32 bytes)
+        #[arg(short, long)]
+        key: PathBuf,
     },
 }
 
@@ -606,9 +665,40 @@ async fn main() -> Result<()> {
                 }
             }
         }
+
+        #[cfg(feature = "lens")]
+        Commands::Lens { action } => {
+            lens::handle_lens_command(action)?;
+        }
+
+        #[cfg(feature = "identity-defra")]
+        Commands::Identity { action } => {
+            handle_identity_command(action)?;
+        }
     }
 
     Ok(())
+}
+
+#[cfg(feature = "identity-defra")]
+fn handle_identity_command(action: IdentityAction) -> Result<()> {
+    match action {
+        IdentityAction::DeriveDefra { key } => {
+            use clasp_identity::{DefraIdentity, Identity};
+
+            let signing_key = load_signing_key(&key)?;
+            let identity = Identity::from_signing_key(signing_key);
+            let defra = DefraIdentity::derive_from(&identity)
+                .map_err(|e| anyhow::anyhow!("Derivation failed: {}", e))?;
+
+            println!("{}", defra.to_hex());
+            eprintln!(
+                "{} Derived secp256k1 key for DefraDB ACP",
+                "OK".green().bold()
+            );
+            Ok(())
+        }
+    }
 }
 
 fn setup_logging(level: &str, json: bool) -> Result<()> {

@@ -100,6 +100,7 @@ cargo install clasp-cli
 | [clasp-rules](https://crates.io/crates/clasp-rules) | Server-side reactive rules engine | `cargo add clasp-rules` |
 | [clasp-federation](https://crates.io/crates/clasp-federation) | Router-to-router federation | `cargo add clasp-federation` |
 | [clasp-discovery](https://crates.io/crates/clasp-discovery) | mDNS/DNS-SD device discovery | `cargo add clasp-discovery` |
+| [clasp-lens](https://crates.io/crates/clasp-lens) | LensVM WASM transform host | `cargo add clasp-lens` |
 
 **Rust Crates: DefraDB Integration** ([docs](docs/defra/) | [DEFRA.md](DEFRA.md))
 
@@ -355,7 +356,7 @@ CLASP clients in different languages can seamlessly communicate:
 ## Features
 
 - **Protocol Connections**: OSC, MIDI, Art-Net, DMX, MQTT, WebSocket, Socket.IO, HTTP/REST
-- **Signal Routing**: Wildcard patterns (`*`, `**`), transforms, aggregation
+- **Signal Routing**: Wildcard patterns (`*`, `**`), 18 built-in transforms, custom WASM transforms via LensVM
 - **Low Latency**: WebSocket transport with sub-millisecond overhead
 - **State Sync**: Automatic state synchronization between clients
 - **E2E Encryption**: Client-side AES-256-GCM encryption with ECDH key exchange, TOFU, auto-rotation
@@ -365,7 +366,7 @@ CLASP clients in different languages can seamlessly communicate:
 - **Rules Engine**: Server-side reactive automation (triggers, conditions, transforms)
 - **Federation**: Router-to-router state sharing for multi-site deployments
 - **Desktop App**: Visual protocol configuration and signal monitoring
-- **DefraDB Integration**: P2P persistent storage via Merkle CRDTs, zero-config multi-node sync
+- **DefraDB Integration**: P2P persistent storage via Merkle CRDTs, zero-config multi-node sync, Zanzibar-style access control
 - **CLI Tool**: Start routers and protocol connections from the command line
 - **Embeddable**: Rust crates, WASM module, Python, JavaScript
 

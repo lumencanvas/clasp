@@ -168,7 +168,7 @@ export interface SignalEndpoint {
   jsonTemplate?: string
 }
 
-export type TransformType = 'direct' | 'scale' | 'invert' | 'clamp' | 'round' | 'threshold' | 'gate' | 'trigger' | 'toggle' | 'expression' | 'javascript' | 'deadzone' | 'smooth' | 'quantize' | 'curve' | 'modulo' | 'negate' | 'power'
+export type TransformType = 'direct' | 'scale' | 'invert' | 'clamp' | 'round' | 'threshold' | 'gate' | 'trigger' | 'toggle' | 'expression' | 'javascript' | 'deadzone' | 'smooth' | 'quantize' | 'curve' | 'modulo' | 'negate' | 'power' | 'wasm'
 
 export interface TransformConfig {
   type: TransformType
@@ -194,6 +194,10 @@ export interface TransformConfig {
   moduloDivisor?: number
   // Power
   powerExponent?: number
+  // WASM (LensVM)
+  wasmModuleId?: string
+  wasmModuleName?: string
+  wasmParams?: string
 }
 
 // Rules engine
@@ -449,6 +453,13 @@ export interface ClaspAPI {
   showOpenDialog: (options: any) => Promise<{ canceled: boolean; filePaths?: string[] }>
   writeFile: (path: string, content: string) => Promise<void>
   readFile: (path: string) => Promise<{ success: boolean; content?: string; error?: string }>
+  // DefraDB
+  defraHealthCheck?: (url: string) => Promise<{ healthy: boolean; url: string; error?: string }>
+  defraConfigExport?: (url: string) => Promise<any>
+  defraConfigImport?: (url: string, config: any) => Promise<{ success: boolean }>
+  // ACP (access control, optional)
+  acpAddRelationship?: (collection: string, docId: string, relation: string, actor: string, identity: string) => Promise<{ success: boolean }>
+  acpDeleteRelationship?: (collection: string, docId: string, relation: string, actor: string, identity: string) => Promise<{ success: boolean }>
   // Events (return cleanup functions)
   onDeviceFound: (callback: (device: Device) => void) => () => void
   onDeviceUpdated: (callback: (device: Device) => void) => () => void

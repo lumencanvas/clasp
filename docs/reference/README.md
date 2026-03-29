@@ -22,6 +22,11 @@ Complete reference documentation for CLASP CLIs, protocol specification, configu
 - [App Config Schema](app-config-schema.md) -- JSON schema for scopes, write rules, snapshot transforms, and rate limits
 - [Rules Schema](rules-schema.md) -- complete JSON schema for the rules engine
 - [Router Config](router-config.md) -- `RouterConfig` reference for embedding routers in Rust
+## Transforms
+
+- [WASM Transforms](../transforms/wasm-transforms.md) -- custom signal transforms via LensVM WebAssembly modules
+- [Authoring Lenses](../transforms/authoring-lenses.md) -- writing custom WASM lens modules in Rust
+
 ## Transports
 
 - [Transport Guide](../core/transports.md) -- WebSocket, QUIC, TCP, UDP, Serial, BLE configuration and usage

@@ -45,6 +45,9 @@ const quantizeSteps = ref(8)
 const curveType = ref<string>('linear')
 const moduloDivisor = ref(1)
 const powerExponent = ref(2)
+const wasmModuleId = ref('')
+const wasmModuleName = ref('')
+const wasmParams = ref('')
 
 // Target fields
 const tgtProtocol = ref<AnyProtocol>('clasp')
@@ -83,6 +86,7 @@ const transformPreview = computed(() => {
     case 'modulo': return `out = in % ${moduloDivisor.value}`
     case 'negate': return 'out = -in'
     case 'power': return `out = in ^ ${powerExponent.value}`
+    case 'wasm': return wasmModuleName.value ? `out = ${wasmModuleName.value}(in)` : 'out = WASM(in)'
     default: return ''
   }
 })
@@ -163,6 +167,11 @@ function buildTransform(): TransformConfig {
     case 'power':
       cfg.powerExponent = powerExponent.value
       break
+    case 'wasm':
+      cfg.wasmModuleId = wasmModuleId.value
+      cfg.wasmModuleName = wasmModuleName.value
+      if (wasmParams.value) cfg.wasmParams = wasmParams.value
+      break
   }
   return cfg
 }
@@ -210,6 +219,9 @@ function loadTransform(cfg: TransformConfig) {
   curveType.value = cfg.curveType ?? 'linear'
   moduloDivisor.value = cfg.moduloDivisor ?? 1
   powerExponent.value = cfg.powerExponent ?? 2
+  wasmModuleId.value = cfg.wasmModuleId || ''
+  wasmModuleName.value = cfg.wasmModuleName || ''
+  wasmParams.value = cfg.wasmParams || ''
 }
 
 function resetForm() {
@@ -240,6 +252,9 @@ function resetForm() {
   curveType.value = 'linear'
   moduloDivisor.value = 1
   powerExponent.value = 2
+  wasmModuleId.value = ''
+  wasmModuleName.value = ''
+  wasmParams.value = ''
 
   tgtProtocol.value = 'clasp'
   tgtAddress.value = ''
@@ -513,6 +528,21 @@ defineExpose({ open, close })
                 <div class="form-group">
                   <label class="form-label">Exponent</label>
                   <input v-model.number="powerExponent" class="input" type="number" step="any" />
+                </div>
+              </template>
+
+              <template v-if="transformType === 'wasm'">
+                <div class="form-group">
+                  <label class="form-label">Module Name</label>
+                  <input v-model="wasmModuleName" class="input" placeholder="my-transform" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Module ID</label>
+                  <input v-model="wasmModuleId" class="input" placeholder="hash or path" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Parameters (JSON)</label>
+                  <textarea v-model="wasmParams" class="input" rows="3" placeholder='{"scale_factor": 2.0, "offset": 0.5}' />
                 </div>
               </template>
 

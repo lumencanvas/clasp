@@ -16,7 +16,7 @@ CLASP is organized as a collection of Rust crates, each with a specific responsi
 | `clasp-transport`   | Network transports       | `WebSocketTransport`, `QuicTransport`, `UdpTransport`, `SerialTransport`, `BleTransport` | `clasp-core`                     | `websocket` (default), `quic`, `udp`, `serial`, `ble`   |
 | `clasp-client`      | Async client library     | `Clasp`, `ClaspBuilder`                              | `clasp-core`, `clasp-transport`    | `p2p`                                                    |
 | `clasp-router`      | Router implementation    | `Router`, `RouterConfig`, `RouterState`              | `clasp-core`, `clasp-transport`    | --                                                       |
-| `clasp-bridge`      | Protocol bridges         | `Bridge`, `BridgeConfig`, `AddressMapping`           | `clasp-core`                       | `osc`, `midi`, `artnet`, `dmx`, `sacn`, `mqtt`, `http`, `websocket` |
+| `clasp-bridge`      | Protocol bridges         | `Bridge`, `BridgeConfig`, `AddressMapping`           | `clasp-core`                       | `osc`, `midi`, `artnet`, `dmx`, `sacn`, `mqtt`, `http`, `websocket`, `lens` |
 | `clasp-discovery`   | Service discovery        | `DiscoveryConfig`, `DiscoveryEvent`                  | `clasp-core`                       | --                                                       |
 | `clasp-embedded`    | no_std MCU client        | `Client`, `Value`, `MiniRouter`                      | None                               | --                                                       |
 | `clasp-caps`        | Ed25519 capability tokens| `CapabilityToken`, `CapabilityValidator`             | `clasp-core`                       | --                                                       |
@@ -25,6 +25,7 @@ CLASP is organized as a collection of Rust crates, each with a specific responsi
 | `clasp-journal`     | State persistence        | `Journal`, `SqliteJournal`, `MemoryJournal`          | `clasp-core`                       | `sqlite`                                                 |
 | `clasp-federation`  | Multi-router federation  | `FederationManager`, `FederationConfig`, `FederationLink` | `clasp-core`                  | --                                                       |
 | `clasp-crypto`      | E2E encryption           | `E2ESession`, `CryptoClient`, `MemoryKeyStore`, `FileSystemKeyStore` | `clasp-core`           | `client`, `fs-store`                                     |
+| `clasp-lens`        | LensVM WASM host         | `LensHost`, `LensError`                                  | `wasmtime`                     | --                                                       |
 | `clasp-wasm`        | WebAssembly bindings     | WASM client                                              | `clasp-core`, `clasp-client`  | `p2p`                                                    |
 
 ## Layer Diagram

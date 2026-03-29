@@ -1,0 +1,18 @@
+[package]
+name = "lens-lowpass"
+version = "0.1.0"
+edition = "2021"
+description = "Low-pass filter lens for CLASP signal smoothing"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[profile.release]
+opt-level = "z"
+lto = true

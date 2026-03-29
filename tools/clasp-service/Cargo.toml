@@ -21,7 +21,8 @@ mqtt = ["clasp-bridge/mqtt"]
 websocket = ["clasp-bridge/websocket"]
 socketio = ["clasp-bridge/socketio"]
 http = ["clasp-bridge/http"]
-full = ["osc", "midi", "artnet", "sacn", "dmx", "mqtt", "websocket", "socketio", "http"]
+lens = ["clasp-bridge/lens"]
+full = ["osc", "midi", "artnet", "sacn", "dmx", "mqtt", "websocket", "socketio", "http", "lens"]
 
 [dependencies]
 clasp-core = { workspace = true }
