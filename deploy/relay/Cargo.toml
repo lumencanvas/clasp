@@ -8,7 +8,7 @@
 
 [package]
 name = "clasp-relay"
-version = "4.4.0"
+version = "4.5.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "CLASP multi-protocol relay server"
@@ -54,17 +54,17 @@ lens = ["clasp-lens"]
 
 [dependencies]
 # Published crates from crates.io
-clasp-core = "4.4"
-clasp-router = "4.4"
-clasp-discovery = { version = "4.4", features = ["rendezvous"], optional = true }
-clasp-journal = { version = "4.4", features = ["sqlite"], optional = true }
-clasp-caps = { version = "4.4", optional = true }
-clasp-registry = { version = "4.4", features = ["sqlite"], optional = true }
-clasp-rules = { version = "4.4", optional = true }
-clasp-federation = { version = "4.4", optional = true }
-clasp-transport = { version = "4.4", features = ["websocket"], optional = true }
-clasp-lens = { version = "4.4", optional = true }
-clasp-journal-defra = { version = "4.4", optional = true }
+clasp-core = "4.5"
+clasp-router = "4.5"
+clasp-discovery = { version = "4.5", features = ["rendezvous"], optional = true }
+clasp-journal = { version = "4.5", features = ["sqlite"], optional = true }
+clasp-caps = { version = "4.5", optional = true }
+clasp-registry = { version = "4.5", features = ["sqlite"], optional = true }
+clasp-rules = { version = "4.5", optional = true }
+clasp-federation = { version = "4.5", optional = true }
+clasp-transport = { version = "4.5", features = ["websocket"], optional = true }
+clasp-lens = { version = "4.5", optional = true }
+clasp-journal-defra = { version = "4.5", optional = true }
 
 # Runtime
 tokio = { version = "1", features = ["full"] }
