@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRelay } from '../composables/useRelay.js'
 
 const emit = defineEmits(['auth-required'])
@@ -253,11 +253,12 @@ function stopMic() {
 
 // --- Speaking detection ---
 let analyserTimer = null
+let analyserCtx = null
 function startSpeakingDetection() {
   if (!localStream) return
-  const ctx = new AudioContext()
-  const src = ctx.createMediaStreamSource(localStream)
-  const analyser = ctx.createAnalyser()
+  analyserCtx = new AudioContext()
+  const src = analyserCtx.createMediaStreamSource(localStream)
+  const analyser = analyserCtx.createAnalyser()
   analyser.fftSize = 256
   src.connect(analyser)
   const data = new Uint8Array(analyser.frequencyBinCount)
@@ -279,6 +280,7 @@ function startSpeakingDetection() {
 
 function stopSpeakingDetection() {
   if (analyserTimer) { clearInterval(analyserTimer); analyserTimer = null }
+  if (analyserCtx) { analyserCtx.close().catch(() => {}); analyserCtx = null }
   const c = client.value
   if (c && currentRoom.value) {
     c.set(`${PREFIX}/rooms/${currentRoom.value.id}/speaking/${myId.value}`, null)

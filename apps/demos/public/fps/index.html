@@ -207,7 +207,7 @@
       </svg>
       <div>
         <h1>CLASP FPS</h1>
-        <span>multiplayer via relay.clasp.to</span>
+        <span>multiplayer via demo-relay.clasp.to</span>
       </div>
     </div>
     <div class="field-group">
@@ -308,7 +308,7 @@
 <script>
 // =============================================================
 // CLASP FPS - multiplayer first person shooter
-// Three.js r128 + CLASP 4.2.1 via relay.clasp.to
+// Three.js r128 + CLASP via demo-relay.clasp.to
 // =============================================================
 
 const RELAY       = 'wss://demo-relay.clasp.to';
@@ -517,6 +517,18 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
+});
+
+window.addEventListener('beforeunload', () => {
+  if (claspClient && roomId) {
+    claspClient.set(`/fps/${roomId}/player/${myId}/leave`, { t: Date.now() });
+    claspClient.set(`/fps/${roomId}/player/${myId}/pos`, null);
+  }
+  if (broadcastInterval) clearInterval(broadcastInterval);
+});
+
+window.addEventListener('blur', () => {
+  Object.keys(keys).forEach(k => { keys[k] = false; });
 });
 
 // Lighting
@@ -788,7 +800,7 @@ document.addEventListener('pointerlockchange', () => {
 // =============================================================
 // GAME STATE
 // =============================================================
-let myId = '', myName = '', roomId = '', claspClient = null;
+let myId = '', myName = '', roomId = '', claspClient = null, broadcastInterval = null;
 let health = MAX_HEALTH, ammo = MAX_AMMO, reserve = RESERVE;
 let reloading = false, dead = false;
 let remotePlayers = new Map();
@@ -971,7 +983,16 @@ function getOrCreate(id, name, color) {
 
 function removePlayer(id) {
   const rp = remotePlayers.get(id);
-  if (rp?.mesh) scene.remove(rp.mesh);
+  if (rp?.mesh) {
+    rp.mesh.traverse(child => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (child.material.map) child.material.map.dispose();
+        child.material.dispose();
+      }
+    });
+    scene.remove(rp.mesh);
+  }
   remotePlayers.delete(id);
   updatePlayerCountHUD();
 }
@@ -1056,10 +1077,19 @@ async function connectClasp() {
     broadcastPos();
 
     // Then on a timer - use set() not stream() so relay persists the value
-    setInterval(() => {
+    broadcastInterval = setInterval(() => {
       if (!claspClient) return;
       broadcastPos();
     }, TICK_MS);
+
+    // Connection lifecycle
+    claspClient.onDisconnect(() => {
+      setConnState('error', 'disconnected');
+    });
+    claspClient.onReconnect(() => {
+      setConnState('connected', 'live');
+      broadcastPos();
+    });
 
   } catch (err) {
     setConnState('error', 'failed: ' + err.message);

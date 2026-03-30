@@ -1,32 +1,40 @@
 import { ref, readonly, onUnmounted } from 'vue'
 
-export function usePresence(client, namespace, userId, userMeta) {
+export function usePresence(client, getNamespace, userId, userMeta) {
   const peers = ref(new Map())
   const onlineCount = ref(1)
 
   let timer = null
+  let unsub = null
+  let visHandler = null
+
+  function ns() {
+    return typeof getNamespace === 'function' ? getNamespace() : getNamespace
+  }
 
   function send() {
     const c = client.value
     if (!c) return
-    c.set(`${namespace}/pres/${userId}`, JSON.stringify({
-      ...userMeta(),
-      ts: Date.now(),
-    }), { ttl: 35 })
+    try {
+      c.set(`${ns()}/pres/${userId}`, JSON.stringify({
+        ...userMeta(),
+        ts: Date.now(),
+      }), { ttl: 35 })
+    } catch {}
   }
 
   function clear() {
     const c = client.value
     if (!c) return
-    c.set(`${namespace}/pres/${userId}`, null)
+    try { c.set(`${ns()}/pres/${userId}`, null) } catch {}
   }
 
   function start() {
     const c = client.value
     if (!c) return
 
-    c.on(`${namespace}/pres/**`, (v, addr) => {
-      const uid = addr.slice(`${namespace}/pres/`.length)
+    const ret = c.on(`${ns()}/pres/**`, (v, addr) => {
+      const uid = addr.slice(`${ns()}/pres/`.length)
       if (uid === userId) return
       if (!v) {
         peers.value.delete(uid)
@@ -35,22 +43,30 @@ export function usePresence(client, namespace, userId, userMeta) {
       }
       onlineCount.value = peers.value.size + 1
     })
+    if (typeof ret === 'function') unsub = ret
 
     send()
     timer = setInterval(send, 28000)
 
-    const onVis = () => {
+    visHandler = () => {
       if (document.hidden) clear()
       else send()
     }
-    document.addEventListener('visibilitychange', onVis)
-
-    onUnmounted(() => {
-      clearInterval(timer)
-      clear()
-      document.removeEventListener('visibilitychange', onVis)
-    })
+    document.addEventListener('visibilitychange', visHandler)
   }
 
-  return { peers: readonly(peers), onlineCount: readonly(onlineCount), start, send, clear }
+  function stop() {
+    clearInterval(timer)
+    timer = null
+    if (typeof unsub === 'function') { unsub(); unsub = null }
+    if (visHandler) {
+      document.removeEventListener('visibilitychange', visHandler)
+      visHandler = null
+    }
+    clear()
+  }
+
+  onUnmounted(stop)
+
+  return { peers: readonly(peers), onlineCount: readonly(onlineCount), start, stop, send, clear }
 }

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRelay } from '../composables/useRelay.js'
 import { usePresence } from '../composables/usePresence.js'
 
@@ -28,7 +28,7 @@ const sortedPosts = computed(() => {
 
 // --- Presence ---
 const presence = usePresence(
-  client, NS.value, me.id,
+  client, () => NS.value, me.id,
   () => ({ id: me.id, name: me.name, handle: me.handle })
 )
 
@@ -200,19 +200,22 @@ const ageTick = ref(0)
 let ageTimer = null
 
 // --- CLASP setup ---
+const unsubs = []
+
 function setupSubscriptions() {
   const c = client.value
   if (!c) return
 
-  c.on(`${NS.value}/post/**`, (v, addr) => {
+  const u1 = c.on(`${NS.value}/post/**`, (v, addr) => {
     if (!v) { removePost(addr.split('/').pop()); return }
     try {
       const p = JSON.parse(v)
       if (p.author) addPost(p)
     } catch {}
   })
+  if (typeof u1 === 'function') unsubs.push(u1)
 
-  c.on(`${NS.value}/react/**`, (v) => {
+  const u2 = c.on(`${NS.value}/react/**`, (v) => {
     if (!v) return
     try {
       const d = JSON.parse(v)
@@ -221,6 +224,7 @@ function setupSubscriptions() {
       }
     } catch {}
   })
+  if (typeof u2 === 'function') unsubs.push(u2)
 }
 
 onMounted(async () => {
@@ -245,6 +249,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
   clearInterval(ageTimer)
+  unsubs.forEach(u => { try { u() } catch {} })
+  unsubs.length = 0
 })
 
 const reactions = [
