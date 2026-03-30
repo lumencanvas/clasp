@@ -506,7 +506,10 @@ oninput="ghostText=this.value"></textarea>
 // ============================================================
 const CLASP_RELAY_URL = 'wss://demo-relay.clasp.to'; // public relay
 
-const CLASP = (() => {
+// Capture CDN reference before local wrapper shadows the name
+const _ClaspCore = window.CLASP;
+
+var CLASP = (() => {
  // ── Local cache (localStorage) ──────────────────────────────
  // Always active. Provides synchronous reads and survives page reload.
  const PREFIX  = 'clasp_';
@@ -564,11 +567,11 @@ const CLASP = (() => {
  async function _connectRelay(url){
   try{
    // @clasp-to/core exposes CLASP.Clasp on window
-   if(typeof window.CLASP?.Clasp !== 'function'){
+   if(typeof _ClaspCore?.Clasp !== 'function'){
     console.warn('[ghost] @clasp-to/core not loaded — relay disabled');
     return;
    }
-   _relay = new window.CLASP.Clasp(url);
+   _relay = new _ClaspCore.Clasp(url);
    await _relay.connect();
    _relayReady = true;
    console.info('[ghost] CLASP relay connected:', url);
