@@ -44,10 +44,34 @@ source "digitalocean" "clasp" {
 build {
   sources = ["source.digitalocean.clasp"]
 
-  # Copy config files first
+  # Create target directory and copy config files
+  provisioner "shell" {
+    inline = ["mkdir -p /tmp/clasp-files"]
+  }
+
   provisioner "file" {
-    source      = "files/"
-    destination = "/tmp/clasp-files/"
+    source      = "files/clasp-setup"
+    destination = "/tmp/clasp-files/clasp-setup"
+  }
+
+  provisioner "file" {
+    source      = "files/docker-compose.yml.tpl"
+    destination = "/tmp/clasp-files/docker-compose.yml.tpl"
+  }
+
+  provisioner "file" {
+    source      = "files/Caddyfile.tpl"
+    destination = "/tmp/clasp-files/Caddyfile.tpl"
+  }
+
+  provisioner "file" {
+    source      = "files/application.info"
+    destination = "/tmp/clasp-files/application.info"
+  }
+
+  provisioner "file" {
+    source      = "files/99-one-click"
+    destination = "/tmp/clasp-files/99-one-click"
   }
 
   # Install Docker
