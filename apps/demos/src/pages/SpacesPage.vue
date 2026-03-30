@@ -880,4 +880,13 @@ label { display: flex; flex-direction: column; gap: 4px; }
   border-radius: var(--r);
 }
 .btn-primary:hover { opacity: 0.9; }
+
+@media (max-width: 480px) {
+  .controls-bar { padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .ctrl-btn { padding: 6px 10px; font-size: 10px; }
+  .mic-btn { width: 48px; height: 48px; font-size: 10px; }
+  .participant-grid { gap: 8px; }
+  .participant { width: 60px; }
+  .p-avatar { width: 40px; height: 40px; font-size: 14px; }
+}
 </style>
