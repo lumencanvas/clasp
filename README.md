@@ -115,11 +115,22 @@ cargo install clasp-cli
 
 ### Deploy to DigitalOcean
 
-Deploy a production CLASP relay with one click. Creates an Ubuntu droplet with Docker, Caddy (TLS), and the relay pre-installed. SSH in and run `clasp-setup` to configure.
+Create an Ubuntu 22.04 droplet (1 GB+ RAM), SSH in, and run:
 
-[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/droplets/new?image=222634524&size=s-1vcpu-1gb&region=nyc3)
+```bash
+curl -fsSL https://raw.githubusercontent.com/lumencanvas/clasp/main/deploy/marketplace/digitalocean/bootstrap.sh | bash
+```
 
-See [deployment docs](docs/deployment/digitalocean-marketplace.md) for details.
+This installs Docker, pulls the relay image, and sets up the `clasp-setup` interactive configurator. Then run `clasp-setup` to choose your deployment profile, configure TLS, auth, persistence, protocol bridges, and start the relay.
+
+To remove CLASP from a droplet:
+
+```bash
+docker compose -f /opt/clasp/docker-compose.yml down -v
+rm -rf /opt/clasp /var/lib/clasp /usr/local/bin/clasp-setup
+```
+
+See [deployment docs](docs/deployment/digitalocean-marketplace.md) for full details.
 
 ### Desktop App
 

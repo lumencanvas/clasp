@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# CLASP Relay -- DigitalOcean 1-Click Setup
+# CLASP Relay -- Interactive Setup
 # Generates docker-compose.yml and Caddyfile, then starts services.
 # Re-run at any time to reconfigure.
-# Covers all 44 CLI flags of the relay binary.
 
 CLASP_DIR="/opt/clasp"
 DATA_DIR="/var/lib/clasp"
@@ -32,6 +31,10 @@ section() {
   echo ""
 }
 
+info() {
+  echo "  $1"
+}
+
 ask() {
   local prompt="$1" default="${2:-}" value
   if [ -n "$default" ]; then
@@ -52,16 +55,20 @@ ask_yn() {
   [[ "$value" =~ ^[Yy] ]]
 }
 
+ask_choice() {
+  local prompt="$1" options="$2" default="$3" value
+  read -rp "  ${prompt} (${options}) [${default}]: " value
+  echo "${value:-$default}"
+}
+
 gen_token() {
   openssl rand -base64 32 | tr -d '/+=' | head -c 32
 }
 
-# Append a flag pair to CMD_ARGS
 add_flag() {
   CMD_ARGS+="      - \"$1\"\n      - \"$2\"\n"
 }
 
-# Append a bare flag (no value) to CMD_ARGS
 add_bare_flag() {
   CMD_ARGS+="      - \"$1\"\n"
 }
@@ -76,7 +83,9 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 if ! command -v docker &>/dev/null; then
-  echo "Error: docker not found. Install Docker first."
+  echo "Error: docker not found."
+  echo "Run the bootstrap script first:"
+  echo "  curl -fsSL https://raw.githubusercontent.com/lumencanvas/clasp/main/deploy/marketplace/digitalocean/bootstrap.sh | bash"
   exit 1
 fi
 
@@ -84,7 +93,7 @@ banner
 
 # Stop existing deployment if running
 if [ -f "$COMPOSE_FILE" ]; then
-  echo "  Existing configuration detected."
+  info "Existing configuration detected."
   if ! ask_yn "Reconfigure and restart? (y/n)" "y"; then
     echo "  Aborted."
     exit 0
@@ -97,38 +106,54 @@ fi
 # Profile selection
 # ---------------------------------------------------------------
 
-echo "  Deployment profiles:"
+echo "  What kind of deployment do you need?"
 echo ""
-echo "    [1] Standard    WS + TLS + auth + persistence + health + TTLs"
-echo "    [2] Full        Standard + MQTT + OSC + journal + rules +"
-echo "                    federation + metrics + entity registry + cap tokens"
-echo "    [3] Minimal     WebSocket only, no TLS, no auth (dev/testing)"
+echo "    [1] Standard"
+echo "        WebSocket + TLS + authentication + state persistence."
+echo "        Good for: web apps, dashboards, chat, collaboration tools."
+echo ""
+echo "    [2] Full"
+echo "        Everything in Standard, plus MQTT and OSC protocol bridges,"
+echo "        SQLite journal, rules engine, entity registry, capability"
+echo "        tokens, and Prometheus metrics."
+echo "        Good for: IoT, smart buildings, live performance, production."
+echo ""
+echo "    [3] IoT / Sensors"
+echo "        Standard + MQTT bridge + rules engine + journal."
+echo "        Good for: sensor networks, device monitoring, automation."
+echo ""
+echo "    [4] Creative / Live"
+echo "        Standard + OSC bridge + MQTT bridge + low TTLs."
+echo "        Good for: lighting rigs, VJ software, stage control."
+echo ""
+echo "    [5] Minimal"
+echo "        WebSocket only. No TLS, no auth, no persistence."
+echo "        Good for: local development, testing behind another proxy."
 echo ""
 
 PROFILE=$(ask "Profile" "1")
 case "$PROFILE" in
   1) PROFILE_NAME="standard" ;;
   2) PROFILE_NAME="full" ;;
-  3) PROFILE_NAME="minimal" ;;
+  3) PROFILE_NAME="iot" ;;
+  4) PROFILE_NAME="creative" ;;
+  5) PROFILE_NAME="minimal" ;;
   *) PROFILE_NAME="standard" ;;
 esac
 
 # ---------------------------------------------------------------
-# Set profile defaults
+# Set defaults
 # ---------------------------------------------------------------
 
-# Network
 WS_PORT="7330"
 HOST="0.0.0.0"
 RELAY_NAME=""
 NO_WEBSOCKET=false
 
-# TLS / Caddy
 ENABLE_TLS=true
 DOMAIN=""
 ACME_EMAIL=""
 
-# Auth
 ENABLE_AUTH=true
 AUTH_PORT="7350"
 AUTH_DB="/data/auth.db"
@@ -136,85 +161,68 @@ CORS_ORIGINS=""
 ADMIN_TOKEN=""
 TOKEN_TTL="86400"
 
-# QUIC
 ENABLE_QUIC=false
 QUIC_PORT="4433"
 QUIC_CERT=""
 QUIC_KEY=""
 
-# MQTT
 ENABLE_MQTT=false
 MQTT_PORT="1883"
 MQTT_NAMESPACE="/mqtt"
 
-# OSC
 ENABLE_OSC=false
 OSC_PORT="8000"
 OSC_NAMESPACE="/osc"
 
-# Sessions
 MAX_SESSIONS="1000"
 SESSION_TIMEOUT="300"
 
-# TTL
 PARAM_TTL="3600"
 SIGNAL_TTL="3600"
 NO_TTL=false
 
-# Persistence
 ENABLE_PERSIST=true
 PERSIST_PATH="/data/state.json"
 PERSIST_INTERVAL="30"
 
-# Journal
 ENABLE_JOURNAL=false
 JOURNAL_BACKEND="sqlite"
 JOURNAL_PATH="/data/journal.db"
 JOURNAL_MEMORY=false
 DEFRA_URL=""
 
-# Capability tokens
 ENABLE_CAP_TOKENS=false
 TRUST_ANCHOR=""
 CAP_MAX_DEPTH="5"
 
-# Entity registry
 ENABLE_REGISTRY=false
 REGISTRY_DB="/data/registry.db"
 
-# Rules
 ENABLE_RULES=false
 RULES_PATH="/data/rules.json"
 
-# App config
 ENABLE_APP_CONFIG=false
 APP_CONFIG_PATH="/data/app-config.json"
 
-# LensVM
 ENABLE_LENSES=false
 LENSES_PATH="/data/lenses.json"
 
-# Federation
 ENABLE_FEDERATION=false
 FEDERATION_HUB=""
 FEDERATION_ID=""
 FEDERATION_NAMESPACE=""
 FEDERATION_TOKEN=""
 
-# Metrics
 ENABLE_METRICS=false
 METRICS_PORT="9090"
 
-# Health
 ENABLE_HEALTH=true
 HEALTH_PORT="7360"
 DRAIN_TIMEOUT="30"
 
-# Rendezvous
 RENDEZVOUS_PORT="7340"
 RENDEZVOUS_TTL="300"
 
-# Logging
 VERBOSE=false
 
 # Apply profile overrides
@@ -227,7 +235,17 @@ case "$PROFILE_NAME" in
     ENABLE_METRICS=true
     ENABLE_REGISTRY=true
     ENABLE_CAP_TOKENS=true
-    ENABLE_FEDERATION=false  # needs explicit hub URL, asked later
+    ;;
+  iot)
+    ENABLE_MQTT=true
+    ENABLE_JOURNAL=true
+    ENABLE_RULES=true
+    ;;
+  creative)
+    ENABLE_MQTT=true
+    ENABLE_OSC=true
+    PARAM_TTL="300"
+    SIGNAL_TTL="60"
     ;;
   minimal)
     ENABLE_TLS=false
@@ -239,253 +257,371 @@ case "$PROFILE_NAME" in
 esac
 
 # ---------------------------------------------------------------
-# Section 1: Core settings (domain, email, CORS)
+# 1. Domain and TLS
 # ---------------------------------------------------------------
 
-section "Core Settings"
+section "Domain and TLS"
 
 if [ "$ENABLE_TLS" = true ]; then
-  DOMAIN=$(ask "Domain name (e.g. relay.example.com)")
-  ACME_EMAIL=$(ask "Email for Let's Encrypt")
+  info "TLS provides encrypted connections via Let's Encrypt."
+  info "You need a domain name pointed at this server's IP address."
   echo ""
-  echo "  Make sure DNS points ${DOMAIN} to this server's IP."
+  DOMAIN=$(ask "Domain name (e.g. relay.example.com)")
+  ACME_EMAIL=$(ask "Email for Let's Encrypt certificates")
+  echo ""
+  info "Make sure the DNS A record for ${DOMAIN} points to this server."
 else
   DOMAIN=$(hostname -I | awk '{print $1}')
-  echo "  No TLS. Relay will listen on http://${DOMAIN}"
-fi
-
-RELAY_NAME=$(ask "Server name (shown to clients)" "$DOMAIN")
-
-WS_PORT=$(ask "WebSocket port" "$WS_PORT")
-
-if [ "$ENABLE_TLS" = true ]; then
+  info "TLS is disabled. Relay will listen on http://${DOMAIN}"
   echo ""
-  echo "  CORS: which origins can connect to this relay?"
-  echo "  (comma-separated, e.g. https://myapp.com,https://clasp.chat)"
-  CORS_ORIGINS=$(ask "Allowed origins" "https://${DOMAIN}")
+  if ask_yn "Enable TLS? (requires a domain name) (y/n)" "n"; then
+    ENABLE_TLS=true
+    DOMAIN=$(ask "Domain name (e.g. relay.example.com)")
+    ACME_EMAIL=$(ask "Email for Let's Encrypt certificates")
+  fi
+fi
+
+RELAY_NAME=$(ask "Server name (shown to connecting clients)" "$DOMAIN")
+
+# ---------------------------------------------------------------
+# 2. Authentication
+# ---------------------------------------------------------------
+
+section "Authentication"
+
+if [ "$ENABLE_AUTH" = true ]; then
+  info "Authentication controls who can connect and what they can do."
+  info "Clients register or login to get a token. The relay validates"
+  info "tokens on every message and enforces address-level scopes."
+  echo ""
+  info "Without auth, anyone who can reach the relay can read/write"
+  info "any address. Fine for local dev, not for production."
+  echo ""
+  TOKEN_TTL=$(ask "Token TTL in seconds (how long tokens last, 0 = forever)" "$TOKEN_TTL")
+else
+  info "Authentication is disabled."
+  echo ""
+  if ask_yn "Enable authentication? (y/n)" "n"; then
+    ENABLE_AUTH=true
+    TOKEN_TTL=$(ask "Token TTL in seconds (0 = forever)" "$TOKEN_TTL")
+  fi
+fi
+
+if [ "$ENABLE_TLS" = true ] && [ "$ENABLE_AUTH" = true ]; then
+  echo ""
+  info "CORS controls which web origins can call the auth API."
+  info "Comma-separated. Example: https://myapp.com,https://clasp.chat"
+  CORS_ORIGINS=$(ask "Allowed CORS origins" "https://${DOMAIN}")
 fi
 
 # ---------------------------------------------------------------
-# Section 2: Protocol bridges (MQTT, OSC)
+# 3. Protocol bridges
 # ---------------------------------------------------------------
 
-if [ "$PROFILE_NAME" = "standard" ]; then
-  section "Protocol Bridges"
+section "Protocol Bridges"
+
+info "Bridges let non-CLASP devices connect through the relay."
+info "MQTT: IoT sensors, home automation, message brokers."
+info "OSC: TouchOSC, lighting controllers, VJ software, DAWs."
+echo ""
+
+if [ "$ENABLE_MQTT" = false ]; then
   ask_yn "Enable MQTT bridge? (y/n)" "n" && ENABLE_MQTT=true
+fi
+if [ "$ENABLE_OSC" = false ]; then
   ask_yn "Enable OSC bridge? (y/n)" "n" && ENABLE_OSC=true
 fi
 
 if [ "$ENABLE_MQTT" = true ]; then
-  MQTT_PORT=$(ask "MQTT port" "$MQTT_PORT")
-  MQTT_NAMESPACE=$(ask "MQTT namespace prefix" "$MQTT_NAMESPACE")
+  echo ""
+  MQTT_PORT=$(ask "MQTT listen port" "$MQTT_PORT")
+  MQTT_NAMESPACE=$(ask "MQTT namespace prefix (MQTT topics appear under this path)" "$MQTT_NAMESPACE")
 fi
 
 if [ "$ENABLE_OSC" = true ]; then
-  OSC_PORT=$(ask "OSC port (UDP)" "$OSC_PORT")
-  OSC_NAMESPACE=$(ask "OSC namespace prefix" "$OSC_NAMESPACE")
+  echo ""
+  OSC_PORT=$(ask "OSC listen port (UDP)" "$OSC_PORT")
+  OSC_NAMESPACE=$(ask "OSC namespace prefix (OSC addresses appear under this path)" "$OSC_NAMESPACE")
 fi
 
 # ---------------------------------------------------------------
-# Section 3: Security (auth, cap tokens, entity registry)
+# 4. Persistence and journal
 # ---------------------------------------------------------------
 
-section "Security"
+section "State Persistence"
 
-if [ "$ENABLE_AUTH" = true ]; then
-  echo "  Authentication is enabled for this profile."
-  AUTH_PORT=$(ask "Auth HTTP port" "$AUTH_PORT")
-  TOKEN_TTL=$(ask "Default token TTL in seconds (0 = no expiry)" "$TOKEN_TTL")
+info "CLASP state is in-memory by default. Two options to survive restarts:"
+echo ""
+info "  Snapshots  Periodic dump of all current parameter values to disk."
+info "             Fast, simple. You get the latest state on restart."
+info "             No history, no replay, no point-in-time recovery."
+echo ""
+info "  Journal    Ordered log of every state change. Enables replay,"
+info "             crash recovery, and time-travel queries. Heavier but"
+info "             gives you a complete audit trail."
+echo ""
+info "  You can use both. Snapshots for fast startup, journal for history."
+echo ""
+
+if [ "$ENABLE_PERSIST" = true ]; then
+  info "Snapshots: enabled (default for this profile)."
+  PERSIST_INTERVAL=$(ask "Snapshot interval in seconds" "$PERSIST_INTERVAL")
 else
-  if [ "$PROFILE_NAME" = "minimal" ]; then
-    echo "  Authentication is disabled for the minimal profile."
-    if ask_yn "Enable authentication anyway? (y/n)" "n"; then
-      ENABLE_AUTH=true
-      AUTH_PORT=$(ask "Auth HTTP port" "$AUTH_PORT")
-      TOKEN_TTL=$(ask "Default token TTL in seconds (0 = no expiry)" "$TOKEN_TTL")
-    fi
+  if ask_yn "Enable state snapshots? (y/n)" "y"; then
+    ENABLE_PERSIST=true
+    PERSIST_INTERVAL=$(ask "Snapshot interval in seconds" "30")
   fi
 fi
 
-if [ "$ENABLE_CAP_TOKENS" = true ]; then
-  echo ""
-  echo "  Capability tokens allow delegated authorization chains."
-  TRUST_ANCHOR=$(ask "Trust anchor public key file (Ed25519, or blank to skip)" "")
-  CAP_MAX_DEPTH=$(ask "Max delegation chain depth" "$CAP_MAX_DEPTH")
-fi
-
-if [ "$ENABLE_REGISTRY" = true ]; then
-  echo ""
-  echo "  Entity registry stores device/client identity records."
-  REGISTRY_DB=$(ask "Registry database path (in container)" "$REGISTRY_DB")
-fi
-
-# ---------------------------------------------------------------
-# Section 4: Persistence (snapshots, journal)
-# ---------------------------------------------------------------
-
-section "Persistence"
-
-if [ "$ENABLE_PERSIST" = true ]; then
-  echo "  State snapshots save parameter values across restarts."
-  PERSIST_INTERVAL=$(ask "Snapshot interval in seconds" "$PERSIST_INTERVAL")
+echo ""
+if [ "$ENABLE_JOURNAL" = false ]; then
+  if ask_yn "Enable journal (event log)? (y/n)" "n"; then
+    ENABLE_JOURNAL=true
+  fi
 fi
 
 if [ "$ENABLE_JOURNAL" = true ]; then
   echo ""
-  echo "  Journal provides an ordered event log for state replay."
-  echo "  Backends: sqlite, defra"
-  JOURNAL_BACKEND=$(ask "Journal backend" "$JOURNAL_BACKEND")
+  info "Journal backends:"
+  info "  sqlite  Local file. Single-node. Fast. Good for most deployments."
+  info "  defra   DefraDB (Merkle CRDTs). Multi-node P2P sync. State"
+  info "          replicates between nodes automatically. Requires a"
+  info "          DefraDB instance (will be started as a Docker container)."
+  echo ""
+  JOURNAL_BACKEND=$(ask_choice "Journal backend" "sqlite/defra" "$JOURNAL_BACKEND")
+
   case "$JOURNAL_BACKEND" in
     defra)
-      DEFRA_URL=$(ask "DefraDB GraphQL endpoint URL" "http://defra:9181/api/v0/graphql")
+      info ""
+      info "A DefraDB container will be added to the deployment."
+      DEFRA_URL=$(ask "DefraDB endpoint (inside Docker network)" "http://defra:9181/api/v0/graphql")
       ;;
-    sqlite)
-      JOURNAL_PATH=$(ask "Journal database path (in container)" "$JOURNAL_PATH")
+    sqlite|*)
+      JOURNAL_BACKEND="sqlite"
+      JOURNAL_PATH=$(ask "Journal database path (inside container)" "$JOURNAL_PATH")
       ;;
   esac
-elif [ "$PROFILE_NAME" = "standard" ]; then
-  if ask_yn "Enable journal (event log)? (y/n)" "n"; then
-    ENABLE_JOURNAL=true
-    JOURNAL_BACKEND=$(ask "Journal backend (sqlite/defra)" "$JOURNAL_BACKEND")
-    case "$JOURNAL_BACKEND" in
-      defra)
-        DEFRA_URL=$(ask "DefraDB GraphQL endpoint URL" "http://defra:9181/api/v0/graphql")
-        ;;
-      sqlite)
-        JOURNAL_PATH=$(ask "Journal database path (in container)" "$JOURNAL_PATH")
-        ;;
-    esac
+fi
+
+# ---------------------------------------------------------------
+# 5. Security features
+# ---------------------------------------------------------------
+
+if [ "$ENABLE_AUTH" = true ]; then
+  section "Security Features"
+
+  info "These build on top of basic auth with more fine-grained control."
+  echo ""
+
+  # Capability tokens
+  if [ "$ENABLE_CAP_TOKENS" = false ]; then
+    info "Capability tokens: Ed25519 signed tokens with delegation chains."
+    info "A root key can issue tokens that grant access to specific address"
+    info "patterns. Those tokens can delegate narrower access to others."
+    info "Useful when you have devices or services that need scoped access"
+    info "without going through the auth API."
+    echo ""
+    if ask_yn "Enable capability tokens? (y/n)" "n"; then
+      ENABLE_CAP_TOKENS=true
+    fi
+  fi
+
+  if [ "$ENABLE_CAP_TOKENS" = true ]; then
+    echo ""
+    info "Trust anchors are Ed25519 public keys that the relay trusts as"
+    info "root issuers. Generate one with: clasp key generate --out root.key"
+    TRUST_ANCHOR=$(ask "Trust anchor key file path (blank to skip)" "")
+    CAP_MAX_DEPTH=$(ask "Max delegation chain depth" "$CAP_MAX_DEPTH")
+  fi
+
+  echo ""
+
+  # Entity registry
+  if [ "$ENABLE_REGISTRY" = false ]; then
+    info "Entity registry: persistent identity store for devices, users,"
+    info "and services. Each entity gets a signed Ed25519 token. The relay"
+    info "tracks entity status (active, suspended, revoked) and exposes"
+    info "a REST API for management."
+    echo ""
+    if ask_yn "Enable entity registry? (y/n)" "n"; then
+      ENABLE_REGISTRY=true
+    fi
+  fi
+
+  if [ "$ENABLE_REGISTRY" = true ]; then
+    REGISTRY_DB=$(ask "Registry database path (inside container)" "$REGISTRY_DB")
   fi
 fi
 
 # ---------------------------------------------------------------
-# Section 5: Automation (rules, lenses, app config)
+# 6. Automation
 # ---------------------------------------------------------------
 
 section "Automation"
 
-if [ "$ENABLE_RULES" = true ]; then
-  echo "  Rules engine processes trigger/condition/action pipelines."
-  RULES_PATH=$(ask "Rules JSON path (in container)" "$RULES_PATH")
-else
-  if [ "$PROFILE_NAME" = "standard" ]; then
-    if ask_yn "Enable rules engine? (y/n)" "n"; then
-      ENABLE_RULES=true
-      RULES_PATH=$(ask "Rules JSON path (in container)" "$RULES_PATH")
-    fi
+info "Server-side logic that runs on the relay without client code."
+echo ""
+
+# Rules engine
+if [ "$ENABLE_RULES" = false ]; then
+  info "Rules engine: reactive triggers that fire on state changes."
+  info "Example: when /sensors/temp exceeds 30, set /hvac/fan to true."
+  info "Supports thresholds, pattern matching, cooldowns, transforms."
+  info "Rules are defined in a JSON file."
+  echo ""
+  if ask_yn "Enable rules engine? (y/n)" "n"; then
+    ENABLE_RULES=true
   fi
+else
+  info "Rules engine: enabled (default for this profile)."
 fi
 
-if ask_yn "Enable LensVM transforms (WASM)? (y/n)" "n"; then
+if [ "$ENABLE_RULES" = true ]; then
+  RULES_PATH=$(ask "Rules JSON file path (inside container)" "$RULES_PATH")
+fi
+
+echo ""
+
+# LensVM
+info "LensVM: programmable signal transforms via WebAssembly."
+info "Load WASM modules that process values in the relay's hot path."
+info "Example: lowpass filter on sensor data, hysteresis for debouncing."
+info "Lenses are defined in a JSON config that maps address patterns"
+info "to WASM files and parameters."
+echo ""
+if ask_yn "Enable LensVM transforms? (y/n)" "n"; then
   ENABLE_LENSES=true
-  LENSES_PATH=$(ask "Lenses JSON path (in container)" "$LENSES_PATH")
+  LENSES_PATH=$(ask "Lenses JSON file path (inside container)" "$LENSES_PATH")
 fi
 
-if ask_yn "Load app config (scopes, write rules, snapshots)? (y/n)" "n"; then
+echo ""
+
+# App config
+info "App config: scopes, write rules, and snapshot visibility rules."
+info "Scopes template which addresses each user can access."
+info "Write rules validate values before they're stored (e.g. 'only the"
+info "room creator can set /room/*/admin'). Snapshot rules control what"
+info "data clients see when they connect."
+echo ""
+if ask_yn "Load app config? (y/n)" "n"; then
   ENABLE_APP_CONFIG=true
-  APP_CONFIG_PATH=$(ask "App config JSON path (in container)" "$APP_CONFIG_PATH")
+  APP_CONFIG_PATH=$(ask "App config JSON file path (inside container)" "$APP_CONFIG_PATH")
 fi
 
 # ---------------------------------------------------------------
-# Section 6: Federation
+# 7. Federation
 # ---------------------------------------------------------------
 
 section "Federation"
 
-if [ "$PROFILE_NAME" = "full" ]; then
-  echo "  Federation connects this relay to a hub for namespace routing."
-  if ask_yn "Enable federation? (y/n)" "n"; then
-    ENABLE_FEDERATION=true
-  fi
-elif [ "$PROFILE_NAME" = "standard" ]; then
-  if ask_yn "Enable federation? (y/n)" "n"; then
-    ENABLE_FEDERATION=true
-  fi
-fi
-
-if [ "$ENABLE_FEDERATION" = true ]; then
-  FEDERATION_HUB=$(ask "Hub WebSocket URL (e.g. ws://hub.example.com:7330)")
-  FEDERATION_ID=$(ask "Local router identity" "$(hostname -s)")
-  FEDERATION_NAMESPACE=$(ask "Owned namespace pattern (e.g. /sensors/*)" "")
-  FEDERATION_TOKEN=$(ask "Auth token for hub (blank if none)" "")
-fi
-
-# ---------------------------------------------------------------
-# Section 7: Advanced (TTLs, sessions, QUIC, rendezvous, etc.)
-# ---------------------------------------------------------------
-
-CONFIGURE_ADVANCED=false
+info "Federation connects multiple CLASP relays into a coordinated"
+info "network. Each relay owns a namespace prefix (e.g. /building-a/**)."
+info "A hub relay aggregates state from all connected leaves."
 echo ""
-if ask_yn "Configure advanced settings? (y/n)" "n"; then
-  CONFIGURE_ADVANCED=true
+info "Use this when you have multiple physical sites that need to share"
+info "state, or when you want to scale horizontally across regions."
+echo ""
+
+if ask_yn "Enable federation? (y/n)" "n"; then
+  ENABLE_FEDERATION=true
+  echo ""
+  FEDERATION_HUB=$(ask "Hub relay WebSocket URL (e.g. ws://hub.example.com:7330)")
+  FEDERATION_ID=$(ask "This relay's identity (unique name)" "$(hostname -s)")
+  echo ""
+  info "Namespace: the address prefix this relay owns. Writes to addresses"
+  info "under this prefix originate here and propagate to the hub."
+  FEDERATION_NAMESPACE=$(ask "Owned namespace pattern (e.g. /site-a/**)" "")
+  FEDERATION_TOKEN=$(ask "Auth token for hub (blank if open)" "")
 fi
 
-if [ "$CONFIGURE_ADVANCED" = true ]; then
+# ---------------------------------------------------------------
+# 8. Advanced settings
+# ---------------------------------------------------------------
 
-  section "Advanced -- Sessions"
+echo ""
+if ask_yn "Configure advanced settings (TTLs, sessions, QUIC, metrics)? (y/n)" "n"; then
+
+  section "Sessions"
+  info "Max sessions limits concurrent WebSocket connections."
+  info "Session timeout disconnects idle clients."
   MAX_SESSIONS=$(ask "Max sessions (0 = unlimited)" "$MAX_SESSIONS")
   SESSION_TIMEOUT=$(ask "Session timeout in seconds" "$SESSION_TIMEOUT")
 
-  section "Advanced -- TTL"
-  if [ "$NO_TTL" = false ]; then
-    PARAM_TTL=$(ask "Parameter TTL in seconds (0 = disabled)" "$PARAM_TTL")
-    SIGNAL_TTL=$(ask "Signal TTL in seconds (0 = disabled)" "$SIGNAL_TTL")
-    if ask_yn "Disable all TTLs (persist indefinitely)? (y/n)" "n"; then
-      NO_TTL=true
-    fi
-  else
-    echo "  TTLs are disabled (minimal profile default)."
-    if ask_yn "Enable TTLs instead? (y/n)" "n"; then
+  section "TTL (Time-To-Live)"
+  info "TTLs automatically remove stale parameters and signal definitions."
+  info "Param TTL: how long a parameter persists without being updated."
+  info "Signal TTL: how long a signal definition persists without access."
+  info "Set to 0 to disable individual TTLs. Or disable all TTLs to"
+  info "keep everything forever (higher memory usage)."
+  echo ""
+  if [ "$NO_TTL" = true ]; then
+    info "TTLs are currently disabled."
+    if ask_yn "Enable TTLs? (y/n)" "n"; then
       NO_TTL=false
       PARAM_TTL=$(ask "Parameter TTL in seconds" "3600")
       SIGNAL_TTL=$(ask "Signal TTL in seconds" "3600")
     fi
+  else
+    PARAM_TTL=$(ask "Parameter TTL in seconds (0 = disabled)" "$PARAM_TTL")
+    SIGNAL_TTL=$(ask "Signal TTL in seconds (0 = disabled)" "$SIGNAL_TTL")
+    if ask_yn "Disable all TTLs (keep everything forever)? (y/n)" "n"; then
+      NO_TTL=true
+    fi
   fi
 
-  section "Advanced -- QUIC Transport"
+  section "QUIC Transport"
+  info "QUIC provides multiplexed streams with built-in TLS and 0-RTT"
+  info "reconnection. Faster than WebSocket for native applications."
+  info "Requires a TLS certificate and private key."
+  echo ""
   if ask_yn "Enable QUIC transport? (y/n)" "n"; then
     ENABLE_QUIC=true
-    QUIC_PORT=$(ask "QUIC port" "$QUIC_PORT")
-    QUIC_CERT=$(ask "TLS certificate path (PEM, in container)" "/data/certs/cert.pem")
-    QUIC_KEY=$(ask "TLS private key path (PEM, in container)" "/data/certs/key.pem")
+    QUIC_PORT=$(ask "QUIC listen port (UDP)" "$QUIC_PORT")
+    QUIC_CERT=$(ask "TLS certificate path (inside container)" "/data/certs/cert.pem")
+    QUIC_KEY=$(ask "TLS private key path (inside container)" "/data/certs/key.pem")
     echo ""
-    echo "  Place your cert and key in ${CERT_DIR}/ on the host."
+    info "Place your cert and key files in ${CERT_DIR}/ on the host."
   fi
 
-  section "Advanced -- Health and Metrics"
-  if [ "$ENABLE_HEALTH" = true ]; then
-    HEALTH_PORT=$(ask "Health check port (/healthz, /readyz)" "$HEALTH_PORT")
-  else
-    if ask_yn "Enable health check endpoint? (y/n)" "y"; then
+  section "Health and Metrics"
+  if [ "$ENABLE_HEALTH" = false ]; then
+    if ask_yn "Enable health check endpoints (/healthz, /readyz)? (y/n)" "y"; then
       ENABLE_HEALTH=true
       HEALTH_PORT=$(ask "Health check port" "$HEALTH_PORT")
     fi
+  else
+    HEALTH_PORT=$(ask "Health check port" "$HEALTH_PORT")
   fi
   DRAIN_TIMEOUT=$(ask "Graceful shutdown drain timeout in seconds" "$DRAIN_TIMEOUT")
 
-  if [ "$ENABLE_METRICS" = true ]; then
-    METRICS_PORT=$(ask "Prometheus metrics port" "$METRICS_PORT")
-  else
+  echo ""
+  if [ "$ENABLE_METRICS" = false ]; then
+    info "Prometheus metrics expose request counts, latencies, and fanout"
+    info "histograms at /metrics for monitoring and alerting."
+    echo ""
     if ask_yn "Enable Prometheus metrics? (y/n)" "n"; then
       ENABLE_METRICS=true
       METRICS_PORT=$(ask "Metrics port" "$METRICS_PORT")
     fi
+  else
+    METRICS_PORT=$(ask "Metrics port" "$METRICS_PORT")
   fi
 
-  section "Advanced -- Rendezvous Discovery"
+  section "Discovery"
+  info "Rendezvous server allows devices to discover this relay on WAN."
   RENDEZVOUS_PORT=$(ask "Rendezvous port (0 = disabled)" "$RENDEZVOUS_PORT")
-  RENDEZVOUS_TTL=$(ask "Rendezvous registration TTL in seconds" "$RENDEZVOUS_TTL")
+  RENDEZVOUS_TTL=$(ask "Device registration TTL in seconds" "$RENDEZVOUS_TTL")
 
-  section "Advanced -- Logging"
-  if ask_yn "Enable verbose logging? (y/n)" "n"; then
-    VERBOSE=true
-  fi
-
-  section "Advanced -- WebSocket"
-  if ask_yn "Disable WebSocket (use other protocols only)? (y/n)" "n"; then
+  section "Ports"
+  WS_PORT=$(ask "WebSocket port" "$WS_PORT")
+  if ask_yn "Disable WebSocket (use QUIC/MQTT/OSC only)? (y/n)" "n"; then
     NO_WEBSOCKET=true
   fi
 
+  section "Logging"
+  if ask_yn "Enable verbose/debug logging? (y/n)" "n"; then
+    VERBOSE=true
+  fi
 fi
 
 # ---------------------------------------------------------------
@@ -499,7 +635,7 @@ if [ "$ENABLE_AUTH" = true ]; then
   if [ -f "$TOKEN_FILE" ]; then
     ADMIN_TOKEN=$(cat "$TOKEN_FILE")
     echo ""
-    echo "  Using existing admin token from ${TOKEN_FILE}"
+    info "Using existing admin token from ${TOKEN_FILE}"
   else
     ADMIN_TOKEN=$(gen_token)
     echo "$ADMIN_TOKEN" > "$TOKEN_FILE"
@@ -507,44 +643,48 @@ if [ "$ENABLE_AUTH" = true ]; then
   fi
 fi
 
-# Create empty config files if referenced and missing
+# Create empty config files if needed
 if [ "$ENABLE_RULES" = true ] && [ ! -f "${DATA_DIR}/rules.json" ]; then
-  echo '{"rules":[]}' > "${DATA_DIR}/rules.json"
+  echo '[]' > "${DATA_DIR}/rules.json"
+  info "Created empty rules file: ${DATA_DIR}/rules.json"
 fi
 
 if [ "$ENABLE_LENSES" = true ] && [ ! -f "${DATA_DIR}/lenses.json" ]; then
   echo '[]' > "${DATA_DIR}/lenses.json"
+  info "Created empty lenses file: ${DATA_DIR}/lenses.json"
 fi
 
 if [ "$ENABLE_APP_CONFIG" = true ] && [ ! -f "${DATA_DIR}/app-config.json" ]; then
-  echo '{"scopes":[],"writeRules":[],"snapshotRules":[]}' > "${DATA_DIR}/app-config.json"
+  cat > "${DATA_DIR}/app-config.json" <<'JSON'
+{
+  "scopes": [],
+  "write_rules": [],
+  "snapshot_transforms": [],
+  "snapshot_visibility": []
+}
+JSON
+  info "Created empty app config: ${DATA_DIR}/app-config.json"
 fi
 
 # ---------------------------------------------------------------
 # Build relay command arguments
 # ---------------------------------------------------------------
 
-echo ""
-echo "  Writing configuration..."
+section "Generating Configuration"
 
 CMD_ARGS=""
 
-# -- Network --
 add_flag "--ws-port" "$WS_PORT"
 add_flag "--host" "$HOST"
 add_flag "--name" "$RELAY_NAME"
 
-if [ "$NO_WEBSOCKET" = true ]; then
-  add_bare_flag "--no-websocket"
-fi
+[ "$NO_WEBSOCKET" = true ] && add_bare_flag "--no-websocket"
 
-# -- Health --
 if [ "$ENABLE_HEALTH" = true ]; then
   add_flag "--health-port" "$HEALTH_PORT"
   add_flag "--drain-timeout" "$DRAIN_TIMEOUT"
 fi
 
-# -- Auth --
 if [ "$ENABLE_AUTH" = true ]; then
   add_flag "--auth-port" "$AUTH_PORT"
   add_flag "--auth-db" "$AUTH_DB"
@@ -552,34 +692,27 @@ if [ "$ENABLE_AUTH" = true ]; then
   add_flag "--token-ttl" "$TOKEN_TTL"
 fi
 
-if [ -n "$CORS_ORIGINS" ]; then
-  add_flag "--cors-origin" "$CORS_ORIGINS"
-fi
+[ -n "$CORS_ORIGINS" ] && add_flag "--cors-origin" "$CORS_ORIGINS"
 
-# -- QUIC --
 if [ "$ENABLE_QUIC" = true ]; then
   add_flag "--quic-port" "$QUIC_PORT"
   add_flag "--cert" "$QUIC_CERT"
   add_flag "--key" "$QUIC_KEY"
 fi
 
-# -- MQTT --
 if [ "$ENABLE_MQTT" = true ]; then
   add_flag "--mqtt-port" "$MQTT_PORT"
   add_flag "--mqtt-namespace" "$MQTT_NAMESPACE"
 fi
 
-# -- OSC --
 if [ "$ENABLE_OSC" = true ]; then
   add_flag "--osc-port" "$OSC_PORT"
   add_flag "--osc-namespace" "$OSC_NAMESPACE"
 fi
 
-# -- Sessions --
 add_flag "--max-sessions" "$MAX_SESSIONS"
 add_flag "--session-timeout" "$SESSION_TIMEOUT"
 
-# -- TTL --
 if [ "$NO_TTL" = true ]; then
   add_bare_flag "--no-ttl"
 else
@@ -587,102 +720,53 @@ else
   add_flag "--signal-ttl" "$SIGNAL_TTL"
 fi
 
-# -- Persistence --
 if [ "$ENABLE_PERSIST" = true ]; then
   add_flag "--persist" "$PERSIST_PATH"
   add_flag "--persist-interval" "$PERSIST_INTERVAL"
 fi
 
-# -- Journal --
 if [ "$ENABLE_JOURNAL" = true ]; then
   add_flag "--journal-backend" "$JOURNAL_BACKEND"
   case "$JOURNAL_BACKEND" in
-    defra)
-      add_flag "--defra-url" "$DEFRA_URL"
-      ;;
-    sqlite)
-      add_flag "--journal" "$JOURNAL_PATH"
-      ;;
+    defra) add_flag "--defra-url" "$DEFRA_URL" ;;
+    sqlite) add_flag "--journal" "$JOURNAL_PATH" ;;
   esac
-  if [ "$JOURNAL_MEMORY" = true ]; then
-    add_bare_flag "--journal-memory"
-  fi
+  [ "$JOURNAL_MEMORY" = true ] && add_bare_flag "--journal-memory"
 fi
 
-# -- Capability Tokens --
 if [ "$ENABLE_CAP_TOKENS" = true ]; then
-  if [ -n "$TRUST_ANCHOR" ]; then
-    add_flag "--trust-anchor" "$TRUST_ANCHOR"
-  fi
+  [ -n "$TRUST_ANCHOR" ] && add_flag "--trust-anchor" "$TRUST_ANCHOR"
   add_flag "--cap-max-depth" "$CAP_MAX_DEPTH"
 fi
 
-# -- Entity Registry --
-if [ "$ENABLE_REGISTRY" = true ]; then
-  add_flag "--registry-db" "$REGISTRY_DB"
-fi
+[ "$ENABLE_REGISTRY" = true ] && add_flag "--registry-db" "$REGISTRY_DB"
+[ "$ENABLE_RULES" = true ] && add_flag "--rules" "$RULES_PATH"
+[ "$ENABLE_APP_CONFIG" = true ] && add_flag "--app-config" "$APP_CONFIG_PATH"
+[ "$ENABLE_LENSES" = true ] && add_flag "--lenses" "$LENSES_PATH"
 
-# -- Rules --
-if [ "$ENABLE_RULES" = true ]; then
-  add_flag "--rules" "$RULES_PATH"
-fi
-
-# -- App Config --
-if [ "$ENABLE_APP_CONFIG" = true ]; then
-  add_flag "--app-config" "$APP_CONFIG_PATH"
-fi
-
-# -- LensVM --
-if [ "$ENABLE_LENSES" = true ]; then
-  add_flag "--lenses" "$LENSES_PATH"
-fi
-
-# -- Federation --
 if [ "$ENABLE_FEDERATION" = true ]; then
   add_flag "--federation-hub" "$FEDERATION_HUB"
-  if [ -n "$FEDERATION_ID" ]; then
-    add_flag "--federation-id" "$FEDERATION_ID"
-  fi
-  if [ -n "$FEDERATION_NAMESPACE" ]; then
-    add_flag "--federation-namespace" "$FEDERATION_NAMESPACE"
-  fi
-  if [ -n "$FEDERATION_TOKEN" ]; then
-    add_flag "--federation-token" "$FEDERATION_TOKEN"
-  fi
+  [ -n "$FEDERATION_ID" ] && add_flag "--federation-id" "$FEDERATION_ID"
+  [ -n "$FEDERATION_NAMESPACE" ] && add_flag "--federation-namespace" "$FEDERATION_NAMESPACE"
+  [ -n "$FEDERATION_TOKEN" ] && add_flag "--federation-token" "$FEDERATION_TOKEN"
 fi
 
-# -- Metrics --
-if [ "$ENABLE_METRICS" = true ]; then
-  add_flag "--metrics-port" "$METRICS_PORT"
-fi
+[ "$ENABLE_METRICS" = true ] && add_flag "--metrics-port" "$METRICS_PORT"
 
-# -- Rendezvous --
 add_flag "--rendezvous-port" "$RENDEZVOUS_PORT"
 add_flag "--rendezvous-ttl" "$RENDEZVOUS_TTL"
 
-# -- Logging --
-if [ "$VERBOSE" = true ]; then
-  add_bare_flag "--verbose"
-fi
+[ "$VERBOSE" = true ] && add_bare_flag "--verbose"
 
 # ---------------------------------------------------------------
-# Build exposed ports list
+# Build exposed ports
 # ---------------------------------------------------------------
 
 EXTRA_PORTS=""
-
-if [ "$ENABLE_MQTT" = true ]; then
-  EXTRA_PORTS+="      - \"${MQTT_PORT}:${MQTT_PORT}\"\n"
-fi
-if [ "$ENABLE_OSC" = true ]; then
-  EXTRA_PORTS+="      - \"${OSC_PORT}:${OSC_PORT}/udp\"\n"
-fi
-if [ "$ENABLE_QUIC" = true ]; then
-  EXTRA_PORTS+="      - \"${QUIC_PORT}:${QUIC_PORT}/udp\"\n"
-fi
-if [ "$ENABLE_METRICS" = true ]; then
-  EXTRA_PORTS+="      - \"${METRICS_PORT}:${METRICS_PORT}\"\n"
-fi
+[ "$ENABLE_MQTT" = true ] && EXTRA_PORTS+="      - \"${MQTT_PORT}:${MQTT_PORT}\"\n"
+[ "$ENABLE_OSC" = true ] && EXTRA_PORTS+="      - \"${OSC_PORT}:${OSC_PORT}/udp\"\n"
+[ "$ENABLE_QUIC" = true ] && EXTRA_PORTS+="      - \"${QUIC_PORT}:${QUIC_PORT}/udp\"\n"
+[ "$ENABLE_METRICS" = true ] && EXTRA_PORTS+="      - \"${METRICS_PORT}:${METRICS_PORT}\"\n"
 
 # ---------------------------------------------------------------
 # Generate docker-compose.yml
@@ -696,7 +780,6 @@ cat > "$COMPOSE_FILE" <<YAML
 services:
 YAML
 
-# Caddy service (only if TLS enabled)
 if [ "$ENABLE_TLS" = true ]; then
   cat >> "$COMPOSE_FILE" <<YAML
   caddy:
@@ -716,7 +799,6 @@ if [ "$ENABLE_TLS" = true ]; then
 YAML
 fi
 
-# DefraDB service (if journal backend is defra)
 if [ "$ENABLE_JOURNAL" = true ] && [ "$JOURNAL_BACKEND" = "defra" ]; then
   cat >> "$COMPOSE_FILE" <<YAML
   defra:
@@ -729,15 +811,12 @@ if [ "$ENABLE_JOURNAL" = true ] && [ "$JOURNAL_BACKEND" = "defra" ]; then
 YAML
 fi
 
-# Relay service
 cat >> "$COMPOSE_FILE" <<YAML
   relay:
     image: ghcr.io/lumencanvas/clasp-relay:latest
 YAML
 
-# Ports
 if [ "$ENABLE_TLS" = true ]; then
-  # Behind Caddy, only expose non-HTTP ports
   if [ -n "$EXTRA_PORTS" ]; then
     echo "    ports:" >> "$COMPOSE_FILE"
     echo -e "$EXTRA_PORTS" >> "$COMPOSE_FILE"
@@ -745,18 +824,11 @@ if [ "$ENABLE_TLS" = true ]; then
 else
   echo "    ports:" >> "$COMPOSE_FILE"
   echo "      - \"${WS_PORT}:${WS_PORT}\"" >> "$COMPOSE_FILE"
-  if [ "$ENABLE_AUTH" = true ]; then
-    echo "      - \"${AUTH_PORT}:${AUTH_PORT}\"" >> "$COMPOSE_FILE"
-  fi
-  if [ "$ENABLE_HEALTH" = true ]; then
-    echo "      - \"${HEALTH_PORT}:${HEALTH_PORT}\"" >> "$COMPOSE_FILE"
-  fi
-  if [ -n "$EXTRA_PORTS" ]; then
-    echo -e "$EXTRA_PORTS" >> "$COMPOSE_FILE"
-  fi
+  [ "$ENABLE_AUTH" = true ] && echo "      - \"${AUTH_PORT}:${AUTH_PORT}\"" >> "$COMPOSE_FILE"
+  [ "$ENABLE_HEALTH" = true ] && echo "      - \"${HEALTH_PORT}:${HEALTH_PORT}\"" >> "$COMPOSE_FILE"
+  [ -n "$EXTRA_PORTS" ] && echo -e "$EXTRA_PORTS" >> "$COMPOSE_FILE"
 fi
 
-# Depends on
 if [ "$ENABLE_JOURNAL" = true ] && [ "$JOURNAL_BACKEND" = "defra" ]; then
   cat >> "$COMPOSE_FILE" <<YAML
     depends_on:
@@ -765,9 +837,7 @@ YAML
 fi
 
 RUST_LOG="info"
-if [ "$VERBOSE" = true ]; then
-  RUST_LOG="debug"
-fi
+[ "$VERBOSE" = true ] && RUST_LOG="debug"
 
 cat >> "$COMPOSE_FILE" <<YAML
     environment:
@@ -776,7 +846,6 @@ cat >> "$COMPOSE_FILE" <<YAML
     command:
 YAML
 
-# Write command args
 echo -e "$CMD_ARGS" >> "$COMPOSE_FILE"
 
 cat >> "$COMPOSE_FILE" <<YAML
@@ -786,14 +855,9 @@ cat >> "$COMPOSE_FILE" <<YAML
 
 YAML
 
-# Volumes
 NEED_VOLUMES=false
-if [ "$ENABLE_TLS" = true ]; then
-  NEED_VOLUMES=true
-fi
-if [ "$ENABLE_JOURNAL" = true ] && [ "$JOURNAL_BACKEND" = "defra" ]; then
-  NEED_VOLUMES=true
-fi
+[ "$ENABLE_TLS" = true ] && NEED_VOLUMES=true
+[ "$ENABLE_JOURNAL" = true ] && [ "$JOURNAL_BACKEND" = "defra" ] && NEED_VOLUMES=true
 
 if [ "$NEED_VOLUMES" = true ]; then
   echo "volumes:" >> "$COMPOSE_FILE"
@@ -811,8 +875,6 @@ fi
 # ---------------------------------------------------------------
 
 if [ "$ENABLE_TLS" = true ]; then
-
-  # Start with global block
   cat > "$CADDY_FILE" <<CADDY
 {
 	email ${ACME_EMAIL}
@@ -821,7 +883,6 @@ if [ "$ENABLE_TLS" = true ]; then
 ${DOMAIN} {
 CADDY
 
-  # Auth reverse proxy
   if [ "$ENABLE_AUTH" = true ]; then
     cat >> "$CADDY_FILE" <<CADDY
 	handle /auth/* {
@@ -831,7 +892,6 @@ CADDY
 CADDY
   fi
 
-  # Metrics reverse proxy
   if [ "$ENABLE_METRICS" = true ]; then
     cat >> "$CADDY_FILE" <<CADDY
 	handle /metrics {
@@ -841,7 +901,6 @@ CADDY
 CADDY
   fi
 
-  # WebSocket reverse proxy (default handler)
   if [ "$ENABLE_HEALTH" = true ]; then
     cat >> "$CADDY_FILE" <<CADDY
 	handle {
@@ -864,13 +923,17 @@ CADDY
 fi
 
 # ---------------------------------------------------------------
-# Start services
+# Start
 # ---------------------------------------------------------------
 
-echo "  Starting services..."
+info "Starting services..."
 echo ""
 
 docker compose -f "$COMPOSE_FILE" up -d --pull always
+
+# ---------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------
 
 echo ""
 echo "  ================================================================"
@@ -880,46 +943,28 @@ echo ""
 
 if [ "$ENABLE_TLS" = true ]; then
   echo "  WebSocket:    wss://${DOMAIN}"
-  if [ "$ENABLE_AUTH" = true ]; then
-    echo "  Auth API:     https://${DOMAIN}/auth/"
-  fi
-  if [ "$ENABLE_HEALTH" = true ]; then
-    echo "  Health:       https://${DOMAIN} (via Caddy)"
-  fi
+  [ "$ENABLE_AUTH" = true ] && echo "  Auth API:     https://${DOMAIN}/auth/"
+  [ "$ENABLE_HEALTH" = true ] && echo "  Health:       https://${DOMAIN} (via Caddy)"
 else
   echo "  WebSocket:    ws://${DOMAIN}:${WS_PORT}"
-  if [ "$ENABLE_AUTH" = true ]; then
-    echo "  Auth API:     http://${DOMAIN}:${AUTH_PORT}/auth/"
-  fi
-  if [ "$ENABLE_HEALTH" = true ]; then
-    echo "  Health:       http://${DOMAIN}:${HEALTH_PORT}/healthz"
-  fi
+  [ "$ENABLE_AUTH" = true ] && echo "  Auth API:     http://${DOMAIN}:${AUTH_PORT}/auth/"
+  [ "$ENABLE_HEALTH" = true ] && echo "  Health:       http://${DOMAIN}:${HEALTH_PORT}/healthz"
 fi
 
-if [ "$ENABLE_MQTT" = true ]; then
-  echo "  MQTT:         ${DOMAIN}:${MQTT_PORT}"
-fi
-if [ "$ENABLE_OSC" = true ]; then
-  echo "  OSC:          ${DOMAIN}:${OSC_PORT} (UDP)"
-fi
-if [ "$ENABLE_QUIC" = true ]; then
-  echo "  QUIC:         ${DOMAIN}:${QUIC_PORT} (UDP)"
-fi
+[ "$ENABLE_MQTT" = true ] && echo "  MQTT:         ${DOMAIN}:${MQTT_PORT}"
+[ "$ENABLE_OSC" = true ] && echo "  OSC:          ${DOMAIN}:${OSC_PORT} (UDP)"
+[ "$ENABLE_QUIC" = true ] && echo "  QUIC:         ${DOMAIN}:${QUIC_PORT} (UDP)"
+[ "$ENABLE_FEDERATION" = true ] && echo "  Federation:   ${FEDERATION_HUB} (as ${FEDERATION_ID})"
+[ "$ENABLE_JOURNAL" = true ] && echo "  Journal:      ${JOURNAL_BACKEND}"
+[ "$ENABLE_RULES" = true ] && echo "  Rules:        ${RULES_PATH}"
+[ "$ENABLE_LENSES" = true ] && echo "  Lenses:       ${LENSES_PATH}"
+
 if [ "$ENABLE_METRICS" = true ]; then
   if [ "$ENABLE_TLS" = true ]; then
     echo "  Metrics:      https://${DOMAIN}/metrics"
   else
     echo "  Metrics:      http://${DOMAIN}:${METRICS_PORT}/metrics"
   fi
-fi
-if [ "$ENABLE_FEDERATION" = true ]; then
-  echo "  Federation:   ${FEDERATION_HUB} (as ${FEDERATION_ID})"
-fi
-if [ "$ENABLE_JOURNAL" = true ]; then
-  echo "  Journal:      ${JOURNAL_BACKEND}"
-fi
-if [ "$ENABLE_RULES" = true ]; then
-  echo "  Rules:        ${RULES_PATH}"
 fi
 
 echo ""
@@ -928,12 +973,29 @@ if [ "$ENABLE_AUTH" = true ]; then
   echo "  Token File:   ${TOKEN_FILE}"
   echo ""
   echo "  Save your admin token. It will not be shown again."
-  echo ""
 fi
-echo "  Config files:  ${DATA_DIR}/"
-echo "  Compose file:  ${COMPOSE_FILE}"
+
 echo ""
-echo "  Logs:          docker compose -f ${COMPOSE_FILE} logs -f"
+echo "  ---- Management ----"
+echo ""
+echo "  View logs:     docker compose -f ${COMPOSE_FILE} logs -f"
+echo "  Restart:       docker compose -f ${COMPOSE_FILE} restart"
 echo "  Stop:          docker compose -f ${COMPOSE_FILE} down"
 echo "  Reconfigure:   clasp-setup"
+echo "  Uninstall:     docker compose -f ${COMPOSE_FILE} down -v && rm -rf /opt/clasp /var/lib/clasp /usr/local/bin/clasp-setup"
+echo ""
+echo "  ---- Config files ----"
+echo ""
+echo "  Compose:       ${COMPOSE_FILE}"
+[ "$ENABLE_TLS" = true ] && echo "  Caddyfile:     ${CADDY_FILE}"
+echo "  Data:          ${DATA_DIR}/"
+[ "$ENABLE_RULES" = true ] && echo "  Rules:         ${DATA_DIR}/rules.json"
+[ "$ENABLE_LENSES" = true ] && echo "  Lenses:        ${DATA_DIR}/lenses.json"
+[ "$ENABLE_APP_CONFIG" = true ] && echo "  App config:    ${DATA_DIR}/app-config.json"
+echo ""
+echo "  ---- Documentation ----"
+echo ""
+echo "  Docs:          https://docs.clasp.to"
+echo "  SDK:           npm install @clasp-to/core"
+echo "  GitHub:        https://github.com/lumencanvas/clasp"
 echo ""
