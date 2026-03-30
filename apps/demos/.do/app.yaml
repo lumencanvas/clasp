@@ -1,0 +1,18 @@
+name: clasp-demos
+region: nyc
+domains:
+  - domain: demos.clasp.to
+    type: PRIMARY
+static_sites:
+  - name: clasp-demos
+    github:
+      repo: lumencanvas/clasp
+      branch: main
+      deploy_on_push: true
+    source_dir: apps/demos
+    build_command: npm install && npm run build
+    output_dir: dist
+    environment_slug: node-js
+    routes:
+      - path: /
+    catchall_document: index.html

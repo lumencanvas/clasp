@@ -1,0 +1,82 @@
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; overscroll-behavior: none; }
+
+:root {
+  --bg: #0a0a0a;
+  --surf: #111111;
+  --card: #161616;
+  --card2: #1c1c1c;
+  --bdr: rgba(255,255,255,0.07);
+  --bdr2: rgba(255,255,255,0.13);
+  --teal: #2a9d8f;
+  --teal-d: rgba(42,157,143,0.10);
+  --teal-m: rgba(42,157,143,0.22);
+  --red: #e63946;
+  --red-d: rgba(230,57,70,0.10);
+  --grn: #4caf72;
+  --ylw: #d4a840;
+  --txt: #a8a8a8;
+  --br: #e8e8e8;
+  --dim: #484848;
+  --dim2: #242424;
+  --font: 'Space Mono', monospace;
+  --head: 'Archivo Black', sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+  --r: 4px;
+  --noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+body {
+  background: var(--bg);
+  color: var(--txt);
+  font-family: var(--font);
+  font-size: 13px;
+  min-height: 100%;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.03;
+  background-image: var(--noise);
+}
+
+a { color: var(--teal); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+button {
+  font-family: var(--font);
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+input, textarea {
+  font-family: var(--font);
+  background: transparent;
+  border: 1px solid var(--bdr2);
+  color: var(--br);
+  padding: 8px 12px;
+  border-radius: var(--r);
+  outline: none;
+  font-size: 13px;
+}
+input:focus, textarea:focus {
+  border-color: var(--teal-m);
+}
+input::placeholder, textarea::placeholder {
+  color: var(--dim);
+}
+
+.container { max-width: 640px; margin: 0 auto; padding: 0 16px; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.fade-in { animation: fadeIn 0.4s ease both; }

@@ -31,6 +31,7 @@ function goHome() {
     <div class="navlinks">
       <a @click="scrollTo('signals')">Signals</a>
       <a @click="scrollTo('howitworks')">How It Works</a>
+      <a @click="scrollTo('demos')">Demos</a>
       <a @click="scrollTo('ecosystem')">Ecosystem</a>
       <a @click="scrollTo('downloads')">Downloads</a>
       <a @click="scrollTo('spec')">Spec</a>

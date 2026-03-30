@@ -1,0 +1,3102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ghost.webcam  ghost drop</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+<!-- @clasp-to/core browser bundle — 39KB min, 12KB gz, zero external imports -->
+<script src="https://cdn.jsdelivr.net/npm/@clasp-to/core" crossorigin="anonymous"></script>
+<style>
+:root{
+ --bg:#0e0e1a;--surface:#171728;--surface2:#1e1e32;--border:#32325a;
+ --dim:#48487a;--dim2:#9090c8;--ghost:#d8f8f0;--glow:#3dffc0;
+ --warn:#ff4466;--text:#d0d0f0;--bright:#f4f4ff;
+ --mono:'Share Tech Mono',monospace;
+ --safe-t:env(safe-area-inset-top,0px);
+ --safe-b:env(safe-area-inset-bottom,0px);
+ --safe-l:env(safe-area-inset-left,0px);
+ --safe-r:env(safe-area-inset-right,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html{height:100%;overflow:hidden;}
+body{width:100%;height:100dvh;background:var(--bg);color:var(--text);
+ font-family:var(--mono);font-size:13px;overflow:hidden;
+ padding:0 var(--safe-r) 0 var(--safe-l);}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
+ background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.04) 3px,rgba(0,0,0,.04) 4px);}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9998;
+ background:radial-gradient(ellipse at center,transparent 50%,rgba(0,0,0,.35) 100%);}
+
+/* SCREENS */
+.screen{
+ position:fixed;inset:0;
+ opacity:0;pointer-events:none;transition:opacity .4s;
+ overflow:hidden;
+}
+.screen.active{opacity:1;pointer-events:all;}
+/* Scrollable inner -- this is what actually scrolls on mobile */
+.screen-inner{
+ width:100%;height:100%;
+ overflow-y:auto;overflow-x:hidden;
+ -webkit-overflow-scrolling:touch;
+ overscroll-behavior-y:contain;
+ touch-action:pan-y;
+ display:flex;flex-direction:column;align-items:center;
+ padding:max(10px,var(--safe-t)) 10px max(max(24px,var(--safe-b)),24px);
+ gap:0;
+}
+.screen.center .screen-inner{justify-content:center;min-height:100%;}
+
+/* BRAND / TYPE */
+.brand{font-size:11px;letter-spacing:.28em;color:var(--dim2);text-transform:uppercase;flex-shrink:0;line-height:1;}
+.brand span{color:var(--glow);}
+h1{font-size:clamp(20px,5vw,34px);color:var(--bright);letter-spacing:.05em;font-weight:400;}
+.tagline{font-size:12px;color:var(--dim2);letter-spacing:.14em;}
+.sep{width:48px;height:1px;background:var(--border);margin:8px auto;}
+
+/* BUTTONS -- min 44px tall for iOS tap targets */
+.btn{
+ background:var(--surface);border:1px solid var(--border);color:var(--text);
+ font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+ padding:11px 18px;cursor:pointer;transition:all .15s;flex-shrink:0;
+ min-height:44px;touch-action:manipulation;
+}
+.btn:hover{border-color:var(--glow);color:var(--glow);}
+.btn:active{opacity:.7;}
+.btn.primary{border-color:var(--glow);color:var(--glow);background:rgba(61,255,192,.06);}
+.btn.primary:hover{background:rgba(61,255,192,.12);}
+.btn.danger{border-color:var(--warn);color:var(--warn);}
+.btn:disabled{opacity:.25;cursor:not-allowed;border-color:var(--border);color:var(--dim);}
+.btn-row{
+ display:flex;gap:8px;flex-wrap:wrap;justify-content:center;
+ margin-top:6px;flex-shrink:0;width:100%;max-width:min(420px,96vw);
+}
+.btn-row .btn{flex:1;min-width:120px;text-align:center;}
+
+/* CAMERA -- responsive to both width and viewport height */
+.cam-wrap,.watch-wrap{
+ position:relative;
+ /* width capped by viewport width, and by 4/3 of max height so it never gets taller than ~42dvh */
+ width:min(420px, 96vw, calc(42dvh * 4 / 3));
+ aspect-ratio:4/3;
+ background:#060610;border:1px solid var(--border);overflow:hidden;flex-shrink:0;margin-top:4px;
+ align-self:center;
+}
+#canvas-preview{width:100%;height:100%;display:block;}
+.rec-dot{position:absolute;top:7px;right:8px;width:8px;height:8px;border-radius:50%;
+ background:var(--warn);opacity:0;box-shadow:0 0 6px var(--warn);}
+.rec-dot.on{animation:blink 1s step-end infinite;opacity:1;}
+@keyframes blink{50%{opacity:0;}}
+.rec-timer{position:absolute;top:7px;left:9px;font-size:11px;letter-spacing:.12em;color:var(--warn);opacity:0;}
+.rec-timer.on{opacity:1;}
+.fx-label{position:absolute;bottom:7px;left:9px;font-size:9px;letter-spacing:.14em;color:var(--glow);text-transform:uppercase;opacity:.6;}
+.mp-tag{position:absolute;bottom:7px;right:9px;font-size:8px;letter-spacing:.12em;color:var(--dim2);text-transform:uppercase;}
+.mp-tag.ok{color:rgba(61,255,192,.55);}
+.no-cam{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+ color:var(--dim2);font-size:11px;letter-spacing:.18em;text-transform:uppercase;gap:6px;}
+
+/* CONTROLS */
+.ctrl-panel{
+ width:min(420px,96vw);align-self:center;
+ margin-top:4px;display:flex;flex-direction:column;gap:3px;flex-shrink:0;
+}
+.ctrl-row{display:grid;grid-template-columns:1fr 1fr;gap:3px;}
+.ctrl-row.full{grid-template-columns:1fr;}
+.cg{border:1px solid var(--border);padding:6px 9px;background:var(--surface);}
+.cg label{display:flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.16em;
+ color:var(--dim2);text-transform:uppercase;margin-bottom:5px;line-height:1;}
+.cg label .lval{color:var(--glow);margin-left:auto;letter-spacing:.04em;font-size:11px;}
+
+/* Section divider */
+.ctrl-section{display:flex;align-items:center;gap:8px;margin:4px 0 2px;flex-shrink:0;}
+.ctrl-section span{font-size:10px;letter-spacing:.26em;color:var(--dim2);text-transform:uppercase;white-space:nowrap;}
+.ctrl-section::before,.ctrl-section::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* Inline sub-label row */
+.cg-sub{display:flex;align-items:center;gap:5px;margin-top:5px;padding-top:5px;border-top:1px solid var(--border);}
+.cg-sub span{font-size:10px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase;white-space:nowrap;}
+
+/* PILLS -- min 36px height for reliable mobile tap */
+.pills{display:flex;gap:3px;flex-wrap:wrap;align-items:center;}
+.pill{
+ background:var(--surface2);border:1px solid var(--border);color:var(--text);
+ font-family:var(--mono);font-size:11px;letter-spacing:.05em;
+ padding:5px 8px;cursor:pointer;transition:all .12s;text-transform:lowercase;
+ flex-shrink:0;line-height:1.4;min-height:28px;touch-action:manipulation;
+}
+.pill:hover{border-color:var(--dim2);color:var(--bright);}
+.pill:active{opacity:.7;}
+.pill.on{border-color:var(--glow);color:var(--glow);background:rgba(61,255,192,.10);}
+.pill-none{
+ background:var(--surface2);border:1px dashed var(--dim);color:var(--dim2);
+ font-family:var(--mono);font-size:11px;letter-spacing:.05em;
+ padding:5px 8px;cursor:pointer;transition:all .12s;text-transform:lowercase;
+ flex-shrink:0;line-height:1.4;min-height:28px;touch-action:manipulation;
+}
+.pill-none:hover{border-color:var(--dim2);color:var(--text);}
+.pill-none:active{opacity:.7;}
+.pill-none.on{border:1px dashed var(--warn);color:var(--warn);background:rgba(255,68,102,.08);
+ text-decoration:line-through;text-decoration-color:rgba(255,68,102,.5);}
+.eq-lbl{font-size:9px;letter-spacing:.12em;color:var(--dim2);text-transform:uppercase;}
+.tpill{
+ background:var(--surface2);border:1px solid var(--border);color:var(--text);
+ font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;
+ padding:5px 12px;cursor:pointer;transition:all .12s;line-height:1.4;
+ min-height:28px;touch-action:manipulation;
+}
+.tpill:active{opacity:.7;}
+.tpill.on{border-color:var(--glow);color:var(--glow);background:rgba(61,255,192,.10);}
+.tpill.off{border-color:var(--warn);color:var(--warn);background:rgba(255,68,102,.08);}
+
+/* STATUS */
+.status{font-size:10px;letter-spacing:.16em;color:var(--dim2);text-transform:uppercase;
+ text-align:center;height:14px;flex-shrink:0;margin-top:3px;line-height:1;align-self:center;}
+.status.ok{color:var(--glow);}.status.err{color:var(--warn);}
+
+/* LINK SCREEN */
+.lbox{border:1px solid var(--border);background:var(--surface);padding:16px;
+ width:min(480px,96vw);text-align:center;align-self:center;}
+.llabel{font-size:10px;letter-spacing:.24em;color:var(--dim2);text-transform:uppercase;margin-bottom:8px;}
+.lurl{font-size:12px;color:var(--ghost);word-break:break-all;padding:9px;border:1px solid var(--border);
+ background:var(--surface2);margin-bottom:12px;cursor:pointer;transition:all .2s;line-height:1.5;
+ touch-action:manipulation;}
+.lurl:hover{border-color:var(--glow);color:var(--glow);}
+.lmeta{font-size:11px;letter-spacing:.12em;color:var(--dim2);line-height:2.2;}
+.lmeta .w{color:var(--warn);}
+
+/* WATCH */
+.wo{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+ background:rgba(10,10,20,.90);cursor:pointer;transition:background .3s;touch-action:manipulation;}
+.wo:hover{background:rgba(10,10,20,.75);}
+.play-btn{width:60px;height:60px;border:1.5px solid var(--glow);border-radius:50%;
+ display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--glow);
+ margin-bottom:12px;box-shadow:0 0 24px rgba(61,255,192,.18);transition:all .2s;}
+.wo:hover .play-btn{box-shadow:0 0 44px rgba(61,255,192,.42);transform:scale(1.06);}
+.wo p{font-size:12px;letter-spacing:.20em;color:var(--text);text-transform:uppercase;}
+.wo .sub{font-size:10px;letter-spacing:.16em;color:var(--warn);margin-top:5px;}
+
+/* GONE / HOME */
+#screen-gone{text-align:center;gap:14px;}
+.gone-g{font-size:56px;opacity:.12;line-height:1;animation:drift 9s ease-in-out infinite;}
+@keyframes drift{0%,100%{transform:translateY(0) rotate(-2deg);opacity:.10;}50%{transform:translateY(-12px) rotate(2deg);opacity:.20;}}
+#screen-gone p{font-size:12px;letter-spacing:.16em;color:var(--dim2);text-transform:uppercase;line-height:2.0;}
+#screen-home{text-align:center;gap:6px;}
+
+.glitch{animation:glitch 7s step-end infinite;}
+@keyframes glitch{0%,88%,100%{transform:none;}89%{transform:translate(-2px,1px);}90%{transform:translate(2px,-1px);}91%{transform:none;}}
+.flicker{animation:flicker 9s step-end infinite;}
+@keyframes flicker{0%,93%,100%{opacity:1;}94%{opacity:.45;}95%{opacity:1;}96%{opacity:.7;}}
+
+#toast{position:fixed;bottom:max(24px,calc(var(--safe-b) + 12px));left:50%;transform:translateX(-50%);
+ background:var(--surface2);border:1px solid var(--glow);color:var(--glow);font-size:11px;
+ letter-spacing:.16em;padding:8px 20px;opacity:0;pointer-events:none;transition:opacity .3s;z-index:10000;}
+#toast.show{opacity:1;}
+
+/* Range sliders */
+.slider-row{display:flex;align-items:center;gap:6px;width:100%;}
+.slider-row input[type=range],.cg-sub input[type=range]{
+ flex:1;-webkit-appearance:none;appearance:none;height:4px;
+ background:var(--border);border-radius:2px;outline:none;cursor:pointer;touch-action:none;
+}
+.slider-row input[type=range]::-webkit-slider-thumb,.cg-sub input[type=range]::-webkit-slider-thumb{
+ -webkit-appearance:none;width:18px;height:18px;
+ border-radius:50%;background:var(--glow);border:2px solid var(--bg);cursor:pointer;box-shadow:0 0 6px rgba(61,255,192,.5);}
+.slider-row input[type=range]::-moz-range-thumb,.cg-sub input[type=range]::-moz-range-thumb{
+ width:18px;height:18px;border-radius:50%;background:var(--glow);border:2px solid var(--bg);cursor:pointer;}
+
+/* Ghost message textarea */
+.msg-wrap{width:min(420px,96vw);align-self:center;margin-top:4px;flex-shrink:0;}
+.ghost-textarea{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);
+ font-family:var(--mono);font-size:12px;letter-spacing:.06em;padding:8px 9px;resize:none;
+ height:40px;line-height:1.5;outline:none;transition:border-color .18s;}
+.ghost-textarea::placeholder{color:var(--dim2);}
+.ghost-textarea:focus{border-color:var(--dim2);}
+
+.cdo{position:absolute;inset:0;background:rgba(10,10,20,.96);display:flex;flex-direction:column;
+ align-items:center;justify-content:center;gap:12px;z-index:10;}
+.cdn{font-size:72px;color:var(--glow);opacity:0;animation:cpop .4s ease forwards;text-shadow:0 0 32px rgba(61,255,192,.5);}
+@keyframes cpop{0%{transform:scale(2);opacity:0;}100%{transform:scale(1);opacity:1;}}
+.cdo p{font-size:11px;letter-spacing:.22em;color:var(--dim2);text-transform:uppercase;}
+.pulse{font-size:12px;letter-spacing:.24em;color:var(--dim2);animation:blink 1s step-end infinite;}
+
+/* Ghost message display on watch/link screens */
+.ghost-msg-display{width:min(420px,96vw);border:1px solid var(--border);border-left:3px solid var(--glow);
+ padding:10px 14px;margin:8px 0;background:var(--surface);align-self:center;
+ font-family:var(--mono);font-size:13px;letter-spacing:.06em;color:var(--ghost);line-height:1.7;
+ white-space:pre-wrap;word-break:break-word;}
+
+/* Narrow phones: visual row goes single-column */
+@media(max-width:360px){
+ .ctrl-row{grid-template-columns:1fr;}
+}
+/* Short screens: tighten spacing, cam is already capped by 42dvh */
+@media(max-height:680px){
+ .cg{padding:4px 7px;}
+ .cg label{margin-bottom:3px;}
+ .ctrl-panel{gap:2px;margin-top:2px;}
+ .ctrl-section{margin:2px 0 1px;}
+ .cam-wrap,.watch-wrap{margin-top:2px;}
+ .btn{padding:9px 14px;min-height:40px;}
+ #voice-eq{height:60px !important;}
+}
+/* Tall screens: breathe */
+@media(min-height:800px){
+ .ctrl-panel{gap:5px;}
+ .cg{padding:8px 11px;}
+ .cg label{margin-bottom:6px;}
+ .cam-wrap,.watch-wrap{width:min(440px,96vw,calc(46dvh * 4 / 3));}
+}
+</style>
+</head>
+<body>
+
+<!-- HOME -->
+<div id="screen-home" class="screen center active">
+<div class="screen-inner">
+ <div class="brand">ghost.<span>webcam</span></div>
+ <h1 class="glitch flicker">ghost drop</h1>
+ <div class="tagline">send a video. once it's seen  it's gone.</div>
+ <div class="sep"></div>
+ <div class="btn-row"><button class="btn primary" onclick="startRecord()">↓ record a ghost</button></div>
+ <div style="margin-top:44px;font-size:11px;color:var(--dim2);letter-spacing:.13em;line-height:2.4;text-align:center;">
+  face masked &nbsp;·&nbsp; voice altered &nbsp;·&nbsp; single view &nbsp;·&nbsp; no account
+ </div>
+</div>
+</div>
+
+<!-- RECORD -->
+<div id="screen-record" class="screen">
+<div class="screen-inner">
+ <div class="brand" style="align-self:center;margin-bottom:0;">ghost.<span>webcam</span> / record</div>
+ <div class="cam-wrap" style="align-self:center;">
+  <canvas id="canvas-preview"></canvas>
+  <div id="rec-dot" class="rec-dot"></div>
+  <div id="rec-timer" class="rec-timer">00:00</div>
+  <div id="fx-label" class="fx-label">ghost + ghost face</div>
+  <div id="mp-tag" class="mp-tag">mp loading...</div>
+  <div id="no-cam" class="no-cam" style="display:none;">
+   <span style="font-size:28px;opacity:.3;">◉</span><span>camera access required</span>
+  </div>
+ </div>
+
+ <div class="ctrl-panel">
+
+  <!-- ── VISUAL ─────────────────────────────────── -->
+  <div class="ctrl-section"><span>visual</span></div>
+
+  <div class="ctrl-row">
+   <div class="cg">
+    <label>filter</label>
+    <div class="pills" id="vfx-pills">
+     <button class="pill on" onclick="setVFX('ghost',this)">ghost</button>
+     <button class="pill" onclick="setVFX('phantom',this)">phantom</button>
+     <button class="pill" onclick="setVFX('specter',this)">specter</button>
+     <button class="pill-none" onclick="setVFX('raw',this)">off</button>
+    </div>
+   </div>
+   <div class="cg">
+    <label>face mask <span class="lval" id="spread-val">18%</span></label>
+    <div class="pills" id="face-pills">
+     <button class="pill on" onclick="setFaceMask('ghost',this)">ghost</button>
+     <button class="pill" onclick="setFaceMask('skull',this)">skull</button>
+     <button class="pill" onclick="setFaceMask('blur',this)">blur</button>
+     <button class="pill" onclick="setFaceMask('pixel',this)">pixel</button>
+     <button class="pill" onclick="setFaceMask('void',this)">void</button>
+     <button class="pill-none" onclick="setFaceMask('none',this)">off</button>
+    </div>
+    <div class="cg-sub">
+     <span>spread</span>
+     <input type="range" style="flex:1;-webkit-appearance:none;appearance:none;height:3px;background:var(--border);border-radius:2px;outline:none;cursor:pointer;" min="0" 
+max="1" step="0.01" value="0.18" oninput="setMaskSpread(this.value)">
+    </div>
+   </div>
+  </div>
+
+  <!-- ── AUDIO ─────────────────────────────────── -->
+  <div class="ctrl-section"><span>audio</span></div>
+
+  <div class="ctrl-row full">
+   <div class="cg" style="width:100%">
+    <label>voice</label>
+    <div class="pills" id="afx-pills">
+     <button class="pill on" onclick="setAFX('robot',this)">robot</button>
+     <button class="pill" onclick="setAFX('deep',this)">deep</button>
+     <button class="pill" onclick="setAFX('ghost',this)">ghost</button>
+     <button class="pill" onclick="setAFX('hollow',this)">hollow</button>
+     <button class="pill" onclick="setAFX('whisper',this)">whisper</button>
+     <button class="pill-none" onclick="setAFX('none',this)">off</button>
+    </div>
+   </div>
+  </div>
+  <div class="ctrl-row full">
+   <div class="cg" style="width:100%;gap:0">
+    <canvas id="voice-eq" style="width:100%;height:72px;display:block;cursor:crosshair;border-radius:3px;border:1px solid var(--border)"></canvas>
+    <div style="display:flex;justify-content:space-around;padding:3px 0 1px;">
+     <span class="eq-lbl">mix&nbsp;<span id="eq-wet-val" style="color:var(--glow)">85%</span></span>
+     <span class="eq-lbl">pitch&nbsp;<span id="eq-pitch-val" style="color:var(--glow)">0st</span></span>
+     <span class="eq-lbl">amt&nbsp;<span id="eq-amt-val" style="color:var(--glow)">low</span></span>
+    </div>
+   </div>
+  </div>
+
+  <div class="ctrl-row full">
+   <div class="cg" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    <button class="tpill on" id="mute-btn" onclick="toggleMute()">mic on</button>
+    <div style="width:1px;height:16px;background:var(--border);flex-shrink:0;"></div>
+    <button class="tpill" id="monitor-btn" onclick="toggleMonitor()">monitor</button>
+    <div style="width:1px;height:16px;background:var(--border);flex-shrink:0;"></div>
+    <span style="font-size:10px;letter-spacing:.14em;color:var(--dim2);text-transform:uppercase;white-space:nowrap;">gain</span>
+    <div class="pills" id="gain-pills" style="gap:2px;">
+     <button class="pill" onclick="setGain(.5,this)">quiet</button>
+     <button class="pill on" onclick="setGain(1,this)">normal</button>
+     <button class="pill" onclick="setGain(1.8,this)">loud</button>
+    </div>
+   </div>
+  </div>
+  <div id="monitor-warn" style="display:none;font-size:10px;letter-spacing:.10em;color:var(--warn);text-align:center;padding:3px 0;flex-shrink:0;">
+   use headphones to avoid feedback
+  </div>
+
+ </div>
+
+ <div id="rec-status" class="status">initializing...</div>
+ <div class="msg-wrap">
+  <textarea id="ghost-msg" class="ghost-textarea" placeholder="add a message (optional)  shown when they open the link" maxlength="280" 
+oninput="ghostText=this.value"></textarea>
+ </div>
+ <div class="btn-row" style="margin-bottom:4px;">
+  <button class="btn" onclick="goHome()">← back</button>
+  <button id="btn-rec" class="btn primary" onclick="toggleRecord()" disabled>● record</button>
+ </div>
+</div>
+</div>
+
+<!-- PREVIEW -->
+<div id="screen-preview" class="screen center">
+<div class="screen-inner">
+ <div class="brand">ghost.<span>webcam</span> / preview</div>
+ <h1 style="font-size:18px;">your ghost is ready</h1>
+ <div class="watch-wrap" style="margin:8px 0;">
+  <video id="preview-video" style="width:100%;height:100%;object-fit:cover;" controls></video>
+ </div>
+
+ <!-- Delivery settings -->
+ <div style="width:min(420px,96vw);align-self:center;margin-top:6px;display:flex;flex-direction:column;gap:3px;flex-shrink:0;">
+  <div class="ctrl-section"><span>delivery</span></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;">
+   <div class="cg">
+    <label>views allowed</label>
+    <div class="pills" id="replay-pills">
+     <button class="pill on" onclick="setReplays(1,this)">once</button>
+     <button class="pill" onclick="setReplays(2,this)">2x</button>
+     <button class="pill" onclick="setReplays(3,this)">3x</button>
+     <button class="pill" onclick="setReplays(5,this)">5x</button>
+     <button class="pill-none" onclick="setReplays(0,this)">∞</button>
+    </div>
+   </div>
+   <div class="cg">
+    <label>expires after</label>
+    <div class="pills" id="ttl-pills">
+     <button class="pill" onclick="setTTL(1,this)">1h</button>
+     <button class="pill" onclick="setTTL(6,this)">6h</button>
+     <button class="pill on" onclick="setTTL(24,this)">24h</button>
+     <button class="pill" onclick="setTTL(72,this)">3d</button>
+     <button class="pill-none" onclick="setTTL(0,this)">never</button>
+    </div>
+   </div>
+  </div>
+ </div>
+
+ <div class="btn-row" style="margin-top:8px;">
+  <button class="btn" onclick="reRecord()">↺ re-record</button>
+  <button class="btn primary" onclick="generateLink()">release this ghost →</button>
+ </div>
+</div>
+</div>
+
+<!-- LINK -->
+<div id="screen-link" class="screen center">
+<div class="screen-inner">
+ <div class="brand">ghost.<span>webcam</span> / link</div>
+ <h1 style="font-size:20px;" class="glitch">link generated</h1>
+ <div class="lbox" style="margin:10px 0;">
+  <div class="llabel">your ghost link</div>
+  <div class="lurl" id="ghost-link" onclick="copyLink()">generating...</div>
+  <div id="link-msg-display" class="ghost-msg-display" style="display:none;text-align:left;margin-bottom:10px;width:100%;"></div>
+  <div class="lmeta">
+   <span class="w" id="link-meta-summary">single view · expires in 24h</span><br>
+   the moment views run out, it vanishes<br>no replay beyond the limit. no recovery.
+  </div>
+ </div>
+ <div class="btn-row">
+  <button class="btn" onclick="copyLink()">copy link</button>
+  <button class="btn primary" onclick="newGhost()">+ drop another ghost</button>
+ </div>
+ <div style="margin-top:12px;font-size:11px;color:var(--dim2);letter-spacing:.11em;text-align:center;line-height:2.2;" id="link-relay-note">
+  stored locally  open in same browser to demo<br>
+  <span style="opacity:.4;">connect CLASP relay for cross-device delivery</span>
+ </div>
+</div>
+</div>
+
+<!-- WATCH -->
+<div id="screen-watch" class="screen center">
+<div class="screen-inner">
+ <div class="brand">ghost.<span>webcam</span> / incoming</div>
+ <div class="tagline">someone sent you a ghost</div>
+ <div id="watch-msg-display" class="ghost-msg-display" style="display:none;"></div>
+ <div class="watch-wrap" style="margin:6px 0;">
+  <video id="watch-video" style="width:100%;height:100%;object-fit:cover;display:none;" controls></video>
+  <div id="watch-ov" class="wo" onclick="startWatch()">
+   <div class="play-btn">▶</div>
+   <p>tap to reveal</p>
+   <p class="sub" id="watch-replay-info">you can only watch this once</p>
+  </div>
+ </div>
+ <div id="watch-status" class="status">ghost link active</div>
+ <div style="font-size:11px;color:var(--dim2);letter-spacing:.13em;text-align:center;margin-top:5px;" id="watch-ttl-info"></div>
+</div>
+</div>
+
+<!-- GONE -->
+<div id="screen-gone" class="screen center">
+<div class="screen-inner">
+ <div class="gone-g">👻</div>
+ <div class="brand">ghost.<span>webcam</span></div>
+ <h1 style="font-size:22px;">this ghost has passed</h1>
+ <div class="sep"></div>
+ <p>the message was already viewed.<br>it no longer exists.<br>there is nothing here.</p>
+ <div class="btn-row" style="margin-top:18px;"><button class="btn primary" onclick="newGhost()">send your own ghost</button></div>
+</div>
+</div>
+
+<!-- LOADING -->
+<div id="screen-loading" class="screen center">
+<div class="screen-inner">
+ <div class="brand">ghost.<span>webcam</span></div>
+ <div class="pulse">summoning...</div>
+</div>
+</div>
+
+<div id="toast">link copied</div>
+
+<script>
+// ============================================================
+// CLASP STATE LAYER  @clasp-to/core@4.2.1
+//
+// Set CLASP_RELAY_URL to enable cross-device delivery.
+// Uses the public relay at relay.clasp.to.
+//
+// The app calls CLASP.get() synchronously throughout, so we keep
+// a localStorage cache that is the source of truth for reads.
+// The real client (when connected) writes through to the relay and
+// populates the cache via subscriptions so late-joining devices see
+// current state. Blobs stay in IndexedDB -- relay carries metadata only.
+//
+// Public surface (same in both modes):
+//   set(addr, value, { ttl?, ttlMode?, revision? })
+//   get(addr)           → value | null  (sync, from local cache)
+//   on(addr, cb)        → unsub fn
+//   remove(addr)
+//   replay(pattern, {from?})  → Promise<[]> (stub locally)
+//   getEntry(addr)      → raw cache entry | null  (non-standard, TTL display)
+// ============================================================
+const CLASP_RELAY_URL = 'wss://demo-relay.clasp.to'; // public relay
+
+const CLASP = (() => {
+ // ── Local cache (localStorage) ──────────────────────────────
+ // Always active. Provides synchronous reads and survives page reload.
+ const PREFIX  = 'clasp_';
+ const lsubs   = {};   // local subscribers
+ let   _rev    = 0;
+ const SESSION = Math.random().toString(36).slice(2, 10);
+
+ const k = addr => PREFIX + addr.replace(/\//g, '_');
+
+ function _write(addr, value, ttl, ttlMode){
+  const now = Date.now();
+  const entry = {
+   v:    value,
+   rev:  ++_rev,
+   w:    SESSION,
+   ts:   now,
+   la:   now,
+   exp:  ttl > 0 ? now + ttl * 1000 : 0,
+   mode: ttlMode,
+  };
+  try{ localStorage.setItem(k(addr), JSON.stringify(entry)); } catch(_){}
+  const meta = {address: addr, revision: entry.rev, writer: entry.w, timestamp: entry.ts};
+  (lsubs[addr] || []).forEach(cb => { try{ cb(value, meta); } catch(_){} });
+ }
+
+ function _read(addr, touch){
+  try{
+   const raw = localStorage.getItem(k(addr));
+   if(!raw) return null;
+   const e   = JSON.parse(raw);
+   const now = Date.now();
+   if(e.exp > 0){
+    if(e.mode === 'absolute'){
+     if(now > e.exp){ localStorage.removeItem(k(addr)); return null; }
+    } else {
+     if(now > e.exp){ localStorage.removeItem(k(addr)); return null; }
+     if(touch){
+      const dur = e.exp - e.la;
+      e.la = now; e.exp = now + dur;
+      try{ localStorage.setItem(k(addr), JSON.stringify(e)); } catch(_){}
+     }
+    }
+   }
+   return e;
+  } catch(_){ return null; }
+ }
+
+ // ── Real client (relay mode) ─────────────────────────────────
+ // Connects when CLASP_RELAY_URL is set and @clasp-to/core loaded.
+ // Writes go to relay; relay updates populate local cache via on().
+ let _relay = null;
+ let _relayReady = false;
+ const _pendingUnsubs = []; // cleanup on page unload
+
+ async function _connectRelay(url){
+  try{
+   // @clasp-to/core exposes CLASP.Clasp on window
+   if(typeof window.CLASP?.Clasp !== 'function'){
+    console.warn('[ghost] @clasp-to/core not loaded — relay disabled');
+    return;
+   }
+   _relay = new window.CLASP.Clasp(url);
+   await _relay.connect();
+   _relayReady = true;
+   console.info('[ghost] CLASP relay connected:', url);
+
+   // Subscribe to all ghost-drop params so any device can see updates.
+   // The wildcard populates our local cache from relay state on join.
+   const unsub = _relay.on('/ghost-drop/*', (value, meta) => {
+    const addr = meta.address;
+    if(value instanceof ArrayBuffer || ArrayBuffer.isView(value)){
+     // Blob param -- cache into IDB, don't try to store binary in localStorage
+     const blob = new Blob([value]);
+     GhostDB.store(addr, blob).catch(()=>{});
+    } else {
+     // Scalar param -- write into localStorage cache and notify local subs
+     const now = Date.now();
+     const entry = {
+      v: value, rev: meta.revision, w: meta.writer,
+      ts: meta.timestamp, la: now, exp: 0, mode: 'absolute',
+     };
+     try{ localStorage.setItem(k(addr), JSON.stringify(entry)); } catch(_){}
+     (lsubs[addr] || []).forEach(cb => { try{ cb(value, meta); } catch(_){} });
+    }
+   });
+   _pendingUnsubs.push(unsub);
+  } catch(e){
+   console.warn('[ghost] CLASP relay connection failed:', e.message);
+   _relay = null; _relayReady = false;
+  }
+ }
+
+ // Start relay connection after DOM ready (CDN script may still be parsing)
+ if(CLASP_RELAY_URL){
+  window.addEventListener('DOMContentLoaded', () => {
+   // Small delay so CDN <script> has time to execute if it loaded fast
+   setTimeout(() => _connectRelay(CLASP_RELAY_URL), 80);
+  });
+  window.addEventListener('beforeunload', () => {
+   _pendingUnsubs.forEach(fn => { try{ fn(); } catch(_){} });
+   try{ _relay?.disconnect?.(); } catch(_){}
+  });
+ }
+
+ // ── Public API ───────────────────────────────────────────────
+ return {
+  /** Write a value. Writes to local cache and relay (if connected).
+   *  opts: { ttl?: seconds (0=never), ttlMode?: 'sliding'|'absolute', revision?: u64 } */
+  set(addr, value, opts = {}){
+   const ttl     = opts.ttl     ?? 0;
+   const ttlMode = opts.ttlMode ?? 'sliding';
+   // Local cache write (synchronous, always)
+   _write(addr, value, ttl, ttlMode);
+   // Relay write (fire-and-forget, non-blocking)
+   if(_relayReady){
+    _relay.set(addr, value, opts).catch(e =>
+     console.warn('[ghost] relay set failed:', addr, e.message)
+    );
+   }
+  },
+
+  /** Store a Blob on a CLASP address.
+   *  Local: IndexedDB (blobs are too large for localStorage).
+   *  Relay: sent as a bytes param with the same TTL opts.
+   *  Use address format: /ghost-drop/<id>/blob
+   *  Returns Promise<void>. */
+  async setBlob(addr, blob, opts = {}){
+   await GhostDB.store(addr, blob);
+   if(_relayReady){
+    const buf = blob instanceof Blob ? await blob.arrayBuffer() : blob;
+    _relay.set(addr, buf, opts).catch(e =>
+     console.warn('[ghost] relay blob set failed:', addr, e.message)
+    );
+   }
+  },
+
+  /** Retrieve a Blob from IDB (local cache) or relay.
+   *  Incoming relay bytes are cached into IDB automatically (see _connectRelay).
+   *  Returns Promise<Blob|null>. */
+  async getBlob(addr){
+   const local = await GhostDB.retrieve(addr);
+   if(local) return local;
+   if(_relayReady){
+    try{
+     const buf = await _relay.get(addr);
+     if(buf){
+      const blob = new Blob([buf]);
+      await GhostDB.store(addr, blob);
+      return blob;
+     }
+    } catch(_){}
+   }
+   return null;
+  },
+
+  /** Remove a blob from IDB and relay. Returns Promise<void>. */
+  async removeBlob(addr){
+   await GhostDB.destroy(addr).catch(()=>{});
+   if(_relayReady) _relay.remove?.(addr).catch(()=>{});
+  },
+
+  /** Read current value from local cache. Returns null if missing or expired. */
+  get(addr){
+   const e = _read(addr, true);
+   return e ? e.v : null;
+  },
+
+  /** Subscribe to live updates from both local writes and relay.
+   *  Immediately emits current cached value (late-joiner snapshot).
+   *  Returns unsub function. */
+  on(addr, cb){
+   if(!lsubs[addr]) lsubs[addr] = [];
+   lsubs[addr].push(cb);
+   // Late-joiner: emit current cache value now
+   const e = _read(addr, false);
+   if(e !== null){
+    try{ cb(e.v, {address: addr, revision: e.rev, writer: e.w, timestamp: e.ts}); } catch(_){}
+   }
+   return () => { lsubs[addr] = (lsubs[addr] || []).filter(f => f !== cb); };
+  },
+
+  /** Delete a param from local cache and relay. */
+  remove(addr){
+   try{ localStorage.removeItem(k(addr)); } catch(_){}
+   if(_relayReady){
+    _relay.remove?.(addr).catch(() => {});
+   }
+  },
+
+  /** Replay past events for a pattern. Delegates to relay; returns [] locally. */
+  async replay(pattern, opts = {}){
+   if(_relayReady) return _relay.replay(pattern, opts).catch(() => []);
+   return [];
+  },
+
+  /** Non-standard: raw cache entry for TTL display. Does not touch sliding window. */
+  getEntry(addr){ return _read(addr, false); },
+
+  /** True when relay is live. */
+  get connected(){ return _relayReady; },
+ };
+})();
+
+const GhostDB=(()=>{
+ let db=null;
+ const DB_NAME='ghost-drop', DB_VER=2, STORE='blobs';
+
+ const openDB=()=>new Promise((res,rej)=>{
+  const r=indexedDB.open(DB_NAME, DB_VER);
+  r.onupgradeneeded=e=>{
+   const d=e.target.result;
+   // create store if it doesn't already exist (handles version bumps cleanly)
+   if(!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE);
+  };
+  r.onsuccess=e=>{db=e.target.result;
+   // if the DB somehow opened without our store (stale v1 with wrong schema),
+   // nuke it and reopen so onupgradeneeded fires fresh
+   if(!db.objectStoreNames.contains(STORE)){
+    db.close(); db=null;
+    indexedDB.deleteDatabase(DB_NAME);
+    return openDB().then(res,rej);
+   }
+   res(db);
+  };
+  r.onerror=()=>rej(r.error);
+  r.onblocked=()=>{if(db)db.close();};
+ });
+
+ const open=()=>db&&db.objectStoreNames.contains(STORE)
+  ?Promise.resolve(db):openDB();
+
+ const tx=(mode,fn)=>open().then(d=>new Promise((res,rej)=>{
+  const t=d.transaction(STORE,mode);
+  fn(t.objectStore(STORE),res,rej);
+  t.onerror=()=>rej(t.error);
+ }));
+
+ return {
+  store:(id,blob)=>tx('readwrite',(s,res)=>{const r=s.put(blob,id);r.onsuccess=res;}),
+  retrieve:(id)=>tx('readonly',(s,res)=>{const r=s.get(id);r.onsuccess=()=>res(r.result||null);}),
+  destroy:(id)=>tx('readwrite',(s,res)=>{const r=s.delete(id);r.onsuccess=res;})
+ };
+})();
+
+// ============================================================
+// FACE MESH LANDMARK GROUPS (MediaPipe 468-point model)
+// ============================================================
+const LM = {
+ faceOval:[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109],
+ leftEye: [362,382,381,380,374,373,390,249,263,466,388,387,386,385,384,398],
+ rightEye:[33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246],
+ lipsOuter:[61,185,40,39,37,0,267,269,270,409,291,375,321,405,314,17,84,181,91,146],
+ lipsInner:[78,191,80,81,82,13,312,311,310,415,308,324,318,402,317,14,87,178,88,95],
+ // Nose bridge + tip for skull nasal cavity
+ noseTip:4, noseL:279, noseR:49,
+ // Forehead mid
+ forehead:10,
+ // Lip corners
+ lipLeft:61, lipRight:291,
+ // Inner lip top/bottom for openness
+ lipTop:13, lipBot:14,
+ // Outer lip top/bottom
+ lipTopOut:0, lipBotOut:17,
+};
+
+// ============================================================
+// STATE
+// ============================================================
+let VFX='ghost', FACE_MASK='ghost', AFX='robot', FX_INT=1;
+let MASK_SPREAD=0.18;
+let VOICE_WET=0.85, VOICE_PITCH=0;
+let voiceMuted=false, inputGainVal=1.0;
+let monitorOn=false;
+let camStream=null, audioCtx=null;
+let micSrc=null, inGain=null, muteGain=null, fxOut=null, masterBus=null, monitorGain=null;
+let pitchNode=null, pitchWorkletReady=false, wetGain=null, dryGain=null;
+let ghostText='';
+let GHOST_REPLAYS=1; // 1 = single view, 0 = unlimited
+let GHOST_TTL=24;   // hours until expiry (0 = no expiry)
+let recorder=null, chunks=[], recBlob=null, recording=false, recInterval=null, recSecs=0;
+let rafOn=false, frame=0, flickerA=1, ghostId=null;
+
+// MediaPipe
+let segModel=null, meshModel=null, mpOk=false;
+let segMask=null, meshLandmarks=null;
+let mpTimer=null;
+
+// Lip animation state (smoothed)
+let lipOpen=0, lipOpenSmooth=0;
+
+const vid=document.createElement('video');
+vid.muted=true; vid.playsInline=true; vid.autoplay=true;
+
+// Persistent offscreen canvases  allocated ONCE
+const offA=document.createElement('canvas'), offAc=offA.getContext('2d',{willReadFrequently:true});
+const offB=document.createElement('canvas'), offBc=offB.getContext('2d',{willReadFrequently:true});
+const sc=document.createElement('canvas'),  scc=sc.getContext('2d',{willReadFrequently:true});
+// blurSc: downsized scratch canvas for background blur -- blur on 1/4-area canvas is ~4x faster
+const blurSc=document.createElement('canvas'), blurScc=blurSc.getContext('2d');
+
+// Noise tile  one persistent canvas, repainted periodically
+const noiseCv=document.createElement('canvas'); noiseCv.width=noiseCv.height=64;
+const noiseCtx=noiseCv.getContext('2d'); let noiseTick=0;
+function refreshNoise(){
+ const id=noiseCtx.createImageData(64,64);
+ for(let i=0;i<id.data.length;i+=4){
+  const v=(Math.random()*185)|0;
+  id.data[i]=id.data[i+1]=id.data[i+2]=v; id.data[i+3]=(Math.random()*85)|0;
+ }
+ noiseCtx.putImageData(id,0,0);
+}
+refreshNoise();
+
+function syncOff(w,h){[offA,offB,sc].forEach(c=>{if(c.width!==w||c.height!==h){c.width=w;c.height=h;}});}
+
+// drawVidBlurred: downsample → CSS blur at small size → draw result back at full size.
+// Much cheaper than blurring at full canvas resolution on mobile GPU.
+function drawVidBlurred(targetCtx,W,H,blurPx,brightness,saturate){
+ const BW=Math.round(W/3), BH=Math.round(H/3); // 1/9th area for the blur pass
+ if(blurSc.width!==BW||blurSc.height!==BH){blurSc.width=BW;blurSc.height=BH;}
+ blurScc.save();
+ blurScc.translate(BW,0);blurScc.scale(-1,1); // mirror to match drawVid
+ blurScc.drawImage(vid,0,0,BW,BH);
+ blurScc.restore();
+ // Apply filter at small size -- blur radius scaled proportionally
+ const scaledBlur=Math.round(blurPx/3);
+ let filt=`blur(${scaledBlur}px)`;
+ if(brightness!==undefined) filt+=` brightness(${brightness})`;
+ if(saturate!==undefined) filt+=` saturate(${saturate})`;
+ targetCtx.save();
+ targetCtx.filter=filt;
+ targetCtx.imageSmoothingEnabled=true;
+ targetCtx.drawImage(blurSc,0,0,BW,BH,0,0,W,H);
+ targetCtx.filter='none';
+ targetCtx.restore();
+}
+
+// MediaPipe returns mirrored results (mask + landmarks) for front camera.
+// Flip vid horizontally when drawing so everything is consistently mirrored (selfie view).
+function drawVid(targetCtx,W,H){
+ targetCtx.save();
+ targetCtx.translate(W,0);
+ targetCtx.scale(-1,1);
+ targetCtx.drawImage(vid,0,0,W,H);
+ targetCtx.restore();
+}
+
+// Helper: canvas path through landmark indices
+function lmPath(ctx, pts, indices, W, H, close=true){
+ if(!pts||!indices.length) return;
+ ctx.beginPath();
+ const p0=pts[indices[0]];
+ ctx.moveTo((1-p0.x)*W, p0.y*H);
+ for(let i=1;i<indices.length;i++){const p=pts[indices[i]];ctx.lineTo((1-p.x)*W,p.y*H);}
+ if(close) ctx.closePath();
+}
+function lm(pts,i,W,H){return{x:(1-pts[i].x)*W,y:pts[i].y*H};}
+
+// Expand all landmarks outward from face centroid by MASK_SPREAD amount
+function getSpreadPts(pts){
+ if(MASK_SPREAD<=0) return pts;
+ let cx=0,cy=0;
+ LM.faceOval.forEach(i=>{cx+=pts[i].x;cy+=pts[i].y;});
+ cx/=LM.faceOval.length; cy/=LM.faceOval.length;
+ const s=1+MASK_SPREAD*0.7;
+ return pts.map(p=>({x:cx+(p.x-cx)*s, y:cy+(p.y-cy)*s}));
+}
+
+// ============================================================
+// ROUTING / SCREENS
+// ============================================================
+function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById('screen-'+id).classList.add('active');}
+function goHome(){stopCam();show('home');}
+function newGhost(){recBlob=null;ghostId=null;show('home');}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+async function route(){
+ const h=location.hash;
+ if(h.startsWith('#ghost/')) await openGhost(h.slice(7));
+ else show('home');
+}
+
+async function openGhost(id){
+ show('loading');
+
+ // CLASP.get() returns null if param has expired (absolute TTL enforced on read).
+ // No manual timestamp math needed.
+ const meta = CLASP.get(`/ghost-drop/${id}/meta`);
+ if(!meta){ await CLASP.removeBlob(`/ghost-drop/${id}/blob`); show('gone'); return; }
+
+ const replays   = meta.replays ?? 1;
+ const viewCount = CLASP.get(`/ghost-drop/${id}/views`) ?? 0;
+ if(replays !== 0 && viewCount >= replays){ show('gone'); return; }
+
+ try{
+  const b = await CLASP.getBlob(`/ghost-drop/${id}/blob`);
+  if(!b){ show('gone'); return; }
+  ghostId = id;
+
+  const txt = CLASP.get(`/ghost-drop/${id}/text`) || '';
+  const msgEl = document.getElementById('watch-msg-display');
+  if(msgEl){ msgEl.textContent=txt; msgEl.style.display=txt?'block':'none'; }
+
+  const info = document.getElementById('watch-replay-info');
+  if(info){
+   if(replays===0) info.textContent='unlimited replays';
+   else{ const left=replays-viewCount; info.textContent=left===1?'1 view remaining':`${left} views remaining`; }
+  }
+
+  // TTL display: read raw entry to get absolute expiry timestamp
+  const ttlInfo = document.getElementById('watch-ttl-info');
+  if(ttlInfo){
+   const e = CLASP.getEntry(`/ghost-drop/${id}/meta`);
+   if(e?.exp > 0){
+    const minsLeft = Math.max(0, Math.round((e.exp - Date.now())/60000));
+    ttlInfo.textContent = minsLeft < 60 ? `expires in ${minsLeft}m` : `expires in ${Math.round(minsLeft/60)}h`;
+   } else {
+    ttlInfo.textContent = '';
+   }
+  }
+
+  show('watch');
+ }catch(e){ show('gone'); }
+}
+
+async function startWatch(){
+ if(!ghostId) return;
+ const ov=document.getElementById('watch-ov'),wv=document.getElementById('watch-video'),st=document.getElementById('watch-status');
+ const meta=CLASP.get(`/ghost-drop/${ghostId}/meta`);
+ const replays=meta?.replays??1;
+
+ // Countdown UI
+ ov.innerHTML=`<div class="cdo"><div class="cdn" id="cdn">3</div><p>${replays===1?'once you watch, it\'s gone':'recording your view...'}</p></div>`;
+ for(let i=3;i>=1;i--){
+  await sleep(900);
+  const el=document.getElementById('cdn');
+  if(el){el.style.animation='none';el.offsetHeight;el.style.animation='cpop .4s ease forwards';el.textContent=i;}
+ }
+
+ // Increment view count -- read raw entry to forward the original TTL on the update write.
+ // Without this, the update would reset the entry to default (no TTL), losing absolute expiry.
+ const viewEntry = CLASP.getEntry(`/ghost-drop/${ghostId}/views`);
+ const prevViews = viewEntry?.v ?? 0;
+ const newViews  = prevViews + 1;
+ // Preserve original absolute TTL so the updated count expires on the same schedule
+ const viewTTLOpts = viewEntry?.exp > 0
+  ? { ttl: Math.max(1, Math.round((viewEntry.exp - Date.now()) / 1000)), ttlMode: viewEntry.mode }
+  : { ttl: 0 };
+ CLASP.set(`/ghost-drop/${ghostId}/views`, newViews, viewTTLOpts);
+
+ const isLastView = replays!==0 && newViews>=replays;
+
+ try{
+  const blob=await CLASP.getBlob(`/ghost-drop/${ghostId}/blob`);if(!blob){show('gone');return;}
+  const url=URL.createObjectURL(blob);
+  wv.src=url;wv.style.display='block';ov.style.display='none';
+  wv.play();
+  st.textContent=isLastView?'watching  this is your last view':'watching';
+  st.className='status err';
+  wv.onended=async()=>{
+   URL.revokeObjectURL(url);
+   if(isLastView){
+    await CLASP.removeBlob(`/ghost-drop/${ghostId}/blob`);
+    CLASP.remove(`/ghost-drop/${ghostId}/text`);
+    CLASP.remove(`/ghost-drop/${ghostId}/meta`);
+    CLASP.remove(`/ghost-drop/${ghostId}/views`);
+    st.textContent='ghost has passed  it no longer exists';
+    setTimeout(()=>show('gone'),2800);
+   }else{
+    const left=replays-newViews;
+    st.textContent=`${left} view${left===1?'':'s'} remaining`;
+    st.className='status';
+    // Reset overlay for potential replay
+    ov.innerHTML=`<div class="play-btn">▶</div><p>watch again</p><p class="sub">${left} view${left===1?'':'s'} left</p>`;
+    ov.style.display='flex';wv.style.display='none';wv.src='';
+   }
+  };
+ }catch(e){show('gone');}
+}
+
+// ============================================================
+// MEDIAPIPE  FaceMesh replaces FaceDetection for landmarks
+// ============================================================
+async function initMP(){
+ const tag=document.getElementById('mp-tag');
+ try{
+  segModel=new SelfieSegmentation({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`});
+  segModel.setOptions({modelSelection:1,selfieMode:true});
+  segModel.onResults(r=>{segMask=r.segmentationMask;});
+  await segModel.initialize();
+
+  meshModel=new FaceMesh({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
+  meshModel.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:0.5,minTrackingConfidence:0.5});
+  meshModel.onResults(r=>{
+   meshLandmarks=r.multiFaceLandmarks?.[0]||null;
+   if(meshLandmarks){
+    // Compute lip openness: distance between inner lip top (13) & bot (14), normalized by face height
+    const c=document.getElementById('canvas-preview');
+    if(c){
+     const W=c.width,H=c.height;
+     const lt=lm(meshLandmarks,LM.lipTop,W,H),lb=lm(meshLandmarks,LM.lipBot,W,H);
+     const fo=lm(meshLandmarks,LM.forehead,W,H),fc=lm(meshLandmarks,152,W,H);
+     const faceH=Math.abs(fc.y-fo.y)||1;
+     lipOpen=Math.max(0,Math.min(1,(Math.abs(lb.y-lt.y)/faceH)*4.5));
+    }
+   }
+  });
+  await meshModel.initialize();
+
+  mpOk=true;tag.textContent='mp ready';tag.className='mp-tag ok';
+ }catch(e){
+  console.warn('MediaPipe unavailable:',e.message);
+  tag.textContent='mp off';tag.className='mp-tag';
+ }
+}
+
+function startMPLoop(){
+ let tick=0;
+ mpTimer=setInterval(()=>{
+  if(!mpOk||vid.readyState<2||vid.paused)return;
+  // Stagger: seg on even ticks, mesh on odd — halves per-model GPU pressure on mobile
+  if(tick%2===0) segModel.send({image:vid}).catch(()=>{});
+  else           meshModel.send({image:vid}).catch(()=>{});
+  tick++;
+ },50); // ~10fps each model, 20fps alternated
+}
+function stopMPLoop(){if(mpTimer){clearInterval(mpTimer);mpTimer=null;}}
+
+// ============================================================
+// CAMERA INIT
+// ============================================================
+async function startRecord(){
+ show('record');
+ initMP(); // fire-and-forget
+ await initCam();
+}
+
+async function initCam(){
+ const nc=document.getElementById('no-cam'),st=document.getElementById('rec-status'),btn=document.getElementById('btn-rec');
+ try{
+  // Mobile-friendly constraints: cap resolution so canvas stays performant,
+  // cap frameRate to avoid draining battery, prefer front camera
+  camStream=await navigator.mediaDevices.getUserMedia({
+   video:{
+    width:{ideal:640,max:1280},
+    height:{ideal:480,max:960},
+    frameRate:{ideal:30,max:30},
+    facingMode:'user'
+   },
+   audio:true
+  });
+  vid.srcObject=camStream;
+
+  // Wait for metadata before reading dimensions
+  await new Promise((res,rej)=>{
+   vid.onloadedmetadata=()=>{vid.play().then(res).catch(rej);};
+   vid.onerror=rej;
+   setTimeout(rej,8000); // bail after 8s
+  });
+
+  const c=document.getElementById('canvas-preview');
+  // Cap internal canvas resolution to 640x480 max regardless of camera output.
+  // CSS (width:100%;height:100%) scales it up. This keeps filter/drawImage ops
+  // fast on mobile GPU. MediaPipe auto-downsamples internally anyway.
+  const vW=vid.videoWidth||640, vH=vid.videoHeight||480;
+  const scale=Math.min(1,640/Math.max(vW,vH));
+  c.width=Math.round(vW*scale);
+  c.height=Math.round(vH*scale);
+
+  nc.style.display='none';
+
+  // iOS AudioContext may be suspended - must resume inside user gesture chain
+  await setupAudio();
+  if(audioCtx?.state==='suspended') await audioCtx.resume().catch(()=>{});
+
+  rafOn=true;renderLoop();
+  startMPLoop();
+  st.textContent='camera ready';st.className='status ok';btn.disabled=false;
+ }catch(e){
+  nc.style.display='flex';
+  const msg=e?.name==='NotAllowedError'?'camera permission denied'
+   :e?.name==='NotFoundError'?'no camera found'
+   :e?.name==='OverconstrainedError'?'camera constraints failed'
+   :'camera error';
+  st.textContent=msg;st.className='status err';
+  console.error(e);
+ }
+}
+
+function stopCam(){
+ rafOn=false;stopMPLoop();
+ if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
+ // Stop monitor
+ monitorOn=false;
+ if(monitorGain)monitorGain.gain.value=0;
+ const mb=document.getElementById('monitor-btn');
+ const mw=document.getElementById('monitor-warn');
+ if(mb){mb.className='tpill';mb.textContent='monitor';}
+ if(mw)mw.style.display='none';
+ pitchNode=null;
+ if(audioCtx){audioCtx.close().catch(()=>{});audioCtx=null;}
+ fxOut=null;masterBus=null;monitorGain=null;
+ micSrc=null;inGain=null;muteGain=null;wetGain=null;dryGain=null;
+ segMask=null;meshLandmarks=null;mpOk=false;segModel=null;meshModel=null;
+}
+
+// ============================================================
+// PHAZE WORKLET BUNDLE (olvb/phaze  phase vocoder, Unlicense)
+// Embedded as blob so no external server is required.
+// ============================================================
+const PHAZE_SRC=`(function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var 
+a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return 
+o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return 
+r})()({1:[function(require,module,exports){
+'use strict';
+
+function FFT(size) {
+ this.size = size | 0;
+ if (this.size <= 1 || (this.size & (this.size - 1)) !== 0)
+  throw new Error('FFT size must be a power of two and bigger than 1');
+
+ this._csize = size << 1;
+
+ // NOTE: Use of \`var\` is intentional for old V8 versions
+ var table = new Array(this.size * 2);
+ for (var i = 0; i < table.length; i += 2) {
+  const angle = Math.PI * i / this.size;
+  table[i] = Math.cos(angle);
+  table[i + 1] = -Math.sin(angle);
+ }
+ this.table = table;
+
+ // Find size's power of two
+ var power = 0;
+ for (var t = 1; this.size > t; t <<= 1)
+  power++;
+
+ // Calculate initial step's width:
+ //  * If we are full radix-4 - it is 2x smaller to give inital len=8
+ //  * Otherwise it is the same as \`power\` to give len=4
+ this._width = power % 2 === 0 ? power - 1 : power;
+
+ // Pre-compute bit-reversal patterns
+ this._bitrev = new Array(1 << this._width);
+ for (var j = 0; j < this._bitrev.length; j++) {
+  this._bitrev[j] = 0;
+  for (var shift = 0; shift < this._width; shift += 2) {
+   var revShift = this._width - shift - 2;
+   this._bitrev[j] |= ((j >>> shift) & 3) << revShift;
+  }
+ }
+
+ this._out = null;
+ this._data = null;
+ this._inv = 0;
+}
+module.exports = FFT;
+
+FFT.prototype.fromComplexArray = function fromComplexArray(complex, storage) {
+ var res = storage || new Array(complex.length >>> 1);
+ for (var i = 0; i < complex.length; i += 2)
+  res[i >>> 1] = complex[i];
+ return res;
+};
+
+FFT.prototype.createComplexArray = function createComplexArray() {
+ const res = new Array(this._csize);
+ for (var i = 0; i < res.length; i++)
+  res[i] = 0;
+ return res;
+};
+
+FFT.prototype.toComplexArray = function toComplexArray(input, storage) {
+ var res = storage || this.createComplexArray();
+ for (var i = 0; i < res.length; i += 2) {
+  res[i] = input[i >>> 1];
+  res[i + 1] = 0;
+ }
+ return res;
+};
+
+FFT.prototype.completeSpectrum = function completeSpectrum(spectrum) {
+ var size = this._csize;
+ var half = size >>> 1;
+ for (var i = 2; i < half; i += 2) {
+  spectrum[size - i] = spectrum[i];
+  spectrum[size - i + 1] = -spectrum[i + 1];
+ }
+};
+
+FFT.prototype.transform = function transform(out, data) {
+ if (out === data)
+  throw new Error('Input and output buffers must be different');
+
+ this._out = out;
+ this._data = data;
+ this._inv = 0;
+ this._transform4();
+ this._out = null;
+ this._data = null;
+};
+
+FFT.prototype.realTransform = function realTransform(out, data) {
+ if (out === data)
+  throw new Error('Input and output buffers must be different');
+
+ this._out = out;
+ this._data = data;
+ this._inv = 0;
+ this._realTransform4();
+ this._out = null;
+ this._data = null;
+};
+
+FFT.prototype.inverseTransform = function inverseTransform(out, data) {
+ if (out === data)
+  throw new Error('Input and output buffers must be different');
+
+ this._out = out;
+ this._data = data;
+ this._inv = 1;
+ this._transform4();
+ for (var i = 0; i < out.length; i++)
+  out[i] /= this.size;
+ this._out = null;
+ this._data = null;
+};
+
+// radix-4 implementation
+//
+// NOTE: Uses of \`var\` are intentional for older V8 version that do not
+// support both \`let compound assignments\` and \`const phi\`
+FFT.prototype._transform4 = function _transform4() {
+ var out = this._out;
+ var size = this._csize;
+
+ // Initial step (permute and transform)
+ var width = this._width;
+ var step = 1 << width;
+ var len = (size / step) << 1;
+
+ var outOff;
+ var t;
+ var bitrev = this._bitrev;
+ if (len === 4) {
+  for (outOff = 0, t = 0; outOff < size; outOff += len, t++) {
+   const off = bitrev[t];
+   this._singleTransform2(outOff, off, step);
+  }
+ } else {
+  // len === 8
+  for (outOff = 0, t = 0; outOff < size; outOff += len, t++) {
+   const off = bitrev[t];
+   this._singleTransform4(outOff, off, step);
+  }
+ }
+
+ // Loop through steps in decreasing order
+ var inv = this._inv ? -1 : 1;
+ var table = this.table;
+ for (step >>= 2; step >= 2; step >>= 2) {
+  len = (size / step) << 1;
+  var quarterLen = len >>> 2;
+
+  // Loop through offsets in the data
+  for (outOff = 0; outOff < size; outOff += len) {
+   // Full case
+   var limit = outOff + quarterLen;
+   for (var i = outOff, k = 0; i < limit; i += 2, k += step) {
+    const A = i;
+    const B = A + quarterLen;
+    const C = B + quarterLen;
+    const D = C + quarterLen;
+
+    // Original values
+    const Ar = out[A];
+    const Ai = out[A + 1];
+    const Br = out[B];
+    const Bi = out[B + 1];
+    const Cr = out[C];
+    const Ci = out[C + 1];
+    const Dr = out[D];
+    const Di = out[D + 1];
+
+    // Middle values
+    const MAr = Ar;
+    const MAi = Ai;
+
+    const tableBr = table[k];
+    const tableBi = inv * table[k + 1];
+    const MBr = Br * tableBr - Bi * tableBi;
+    const MBi = Br * tableBi + Bi * tableBr;
+
+    const tableCr = table[2 * k];
+    const tableCi = inv * table[2 * k + 1];
+    const MCr = Cr * tableCr - Ci * tableCi;
+    const MCi = Cr * tableCi + Ci * tableCr;
+
+    const tableDr = table[3 * k];
+    const tableDi = inv * table[3 * k + 1];
+    const MDr = Dr * tableDr - Di * tableDi;
+    const MDi = Dr * tableDi + Di * tableDr;
+
+    // Pre-Final values
+    const T0r = MAr + MCr;
+    const T0i = MAi + MCi;
+    const T1r = MAr - MCr;
+    const T1i = MAi - MCi;
+    const T2r = MBr + MDr;
+    const T2i = MBi + MDi;
+    const T3r = inv * (MBr - MDr);
+    const T3i = inv * (MBi - MDi);
+
+    // Final values
+    const FAr = T0r + T2r;
+    const FAi = T0i + T2i;
+
+    const FCr = T0r - T2r;
+    const FCi = T0i - T2i;
+
+    const FBr = T1r + T3i;
+    const FBi = T1i - T3r;
+
+    const FDr = T1r - T3i;
+    const FDi = T1i + T3r;
+
+    out[A] = FAr;
+    out[A + 1] = FAi;
+    out[B] = FBr;
+    out[B + 1] = FBi;
+    out[C] = FCr;
+    out[C + 1] = FCi;
+    out[D] = FDr;
+    out[D + 1] = FDi;
+   }
+  }
+ }
+};
+
+// radix-2 implementation
+//
+// NOTE: Only called for len=4
+FFT.prototype._singleTransform2 = function _singleTransform2(outOff, off,
+                               step) {
+ const out = this._out;
+ const data = this._data;
+
+ const evenR = data[off];
+ const evenI = data[off + 1];
+ const oddR = data[off + step];
+ const oddI = data[off + step + 1];
+
+ const leftR = evenR + oddR;
+ const leftI = evenI + oddI;
+ const rightR = evenR - oddR;
+ const rightI = evenI - oddI;
+
+ out[outOff] = leftR;
+ out[outOff + 1] = leftI;
+ out[outOff + 2] = rightR;
+ out[outOff + 3] = rightI;
+};
+
+// radix-4
+//
+// NOTE: Only called for len=8
+FFT.prototype._singleTransform4 = function _singleTransform4(outOff, off,
+                               step) {
+ const out = this._out;
+ const data = this._data;
+ const inv = this._inv ? -1 : 1;
+ const step2 = step * 2;
+ const step3 = step * 3;
+
+ // Original values
+ const Ar = data[off];
+ const Ai = data[off + 1];
+ const Br = data[off + step];
+ const Bi = data[off + step + 1];
+ const Cr = data[off + step2];
+ const Ci = data[off + step2 + 1];
+ const Dr = data[off + step3];
+ const Di = data[off + step3 + 1];
+
+ // Pre-Final values
+ const T0r = Ar + Cr;
+ const T0i = Ai + Ci;
+ const T1r = Ar - Cr;
+ const T1i = Ai - Ci;
+ const T2r = Br + Dr;
+ const T2i = Bi + Di;
+ const T3r = inv * (Br - Dr);
+ const T3i = inv * (Bi - Di);
+
+ // Final values
+ const FAr = T0r + T2r;
+ const FAi = T0i + T2i;
+
+ const FBr = T1r + T3i;
+ const FBi = T1i - T3r;
+
+ const FCr = T0r - T2r;
+ const FCi = T0i - T2i;
+
+ const FDr = T1r - T3i;
+ const FDi = T1i + T3r;
+
+ out[outOff] = FAr;
+ out[outOff + 1] = FAi;
+ out[outOff + 2] = FBr;
+ out[outOff + 3] = FBi;
+ out[outOff + 4] = FCr;
+ out[outOff + 5] = FCi;
+ out[outOff + 6] = FDr;
+ out[outOff + 7] = FDi;
+};
+
+// Real input radix-4 implementation
+FFT.prototype._realTransform4 = function _realTransform4() {
+ var out = this._out;
+ var size = this._csize;
+
+ // Initial step (permute and transform)
+ var width = this._width;
+ var step = 1 << width;
+ var len = (size / step) << 1;
+
+ var outOff;
+ var t;
+ var bitrev = this._bitrev;
+ if (len === 4) {
+  for (outOff = 0, t = 0; outOff < size; outOff += len, t++) {
+   const off = bitrev[t];
+   this._singleRealTransform2(outOff, off >>> 1, step >>> 1);
+  }
+ } else {
+  // len === 8
+  for (outOff = 0, t = 0; outOff < size; outOff += len, t++) {
+   const off = bitrev[t];
+   this._singleRealTransform4(outOff, off >>> 1, step >>> 1);
+  }
+ }
+
+ // Loop through steps in decreasing order
+ var inv = this._inv ? -1 : 1;
+ var table = this.table;
+ for (step >>= 2; step >= 2; step >>= 2) {
+  len = (size / step) << 1;
+  var halfLen = len >>> 1;
+  var quarterLen = halfLen >>> 1;
+  var hquarterLen = quarterLen >>> 1;
+
+  // Loop through offsets in the data
+  for (outOff = 0; outOff < size; outOff += len) {
+   for (var i = 0, k = 0; i <= hquarterLen; i += 2, k += step) {
+    var A = outOff + i;
+    var B = A + quarterLen;
+    var C = B + quarterLen;
+    var D = C + quarterLen;
+
+    // Original values
+    var Ar = out[A];
+    var Ai = out[A + 1];
+    var Br = out[B];
+    var Bi = out[B + 1];
+    var Cr = out[C];
+    var Ci = out[C + 1];
+    var Dr = out[D];
+    var Di = out[D + 1];
+
+    // Middle values
+    var MAr = Ar;
+    var MAi = Ai;
+
+    var tableBr = table[k];
+    var tableBi = inv * table[k + 1];
+    var MBr = Br * tableBr - Bi * tableBi;
+    var MBi = Br * tableBi + Bi * tableBr;
+
+    var tableCr = table[2 * k];
+    var tableCi = inv * table[2 * k + 1];
+    var MCr = Cr * tableCr - Ci * tableCi;
+    var MCi = Cr * tableCi + Ci * tableCr;
+
+    var tableDr = table[3 * k];
+    var tableDi = inv * table[3 * k + 1];
+    var MDr = Dr * tableDr - Di * tableDi;
+    var MDi = Dr * tableDi + Di * tableDr;
+
+    // Pre-Final values
+    var T0r = MAr + MCr;
+    var T0i = MAi + MCi;
+    var T1r = MAr - MCr;
+    var T1i = MAi - MCi;
+    var T2r = MBr + MDr;
+    var T2i = MBi + MDi;
+    var T3r = inv * (MBr - MDr);
+    var T3i = inv * (MBi - MDi);
+
+    // Final values
+    var FAr = T0r + T2r;
+    var FAi = T0i + T2i;
+
+    var FBr = T1r + T3i;
+    var FBi = T1i - T3r;
+
+    out[A] = FAr;
+    out[A + 1] = FAi;
+    out[B] = FBr;
+    out[B + 1] = FBi;
+
+    // Output final middle point
+    if (i === 0) {
+     var FCr = T0r - T2r;
+     var FCi = T0i - T2i;
+     out[C] = FCr;
+     out[C + 1] = FCi;
+     continue;
+    }
+
+    // Do not overwrite ourselves
+    if (i === hquarterLen)
+     continue;
+
+    // In the flipped case:
+    // MAi = -MAi
+    // MBr=-MBi, MBi=-MBr
+    // MCr=-MCr
+    // MDr=MDi, MDi=MDr
+    var ST0r = T1r;
+    var ST0i = -T1i;
+    var ST1r = T0r;
+    var ST1i = -T0i;
+    var ST2r = -inv * T3i;
+    var ST2i = -inv * T3r;
+    var ST3r = -inv * T2i;
+    var ST3i = -inv * T2r;
+
+    var SFAr = ST0r + ST2r;
+    var SFAi = ST0i + ST2i;
+
+    var SFBr = ST1r + ST3i;
+    var SFBi = ST1i - ST3r;
+
+    var SA = outOff + quarterLen - i;
+    var SB = outOff + halfLen - i;
+
+    out[SA] = SFAr;
+    out[SA + 1] = SFAi;
+    out[SB] = SFBr;
+    out[SB + 1] = SFBi;
+   }
+  }
+ }
+};
+
+// radix-2 implementation
+//
+// NOTE: Only called for len=4
+FFT.prototype._singleRealTransform2 = function _singleRealTransform2(outOff,
+                                   off,
+                                   step) {
+ const out = this._out;
+ const data = this._data;
+
+ const evenR = data[off];
+ const oddR = data[off + step];
+
+ const leftR = evenR + oddR;
+ const rightR = evenR - oddR;
+
+ out[outOff] = leftR;
+ out[outOff + 1] = 0;
+ out[outOff + 2] = rightR;
+ out[outOff + 3] = 0;
+};
+
+// radix-4
+//
+// NOTE: Only called for len=8
+FFT.prototype._singleRealTransform4 = function _singleRealTransform4(outOff,
+                                   off,
+                                   step) {
+ const out = this._out;
+ const data = this._data;
+ const inv = this._inv ? -1 : 1;
+ const step2 = step * 2;
+ const step3 = step * 3;
+
+ // Original values
+ const Ar = data[off];
+ const Br = data[off + step];
+ const Cr = data[off + step2];
+ const Dr = data[off + step3];
+
+ // Pre-Final values
+ const T0r = Ar + Cr;
+ const T1r = Ar - Cr;
+ const T2r = Br + Dr;
+ const T3r = inv * (Br - Dr);
+
+ // Final values
+ const FAr = T0r + T2r;
+
+ const FBr = T1r;
+ const FBi = -T3r;
+
+ const FCr = T0r - T2r;
+
+ const FDr = T1r;
+ const FDi = T3r;
+
+ out[outOff] = FAr;
+ out[outOff + 1] = 0;
+ out[outOff + 2] = FBr;
+ out[outOff + 3] = FBi;
+ out[outOff + 4] = FCr;
+ out[outOff + 5] = 0;
+ out[outOff + 6] = FDr;
+ out[outOff + 7] = FDi;
+};
+
+},{}],2:[function(require,module,exports){
+"use strict";
+
+const WEBAUDIO_BLOCK_SIZE = 128;
+
+/** Overlap-Add Node */
+class OLAProcessor extends AudioWorkletProcessor {
+  constructor(options) {
+    super(options);
+
+    this.nbInputs = options.numberOfInputs;
+    this.nbOutputs = options.numberOfOutputs;
+
+    this.blockSize = options.processorOptions.blockSize;
+     // TODO for now, the only support hop size is the size of a web audio block
+    this.hopSize = WEBAUDIO_BLOCK_SIZE;
+
+    this.nbOverlaps = this.blockSize / this.hopSize;
+
+    // pre-allocate input buffers (will be reallocated if needed)
+    this.inputBuffers = new Array(this.nbInputs);
+    this.inputBuffersHead = new Array(this.nbInputs);
+    this.inputBuffersToSend = new Array(this.nbInputs);
+    // default to 1 channel per input until we know more
+    for (var i = 0; i < this.nbInputs; i++) {
+      this.allocateInputChannels(i, 1);
+    }
+    // pre-allocate input buffers (will be reallocated if needed)
+    this.outputBuffers = new Array(this.nbOutputs);
+    this.outputBuffersToRetrieve = new Array(this.nbOutputs);
+    // default to 1 channel per output until we know more
+    for (var i = 0; i < this.nbOutputs; i++) {
+      this.allocateOutputChannels(i, 1);
+    }
+  }
+
+  /** Handles dynamic reallocation of input/output channels buffer
+   (channel numbers may vary during lifecycle) **/
+  reallocateChannelsIfNeeded(inputs, outputs) {
+    for (var i = 0; i < this.nbInputs; i++) {
+      let nbChannels = inputs[i].length;
+      if (nbChannels != this.inputBuffers[i].length) {
+        this.allocateInputChannels(i, nbChannels);
+      }
+    }
+
+    for (var i = 0; i < this.nbOutputs; i++) {
+      let nbChannels = outputs[i].length;
+      if (nbChannels != this.outputBuffers[i].length) {
+        this.allocateOutputChannels(i, nbChannels);
+      }
+    }
+  }
+
+  allocateInputChannels(inputIndex, nbChannels) {
+    // allocate input buffers
+
+    this.inputBuffers[inputIndex] = new Array(nbChannels);
+    for (var i = 0; i < nbChannels; i++) {
+      this.inputBuffers[inputIndex][i] = new Float32Array(this.blockSize + WEBAUDIO_BLOCK_SIZE);
+      this.inputBuffers[inputIndex][i].fill(0);
+    }
+
+    // allocate input buffers to send and head pointers to copy from
+    // (cannot directly send a pointer/subarray because input may be modified)
+    this.inputBuffersHead[inputIndex] = new Array(nbChannels);
+    this.inputBuffersToSend[inputIndex] = new Array(nbChannels);
+    for (var i = 0; i < nbChannels; i++) {
+      this.inputBuffersHead[inputIndex][i] = this.inputBuffers[inputIndex][i] .subarray(0, this.blockSize);
+      this.inputBuffersToSend[inputIndex][i] = new Float32Array(this.blockSize);
+    }
+  }
+
+  allocateOutputChannels(outputIndex, nbChannels) {
+    // allocate output buffers
+    this.outputBuffers[outputIndex] = new Array(nbChannels);
+    for (var i = 0; i < nbChannels; i++) {
+      this.outputBuffers[outputIndex][i] = new Float32Array(this.blockSize);
+      this.outputBuffers[outputIndex][i].fill(0);
+    }
+
+    // allocate output buffers to retrieve
+    // (cannot send a pointer/subarray because new output has to be add to exising output)
+    this.outputBuffersToRetrieve[outputIndex] = new Array(nbChannels);
+    for (var i = 0; i < nbChannels; i++) {
+      this.outputBuffersToRetrieve[outputIndex][i] = new Float32Array(this.blockSize);
+      this.outputBuffersToRetrieve[outputIndex][i].fill(0);
+    }
+  }
+
+  /** Read next web audio block to input buffers **/
+  readInputs(inputs) {
+    // when playback is paused, we may stop receiving new samples
+    if (inputs[0].length && inputs[0][0].length == 0) {
+      for (var i = 0; i < this.nbInputs; i++) {
+        for (var j = 0; j < this.inputBuffers[i].length; j++) {
+          this.inputBuffers[i][j].fill(0, this.blockSize);
+        }
+      }
+      return;
+    }
+
+    for (var i = 0; i < this.nbInputs; i++) {
+      for (var j = 0; j < this.inputBuffers[i].length; j++) {
+        let webAudioBlock = inputs[i][j];
+        this.inputBuffers[i][j].set(webAudioBlock, this.blockSize);
+      }
+    }
+  }
+
+  /** Write next web audio block from output buffers **/
+  writeOutputs(outputs) {
+    for (var i = 0; i < this.nbInputs; i++) {
+      for (var j = 0; j < this.inputBuffers[i].length; j++) {
+        let webAudioBlock = this.outputBuffers[i][j].subarray(0, WEBAUDIO_BLOCK_SIZE);
+        outputs[i][j].set(webAudioBlock);
+      }
+    }
+  }
+
+  /** Shift left content of input buffers to receive new web audio block **/
+  shiftInputBuffers() {
+    for (var i = 0; i < this.nbInputs; i++) {
+      for (var j = 0; j < this.inputBuffers[i].length; j++) {
+        this.inputBuffers[i][j].copyWithin(0, WEBAUDIO_BLOCK_SIZE);
+      }
+    }
+  }
+
+  /** Shift left content of output buffers to receive new web audio block **/
+  shiftOutputBuffers() {
+    for (var i = 0; i < this.nbOutputs; i++) {
+      for (var j = 0; j < this.outputBuffers[i].length; j++) {
+        this.outputBuffers[i][j].copyWithin(0, WEBAUDIO_BLOCK_SIZE);
+        this.outputBuffers[i][j].subarray(this.blockSize - WEBAUDIO_BLOCK_SIZE).fill(0);
+      }
+    }
+  }
+
+  /** Copy contents of input buffers to buffer actually sent to process **/
+  prepareInputBuffersToSend() {
+    for (var i = 0; i < this.nbInputs; i++) {
+      for (var j = 0; j < this.inputBuffers[i].length; j++) {
+        this.inputBuffersToSend[i][j].set(this.inputBuffersHead[i][j]);
+      }
+    }
+  }
+
+  /** Add contents of output buffers just processed to output buffers **/
+  handleOutputBuffersToRetrieve() {
+    for (var i = 0; i < this.nbOutputs; i++) {
+      for (var j = 0; j < this.outputBuffers[i].length; j++) {
+        for (var k = 0; k < this.blockSize; k++) {
+          this.outputBuffers[i][j][k] += this.outputBuffersToRetrieve[i][j][k] / this.nbOverlaps;
+        }
+      }
+    }
+  }
+
+  process(inputs, outputs, params) {
+    this.reallocateChannelsIfNeeded(inputs, outputs);
+
+    this.readInputs(inputs);
+    this.shiftInputBuffers();
+    this.prepareInputBuffersToSend()
+    this.processOLA(this.inputBuffersToSend, this.outputBuffersToRetrieve, params);
+    this.handleOutputBuffersToRetrieve();
+    this.writeOutputs(outputs);
+    this.shiftOutputBuffers();
+
+    return true;
+  }
+
+  processOLA(inputs, outputs, params) {
+    console.assert(false, "Not overriden");
+  }
+}
+
+module.exports = OLAProcessor;
+
+},{}],3:[function(require,module,exports){
+"use strict";
+
+const OLAProcessor = require('./ola-processor.js');
+const FFT = require('fft.js');
+
+const BUFFERED_BLOCK_SIZE = 2048;
+
+function genHannWindow(length) {
+  let win = new Float32Array(length);
+  for (var i = 0; i < length; i++) {
+    win[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / length));
+  }
+  return win;
+}
+
+class PhaseVocoderProcessor extends OLAProcessor {
+  static get parameterDescriptors() {
+    return [{
+      name: 'pitchFactor',
+      defaultValue: 1.0
+    }];
+  }
+
+  constructor(options) {
+    options.processorOptions = {
+      blockSize: BUFFERED_BLOCK_SIZE,
+    };
+    super(options);
+
+    this.fftSize = this.blockSize;
+    this.timeCursor = 0;
+
+    this.hannWindow = genHannWindow(this.blockSize);
+
+    // prepare FFT and pre-allocate buffers
+    this.fft = new FFT(this.fftSize);
+    this.freqComplexBuffer = this.fft.createComplexArray();
+    this.freqComplexBufferShifted = this.fft.createComplexArray();
+    this.timeComplexBuffer = this.fft.createComplexArray();
+    this.magnitudes = new Float32Array(this.fftSize / 2 + 1);
+    this.peakIndexes = new Int32Array(this.magnitudes.length);
+    this.nbPeaks = 0;
+  }
+
+  processOLA(inputs, outputs, parameters) {
+    // no automation, take last value
+    const pitchFactor = parameters.pitchFactor[parameters.pitchFactor.length - 1];
+
+    for (var i = 0; i < this.nbInputs; i++) {
+      for (var j = 0; j < inputs[i].length; j++) {
+        // big assumption here: output is symetric to input
+        var input = inputs[i][j];
+        var output = outputs[i][j];
+
+        this.applyHannWindow(input);
+
+        this.fft.realTransform(this.freqComplexBuffer, input);
+
+        this.computeMagnitudes();
+        this.findPeaks();
+        this.shiftPeaks(pitchFactor);
+
+        this.fft.completeSpectrum(this.freqComplexBufferShifted);
+        this.fft.inverseTransform(this.timeComplexBuffer, this.freqComplexBufferShifted);
+        this.fft.fromComplexArray(this.timeComplexBuffer, output);
+
+        this.applyHannWindow(output);
+      }
+    }
+
+    this.timeCursor += this.hopSize;
+  }
+
+  /** Apply Hann window in-place */
+  applyHannWindow(input) {
+    for (var i = 0; i < this.blockSize; i++) {
+      input[i] = input[i] * this.hannWindow[i];
+    }
+  }
+
+  /** Compute squared magnitudes for peak finding **/
+  computeMagnitudes() {
+    var i = 0, j = 0;
+    while (i < this.magnitudes.length) {
+      let real = this.freqComplexBuffer[j];
+      let imag = this.freqComplexBuffer[j + 1];
+      // no need to sqrt for peak finding
+      this.magnitudes[i] = real ** 2 + imag ** 2;
+      i+=1;
+      j+=2;
+    }
+  }
+
+  /** Find peaks in spectrum magnitudes **/
+  findPeaks() {
+    this.nbPeaks = 0;
+    var i = 2;
+    let end = this.magnitudes.length - 2;
+
+    while (i < end) {
+      let mag = this.magnitudes[i];
+
+      if (this.magnitudes[i - 1] >= mag || this.magnitudes[i - 2] >= mag) {
+        i++;
+        continue;
+      }
+      if (this.magnitudes[i + 1] >= mag || this.magnitudes[i + 2] >= mag) {
+        i++;
+        continue;
+      }
+
+      this.peakIndexes[this.nbPeaks] = i;
+      this.nbPeaks++;
+      i += 2;
+    }
+  }
+
+  /** Shift peaks and regions of influence by pitchFactor into new specturm */
+  shiftPeaks(pitchFactor) {
+    // zero-fill new spectrum
+    this.freqComplexBufferShifted.fill(0);
+
+    for (var i = 0; i < this.nbPeaks; i++) {
+      let peakIndex = this.peakIndexes[i];
+      let peakIndexShifted = Math.round(peakIndex * pitchFactor);
+
+      if (peakIndexShifted > this.magnitudes.length) {
+        break;
+      }
+
+      // find region of influence
+      var startIndex = 0;
+      var endIndex = this.fftSize;
+      if (i > 0) {
+        let peakIndexBefore = this.peakIndexes[i - 1];
+        startIndex = peakIndex - Math.floor((peakIndex - peakIndexBefore) / 2);
+      }
+      if (i < this.nbPeaks - 1) {
+        let peakIndexAfter = this.peakIndexes[i + 1];
+        endIndex = peakIndex + Math.ceil((peakIndexAfter - peakIndex) / 2);
+      }
+
+      // shift whole region of influence around peak to shifted peak
+      let startOffset = startIndex - peakIndex;
+      let endOffset = endIndex - peakIndex;
+      for (var j = startOffset; j < endOffset; j++) {
+        let binIndex = peakIndex + j;
+        let binIndexShifted = peakIndexShifted + j;
+
+        if (binIndexShifted >= this.magnitudes.length) {
+          break;
+        }
+
+        // apply phase correction
+        let omegaDelta = 2 * Math.PI * (binIndexShifted - binIndex) / this.fftSize;
+        let phaseShiftReal = Math.cos(omegaDelta * this.timeCursor);
+        let phaseShiftImag = Math.sin(omegaDelta * this.timeCursor);
+
+        let indexReal = binIndex * 2;
+        let indexImag = indexReal + 1;
+        let valueReal = this.freqComplexBuffer[indexReal];
+        let valueImag = this.freqComplexBuffer[indexImag];
+
+        let valueShiftedReal = valueReal * phaseShiftReal - valueImag * phaseShiftImag;
+        let valueShiftedImag = valueReal * phaseShiftImag + valueImag * phaseShiftReal;
+
+        let indexShiftedReal = binIndexShifted * 2;
+        let indexShiftedImag = indexShiftedReal + 1;
+        this.freqComplexBufferShifted[indexShiftedReal] += valueShiftedReal;
+        this.freqComplexBufferShifted[indexShiftedImag] += valueShiftedImag;
+      }
+    }
+  }
+}
+
+registerProcessor("phase-vocoder-processor", PhaseVocoderProcessor);
+
+
+},{"./ola-processor.js":2,"fft.js":1}]},{},[3]);
+`;
+
+async function loadPhazeWorklet(ctx){
+ if(pitchWorkletReady)return;
+ try{
+  const blob=new Blob([PHAZE_SRC],{type:'application/javascript'});
+  const url=URL.createObjectURL(blob);
+  await ctx.audioWorklet.addModule(url);
+  URL.revokeObjectURL(url);
+  pitchWorkletReady=true;
+ }catch(e){
+  console.warn('phaze worklet failed, pitch shift unavailable:',e);
+ }
+}
+
+// ============================================================
+// AUDIO ENGINE
+// ============================================================
+async function setupAudio(){
+ if(audioCtx)await audioCtx.close().catch(()=>{});
+ audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+ await loadPhazeWorklet(audioCtx);
+
+ micSrc=audioCtx.createMediaStreamSource(camStream);
+ inGain=audioCtx.createGain(); inGain.gain.value=inputGainVal;
+ muteGain=audioCtx.createGain(); muteGain.gain.value=voiceMuted?0:1;
+
+ // Master bus: FX output + monitoring + recording all tap here
+ masterBus=audioCtx.createGain(); masterBus.gain.value=1;
+ monitorGain=audioCtx.createGain(); monitorGain.gain.value=0; // off by default
+ fxOut=audioCtx.createMediaStreamDestination();
+
+ masterBus.connect(fxOut);
+ masterBus.connect(monitorGain);
+ monitorGain.connect(audioCtx.destination);
+
+ micSrc.connect(inGain);
+ inGain.connect(muteGain);
+
+ rebuildFX();
+}
+
+async function rebuildFX(){
+ if(!audioCtx||!muteGain||!masterBus)return;
+ try{muteGain.disconnect();}catch(e){}
+ if(pitchNode){try{pitchNode.disconnect();}catch(e){}}
+ if(wetGain){try{wetGain.disconnect();}catch(e){}}
+ if(dryGain){try{dryGain.disconnect();}catch(e){}}
+ pitchNode=null; wetGain=null; dryGain=null;
+
+ // Phase vocoder pitch stage -- only inserted when pitch != 0
+ let srcNode=muteGain;
+ if(VOICE_PITCH!==0 && pitchWorkletReady){
+  try{
+   pitchNode=new AudioWorkletNode(audioCtx,'phase-vocoder-processor');
+   pitchNode.parameters.get('pitchFactor').value=Math.pow(2,VOICE_PITCH/12);
+   muteGain.connect(pitchNode);
+   srcNode=pitchNode;
+  }catch(e){pitchNode=null;srcNode=muteGain;}
+ }
+
+ // FX chain
+ const{i,o}=makeFX(AFX,FX_INT);
+ srcNode.connect(i);
+
+ // Wet/dry mix into master bus
+ wetGain=audioCtx.createGain(); wetGain.gain.value=VOICE_WET;
+ dryGain=audioCtx.createGain(); dryGain.gain.value=Math.max(0,1-VOICE_WET);
+ o.connect(wetGain); wetGain.connect(masterBus);
+ srcNode.connect(dryGain); dryGain.connect(masterBus);
+}
+
+// ============================================================
+// VOICE EFFECTS
+// Each returns {i: input GainNode, o: output node}
+//
+// robot   - ring modulation (oscillator multiplied by signal)
+//           creates classic dalek/vocoder harmonic scrambling
+// deep    - sub-octave reinforcement + heavy bass shelf + saturation
+// ghost   - multi-tap shimmer reverb + slight pitch modulation tremolo
+// hollow  - parallel bandpass formant simulation (telephone/mask effect)
+// whisper - high-pass kills fundamentals, soft saturation, slapback
+// ============================================================
+function makeFX(type,lvl){
+ const i=audioCtx.createGain(); i.gain.value=1; let o;
+
+ if(type==='robot'){
+  // ── RING MODULATION ─────────────────────────────────────
+  // Carrier oscillator output (±1) controls gain of signal.
+  // Result: sidebands at (signal_freq ± carrier_freq), kills fundamental.
+  // Classic dalek/robot effect.
+  const carrierFreq=[80,100,120][lvl-1];
+  const carrierType=['sine','sawtooth','square'][lvl-1];
+  const ringDepth=[0.7,0.85,1.0][lvl-1];
+
+  // Ring mod node: input signal goes here, carrier modulates gain
+  const ringGain=audioCtx.createGain();
+  ringGain.gain.value=0; // will be driven by oscillator
+
+  // Carrier oscillator (drives the gain AudioParam = true ring mod)
+  const carrier=audioCtx.createOscillator();
+  carrier.type=carrierType;
+  carrier.frequency.value=carrierFreq;
+  // Scale carrier amplitude to ringDepth via a gain before AudioParam
+  const carrierAmp=audioCtx.createGain();
+  carrierAmp.gain.value=ringDepth;
+  carrier.connect(carrierAmp);
+  carrierAmp.connect(ringGain.gain);
+  carrier.start();
+
+  // Dry blend so speech stays intelligible (ring mod alone sounds robotic/alien)
+  const dryBlend=audioCtx.createGain(); dryBlend.gain.value=[0.3,0.20,0.10][lvl-1];
+  const mix=audioCtx.createGain(); mix.gain.value=1;
+
+  i.connect(ringGain); ringGain.connect(mix);
+  i.connect(dryBlend); dryBlend.connect(mix);
+
+  // LP to tame high harmonics from ring mod
+  const lp=audioCtx.createBiquadFilter();
+  lp.type='lowpass'; lp.frequency.value=[5000,4000,3200][lvl-1]; lp.Q.value=0.7;
+  mix.connect(lp);
+  o=lp;
+
+ }else if(type==='deep'){
+  // ── DEMON / DEEP ────────────────────────────────────────
+  // Heavy bass shelf + sub-octave ring mod (half freq creates octave below)
+  // + gentle saturation to add harmonics
+  const subFreq=[55,45,35][lvl-1]; // sub carrier ~octave below speech
+  const bassBoost=[8,12,16][lvl-1];
+  const satAmt=[15,30,55][lvl-1];
+
+  // Compress first to even out dynamics
+  const comp=audioCtx.createDynamicsCompressor();
+  comp.threshold.value=-20; comp.knee.value=10;
+  comp.ratio.value=4; comp.attack.value=0.003; comp.release.value=0.15;
+
+  // Sub-harmonic ring: oscillator at ~55Hz creates deep chest resonance
+  const subOsc=audioCtx.createOscillator();
+  subOsc.type='sine'; subOsc.frequency.value=subFreq;
+  const subRing=audioCtx.createGain(); subRing.gain.value=0;
+  const subAmp=audioCtx.createGain(); subAmp.gain.value=[0.4,0.55,0.70][lvl-1];
+  subOsc.connect(subAmp); subAmp.connect(subRing.gain); subOsc.start();
+
+  // Bass shelf boost
+  const bass=audioCtx.createBiquadFilter();
+  bass.type='lowshelf'; bass.frequency.value=250; bass.gain.value=bassBoost;
+
+  // LP to kill shrillness
+  const lp=audioCtx.createBiquadFilter();
+  lp.type='lowpass'; lp.frequency.value=[4500,3800,3000][lvl-1];
+
+  // Soft saturation (adds harmonics, thickens)
+  const sat=audioCtx.createWaveShaper();
+  sat.curve=makeCurve(satAmt); sat.oversample='4x';
+
+  const mix=audioCtx.createGain(); mix.gain.value=0.85;
+
+  i.connect(comp);
+  comp.connect(subRing); subRing.connect(mix);
+  comp.connect(bass); bass.connect(lp); lp.connect(sat); sat.connect(mix);
+  o=mix;
+
+ }else if(type==='ghost'){
+  // ── GHOST / ETHEREAL ────────────────────────────────────
+  // Multi-tap reverb delay + tremolo (AM oscillator) + HP to remove body
+  const tremFreq=[3.5,5,7][lvl-1];
+  const tremDepth=[0.25,0.38,0.50][lvl-1];
+  const tapTimes=[[0.07,0.14,0.27],[0.06,0.13,0.25,0.47],[0.05,0.11,0.22,0.43]];
+  const tapGains=[[0.45,0.30,0.18],[0.50,0.36,0.24,0.12],[0.55,0.40,0.28,0.16]];
+
+  // Tremolo: AM modulation (ghost "breathing" flutter)
+  const trem=audioCtx.createOscillator();
+  trem.type='sine'; trem.frequency.value=tremFreq;
+  const tremGain=audioCtx.createGain(); tremGain.gain.value=0;
+  const tremAmp=audioCtx.createGain(); tremAmp.gain.value=tremDepth;
+  const tremOffset=audioCtx.createConstantSource(); tremOffset.offset.value=1-tremDepth;
+  const ampMod=audioCtx.createGain(); ampMod.gain.value=1;
+  trem.connect(tremAmp); tremAmp.connect(ampMod.gain);
+  tremOffset.connect(ampMod.gain);
+  trem.start(); tremOffset.start();
+
+  // HP to lift out body/mud (ethereal = no chest resonance)
+  const hp=audioCtx.createBiquadFilter();
+  hp.type='highpass'; hp.frequency.value=[300,450,600][lvl-1]; hp.Q.value=0.8;
+
+  // Reverb via feedback-filtered taps
+  const mix=audioCtx.createGain(); mix.gain.value=1;
+  i.connect(hp); hp.connect(ampMod); ampMod.connect(mix);
+
+  const taps=tapTimes[Math.min(lvl-1,2)];
+  taps.forEach((t,idx)=>{
+   const delay=audioCtx.createDelay(2.0); delay.delayTime.value=t;
+   const tapG=audioCtx.createGain(); tapG.gain.value=tapGains[lvl-1][idx];
+   const tapLP=audioCtx.createBiquadFilter(); tapLP.type='lowpass'; tapLP.frequency.value=3500;
+   hp.connect(delay); delay.connect(tapLP); tapLP.connect(tapG); tapG.connect(mix);
+  });
+
+  // Gentle high shelf brightness for ethereal air
+  const air=audioCtx.createBiquadFilter();
+  air.type='highshelf'; air.frequency.value=5000; air.gain.value=[3,5,7][lvl-1];
+  mix.connect(air);
+  o=air;
+
+ }else if(type==='hollow'){
+  // ── HOLLOW / TELEPHONE ──────────────────────────────────
+  // Bandpass filter bank simulating shifted formant resonances.
+  // No direct signal - only the resonant bands pass through.
+  // Sounds like speaking through a mask / telephone / thin wall.
+  const hpCut=[600,800,1000][lvl-1];
+  const lpCut=[3200,2800,2400][lvl-1];
+  // Three formant bands, shifted inward to sound smaller/masked
+  const formants=[[900,1800,2800],[950,1900,2900],[1000,2000,3000]];
+  const Qval=[4,6,8][lvl-1];
+  const fGains=[[1.0,0.75,0.50],[1.0,0.80,0.60],[1.0,0.85,0.65]];
+
+  const hp=audioCtx.createBiquadFilter();
+  hp.type='highpass'; hp.frequency.value=hpCut; hp.Q.value=0.7;
+  const lp=audioCtx.createBiquadFilter();
+  lp.type='lowpass'; lp.frequency.value=lpCut; lp.Q.value=0.7;
+
+  // Slight saturation to add harmonic grit
+  const sat=audioCtx.createWaveShaper(); sat.curve=makeCurve(12);
+  const mix=audioCtx.createGain(); mix.gain.value=1.2;
+
+  i.connect(hp); hp.connect(lp); lp.connect(sat);
+
+  formants[lvl-1].forEach((freq,idx)=>{
+   const bp=audioCtx.createBiquadFilter();
+   bp.type='bandpass'; bp.frequency.value=freq; bp.Q.value=Qval;
+   const g=audioCtx.createGain(); g.gain.value=fGains[lvl-1][idx];
+   sat.connect(bp); bp.connect(g); g.connect(mix);
+  });
+  o=mix;
+
+ }else if(type==='whisper'){
+  // ── WHISPER ──────────────────────────────────────────────
+  // Kills pitch fundamentals via HP (>1kHz), heavy saturation
+  // to add airy breathiness, then a short slapback for space.
+  const hpF=[1200,1600,2000][lvl-1];
+  const satAmt=[40,80,140][lvl-1];
+  const slapT=[0.025,0.040,0.060][lvl-1];
+  const slapW=[0.25,0.38,0.50][lvl-1];
+
+  const hp=audioCtx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=hpF; hp.Q.value=0.6;
+  const sat=audioCtx.createWaveShaper(); sat.curve=makeCurve(satAmt); sat.oversample='4x';
+  const slap=audioCtx.createDelay(0.3); slap.delayTime.value=slapT;
+  const sg=audioCtx.createGain(); sg.gain.value=slapW;
+  const m=audioCtx.createGain(); m.gain.value=0.80;
+  // Output gain normalizer (whisper is quieter by nature)
+  const outG=audioCtx.createGain(); outG.gain.value=[1.6,1.4,1.2][lvl-1];
+
+  i.connect(hp); hp.connect(sat); sat.connect(m);
+  sat.connect(slap); slap.connect(sg); sg.connect(m);
+  m.connect(outG);
+  o=outG;
+
+ }else{
+  o=i; // passthrough
+ }
+ return{i,o};
+}
+
+function makeCurve(amt){
+ // Arctangent soft-clipping waveshaper
+ const n=512,c=new Float32Array(n);
+ for(let j=0;j<n;j++){const x=(j*2)/n-1;c[j]=Math.atan(x*amt)/Math.atan(amt);}
+ return c;
+}
+
+// ============================================================
+// CONTROLS
+// ============================================================
+function selPills(gid,el){
+ // handle both .pill and .pill-none
+ document.querySelectorAll('#'+gid+' .pill, #'+gid+' .pill-none').forEach(p=>p.classList.remove('on'));
+ el.classList.add('on');
+}
+function setVFX(v,el){VFX=v;selPills('vfx-pills',el);updateLabel();}
+function setFaceMask(v,el){FACE_MASK=v;selPills('face-pills',el);updateLabel();}
+function setAFX(v,el){AFX=v;selPills('afx-pills',el);rebuildFX();}
+function setIntensity(v){FX_INT=v;rebuildFX();}
+
+// ---- VOICE EQ BEZIER CONTROL ----
+const eqNodes=[
+ {xr:0.18, yr:0.15}, // mix (wet=0.85)
+ {xr:0.50, yr:0.50}, // pitch (0st)
+ {xr:0.82, yr:1.00}, // amt (int=1, low)
+];
+let eqDrag=null, eqCtx=null, eqW=0, eqH=78;
+
+function initVoiceEQ(){
+ const cv=document.getElementById('voice-eq');
+ if(!cv)return;
+
+ function resize(){
+  const dpr=window.devicePixelRatio||1;
+  const cssW=cv.clientWidth||320;
+  eqW=cssW; eqH=cv.clientHeight||72;
+  cv.width=Math.round(cssW*dpr); cv.height=Math.round(eqH*dpr);
+  eqCtx=cv.getContext('2d'); eqCtx.scale(dpr,dpr);
+  drawVoiceEQ();
+ }
+ const ro=new ResizeObserver(()=>resize());
+ ro.observe(cv);
+ resize();
+
+ function ptFromEvent(e){
+  const r=cv.getBoundingClientRect();
+  const src=e.touches?e.touches[0]:e;
+  return{x:src.clientX-r.left, y:src.clientY-r.top};
+ }
+ function hitNode(x,y){
+  for(let i=0;i<eqNodes.length;i++){
+   const n=eqNodes[i];
+   if(Math.hypot(x-n.xr*eqW, y-n.yr*eqH)<18)return i;
+  }
+  return -1;
+ }
+ function startDrag(e){
+  const{x,y}=ptFromEvent(e);
+  const h=hitNode(x,y);
+  if(h>=0){eqDrag=h;e.preventDefault();}
+ }
+ function moveDrag(e){
+  if(eqDrag===null)return;
+  e.preventDefault();
+  const{y}=ptFromEvent(e);
+  eqNodes[eqDrag].yr=Math.max(0,Math.min(1,y/eqH));
+  applyEQNode(eqDrag);
+  drawVoiceEQ();
+ }
+ function endDrag(){eqDrag=null;}
+ cv.addEventListener('mousedown',startDrag);
+ cv.addEventListener('touchstart',startDrag,{passive:false});
+ window.addEventListener('mousemove',moveDrag);
+ window.addEventListener('touchmove',moveDrag,{passive:false});
+ window.addEventListener('mouseup',endDrag);
+ window.addEventListener('touchend',endDrag);
+}
+
+function applyEQNode(i){
+ const n=eqNodes[i];
+ if(i===0){
+  // mix: top=100% wet, bottom=0% wet
+  VOICE_WET=1-n.yr;
+  if(wetGain)wetGain.gain.value=VOICE_WET;
+  if(dryGain)dryGain.gain.value=Math.max(0,1-VOICE_WET);
+  const el=document.getElementById('eq-wet-val');
+  if(el)el.textContent=Math.round(VOICE_WET*100)+'%';
+ } else if(i===1){
+  // pitch: top=+12st, mid=0, bottom=-12st
+  const prev=VOICE_PITCH;
+  VOICE_PITCH=Math.round((0.5-n.yr)*24);
+  const el=document.getElementById('eq-pitch-val');
+  if(el)el.textContent=(VOICE_PITCH>0?'+':'')+VOICE_PITCH+'st';
+  // if pitch node exists and we're not crossing zero, just update param live
+  if(pitchNode && VOICE_PITCH!==0 && prev!==0){
+   try{pitchNode.parameters.get('pitchFactor').value=Math.pow(2,VOICE_PITCH/12);return;}catch(e){}
+  }
+  // crossing zero in either direction: rebuild to insert/remove worklet node
+  if((prev===0)!==(VOICE_PITCH===0))rebuildFX();
+ } else if(i===2){
+  // amt: top=max(3), mid=mid(2), bottom=low(1)
+  const newInt=1+Math.round((1-n.yr)*2);
+  if(newInt!==FX_INT){FX_INT=newInt;rebuildFX();}
+  const el=document.getElementById('eq-amt-val');
+  if(el)el.textContent=['','low','mid','max'][FX_INT]||'';
+ }
+}
+
+function drawVoiceEQ(){
+ if(!eqCtx)return;
+ const W=eqW, H=eqH, ctx=eqCtx;
+ ctx.clearRect(0,0,W,H);
+
+ // bg
+ ctx.fillStyle='#0b0b16';
+ ctx.fillRect(0,0,W,H);
+
+ // column zone shading
+ const cols=[
+  {label:'mix',  top:'100%', mid:'50%', bot:'0%'},
+  {label:'pitch',top:'+12', mid:'0',   bot:'-12'},
+  {label:'amt',  top:'max',  mid:'mid', bot:'low'},
+ ];
+ ctx.font='8px "Share Tech Mono",monospace';
+ ctx.textAlign='center';
+ cols.forEach((c,ci)=>{
+  const cx=eqNodes[ci].xr*W;
+  // subtle column bg
+  const zoneW=W/3.4;
+  ctx.fillStyle='rgba(255,255,255,.018)';
+  ctx.fillRect(cx-zoneW/2,0,zoneW,H);
+  // axis labels
+  ctx.fillStyle='rgba(144,144,200,.38)';
+  ctx.fillText(c.top,cx,10);
+  ctx.fillText(c.mid,cx,H/2+3);
+  ctx.fillText(c.bot,cx,H-3);
+ });
+
+ // grid verticals
+ ctx.strokeStyle='rgba(48,48,88,.5)'; ctx.lineWidth=.5;
+ for(let i=1;i<8;i++){ctx.beginPath();ctx.moveTo(i*W/8,0);ctx.lineTo(i*W/8,H);ctx.stroke();}
+ // grid horizontals
+ for(let i=1;i<4;i++){ctx.beginPath();ctx.moveTo(0,i*H/4);ctx.lineTo(W,i*H/4);ctx.stroke();}
+ // mid line
+ ctx.strokeStyle='rgba(61,255,192,.12)'; ctx.lineWidth=1;
+ ctx.beginPath();ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();
+
+ // node screen coords
+ const pts=eqNodes.map(n=>({x:n.xr*W, y:n.yr*H}));
+ const all=[{x:0,y:pts[0].y},{...pts[0]},{...pts[1]},{...pts[2]},{x:W,y:pts[2].y}];
+
+ function catmullBez(p0,p1,p2,p3){
+  return{
+   cp1x:p1.x+(p2.x-p0.x)/6, cp1y:p1.y+(p2.y-p0.y)/6,
+   cp2x:p2.x-(p3.x-p1.x)/6, cp2y:p2.y-(p3.y-p1.y)/6,
+  };
+ }
+
+ // curve fill
+ ctx.beginPath();
+ ctx.moveTo(all[0].x,all[0].y);
+ for(let i=0;i<all.length-1;i++){
+  const b=catmullBez(all[Math.max(0,i-1)],all[i],all[i+1],all[Math.min(all.length-1,i+2)]);
+  ctx.bezierCurveTo(b.cp1x,b.cp1y,b.cp2x,b.cp2y,all[i+1].x,all[i+1].y);
+ }
+ ctx.lineTo(W,H);ctx.lineTo(0,H);ctx.closePath();
+ const grad=ctx.createLinearGradient(0,0,0,H);
+ grad.addColorStop(0,'rgba(61,255,192,.22)');
+ grad.addColorStop(1,'rgba(61,255,192,.02)');
+ ctx.fillStyle=grad; ctx.fill();
+
+ // curve stroke
+ ctx.beginPath();
+ ctx.moveTo(all[0].x,all[0].y);
+ for(let i=0;i<all.length-1;i++){
+  const b=catmullBez(all[Math.max(0,i-1)],all[i],all[i+1],all[Math.min(all.length-1,i+2)]);
+  ctx.bezierCurveTo(b.cp1x,b.cp1y,b.cp2x,b.cp2y,all[i+1].x,all[i+1].y);
+ }
+ ctx.strokeStyle='rgba(61,255,192,.85)'; ctx.lineWidth=1.5; ctx.stroke();
+
+ // nodes
+ pts.forEach((p,i)=>{
+  const dragging=(eqDrag===i);
+  const r=dragging?7:5;
+  // outer glow -- bigger when dragging
+  const glowR=dragging?20:12;
+  const rg=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,glowR);
+  rg.addColorStop(0,dragging?'rgba(61,255,192,.45)':'rgba(61,255,192,.22)');
+  rg.addColorStop(1,'rgba(61,255,192,0)');
+  ctx.beginPath();ctx.arc(p.x,p.y,glowR,0,Math.PI*2);
+  ctx.fillStyle=rg; ctx.fill();
+  // dashed vertical guide
+  ctx.setLineDash([2,3]);
+  ctx.strokeStyle='rgba(61,255,192,.20)'; ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(p.x,p.y+r+2);ctx.lineTo(p.x,H-1);ctx.stroke();
+  ctx.setLineDash([]);
+  // node
+  ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);
+  ctx.fillStyle=dragging?'#fff':'#3dffc0'; ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.lineWidth=1; ctx.stroke();
+ });
+}
+
+function setMaskSpread(v){MASK_SPREAD=parseFloat(v);document.getElementById('spread-val').textContent=Math.round(v*100)+'%';}
+
+function updateLabel(){const l=document.getElementById('fx-label');if(l)l.textContent=VFX+' + '+FACE_MASK+' face';}
+
+function toggleMute(){
+ voiceMuted=!voiceMuted;
+ if(muteGain)muteGain.gain.value=voiceMuted?0:1;
+ const b=document.getElementById('mute-btn');
+ b.textContent=voiceMuted?'mic off':'mic on';
+ b.className=voiceMuted?'tpill off':'tpill on';
+}
+
+function toggleMonitor(){
+ monitorOn=!monitorOn;
+ const b=document.getElementById('monitor-btn');
+ const w=document.getElementById('monitor-warn');
+ if(monitorOn){
+  if(monitorGain)monitorGain.gain.value=1;
+  b.className='tpill on'; b.textContent='monitor on';
+  if(w)w.style.display='block';
+ }else{
+  if(monitorGain)monitorGain.gain.value=0;
+  b.className='tpill'; b.textContent='monitor';
+  if(w)w.style.display='none';
+ }
+}
+function setGain(v,el){
+ inputGainVal=v;
+ if(inGain)inGain.gain.value=v;
+ selPills('gain-pills',el);
+}
+
+// ============================================================
+// RENDER LOOP
+// ============================================================
+let lastRender=0;
+const TARGET_FPS=window.matchMedia('(pointer:coarse)').matches?30:60;
+const FRAME_MS=1000/TARGET_FPS;
+
+function renderLoop(ts=0){
+ if(!rafOn)return;
+ requestAnimationFrame(renderLoop);
+ if(document.hidden)return; // don't render when tab is backgrounded
+ if(ts-lastRender<FRAME_MS-4)return; // throttle to target fps
+ lastRender=ts;
+ const c=document.getElementById('canvas-preview');
+ if(!c||vid.readyState<2)return;
+ const ctx=c.getContext('2d'),W=c.width,H=c.height;
+ syncOff(W,H); frame++;
+
+ // Smooth lip openness
+ lipOpenSmooth+=(lipOpen-lipOpenSmooth)*0.22;
+
+ // Flicker
+ if(VFX!=='raw'&&Math.random()<.005) flickerA=.38+Math.random()*.52;
+ else flickerA=Math.min(1,flickerA+.2);
+
+ buildBase(W,H);
+ drawVFX(ctx,W,H);
+ if(FACE_MASK!=='none'&&meshLandmarks) drawFaceMask(ctx,W,H,meshLandmarks);
+ if(VFX!=='raw') postFX(ctx,W,H);
+}
+
+// ---- BASE: extract person mask into offB, leave offA empty for per-filter bg ----
+function buildBase(W,H){
+ if(mpOk&&segMask&&VFX!=='raw'){
+  // Person layer (masked) → offB
+  offBc.clearRect(0,0,W,H);
+  drawVid(offBc,W,H);
+  offBc.globalCompositeOperation='destination-in';
+  offBc.drawImage(segMask,0,0,W,H);
+  offBc.globalCompositeOperation='source-over';
+ }else{
+  // No segmentation: offB = full frame, offA unused
+  offBc.clearRect(0,0,W,H);
+  drawVid(offBc,W,H);
+ }
+}
+
+// ---- VFX: separate bg and person treatments per filter ----
+function drawVFX(ctx,W,H){
+ const hasSeg = mpOk&&segMask&&VFX!=='raw';
+
+ // ── RAW ──────────────────────────────────────────────────
+ if(VFX==='raw'){
+  ctx.save();ctx.globalAlpha=flickerA;
+  drawVid(ctx,W,H);
+  ctx.globalAlpha=1;ctx.restore();
+  return;
+ }
+
+ ctx.save();ctx.globalAlpha=flickerA;
+
+ // ── GHOST ────────────────────────────────────────────────
+ if(VFX==='ghost'){
+  if(hasSeg){
+   // Background: heavy blur via downsample-blur-upsample (mobile-friendly)
+   drawVidBlurred(offAc,W,H,32,.18,.25);
+   // Dark teal atmospheric color wash over bg
+   offAc.save();
+   offAc.globalCompositeOperation='screen';
+   // Vertical gradient: slightly brighter at center/top (ethereal light source)
+   const bgG=offAc.createLinearGradient(0,0,0,H);
+   bgG.addColorStop(0,'rgba(0,70,55,.50)');
+   bgG.addColorStop(.45,'rgba(0,55,42,.38)');
+   bgG.addColorStop(1,'rgba(0,20,18,.20)');
+   offAc.fillStyle=bgG;offAc.fillRect(0,0,W,H);
+   offAc.restore();
+
+   // Draw bg
+   ctx.drawImage(offA,0,0);
+
+   // Person: desaturated cool + slightly brighter than bg
+   ctx.filter='saturate(.08) brightness(.92) contrast(1.10) hue-rotate(170deg)';
+   ctx.drawImage(offB,0,0);
+   ctx.filter='none';
+
+   // Rim light: teal glow aura around silhouette (smaller blur = faster on mobile)
+   ctx.save();
+   ctx.globalCompositeOperation='screen';
+   ctx.filter='blur(5px) brightness(2.5) saturate(0)';
+   ctx.globalAlpha=.18;
+   ctx.drawImage(offB,0,0);
+   ctx.filter='none';ctx.globalAlpha=1;
+   ctx.restore();
+
+  }else{
+   // No segmentation fallback
+   ctx.filter='saturate(.1) brightness(.80) contrast(1.15) hue-rotate(160deg)';
+   drawVid(ctx,W,H);
+   ctx.filter='none';
+  }
+
+  // Teal center glow (screen)  gives ghostly atmosphere
+  ctx.save();
+  ctx.globalCompositeOperation='screen';
+  const gg=ctx.createRadialGradient(W/2,H*.35,0,W/2,H*.45,H*.72);
+  gg.addColorStop(0,'rgba(30,130,95,.20)');
+  gg.addColorStop(.6,'rgba(10,60,50,.08)');
+  gg.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=gg;ctx.fillRect(0,0,W,H);
+  ctx.restore();
+
+ // ── PHANTOM ──────────────────────────────────────────────
+ }else if(VFX==='phantom'){
+  if(hasSeg){
+   // Background: almost pure black with faint cool-blue bleed
+   drawVidBlurred(offAc,W,H,35,.10,.15);
+   // Cool blue-grey tint on bg
+   offAc.save();
+   offAc.globalCompositeOperation='screen';
+   offAc.fillStyle='rgba(18,28,55,.30)';
+   offAc.fillRect(0,0,W,H);
+   offAc.restore();
+
+   ctx.drawImage(offA,0,0);
+
+   // Person: high-contrast B&W, punchy
+   ctx.filter='saturate(0) contrast(2.4) brightness(.72)';
+   ctx.drawImage(offB,0,0);
+   ctx.filter='none';
+
+   // White edge bloom around person
+   ctx.save();
+   ctx.globalCompositeOperation='screen';
+   ctx.filter='blur(6px) brightness(3) saturate(0) contrast(3)';
+   ctx.globalAlpha=.12;
+   ctx.drawImage(offB,0,0);
+   ctx.filter='none';ctx.globalAlpha=1;
+   ctx.restore();
+
+  }else{
+   ctx.filter='saturate(0) contrast(2.2) brightness(.68)';
+   drawVid(ctx,W,H);
+   ctx.filter='none';
+  }
+
+  // Heavy grain overlay
+  if(noiseTick++%2===0) refreshNoise();
+  ctx.save();ctx.globalAlpha=.10;ctx.globalCompositeOperation='overlay';
+  for(let x=0;x<W;x+=64)for(let y=0;y<H;y+=64)ctx.drawImage(noiseCv,x,y);
+  ctx.restore();
+  // Light grain layer
+  ctx.save();ctx.globalAlpha=.04;ctx.globalCompositeOperation='screen';
+  for(let x=0;x<W;x+=64)for(let y=0;y<H;y+=64)ctx.drawImage(noiseCv,x,y);
+  ctx.restore();
+  // Subtle blue-silver tint on the whole frame
+  ctx.save();
+  ctx.globalCompositeOperation='multiply';
+  ctx.fillStyle='rgba(160,175,215,.18)';
+  ctx.fillRect(0,0,W,H);
+  ctx.restore();
+
+ // ── SPECTER (thermal) ────────────────────────────────────
+ }else if(VFX==='specter'){
+  if(hasSeg){
+   // Background: near-black with faint purple/indigo cold thermal bleed
+   drawVidBlurred(offAc,W,H,30,.12,.6);
+   // Cold-end thermal tint on bg (dark areas = deep purple/blue)
+   offAc.save();
+   offAc.globalCompositeOperation='screen';
+   const bgT=offAc.createLinearGradient(0,0,0,H);
+   bgT.addColorStop(0,'rgba(40,0,60,.40)');
+   bgT.addColorStop(1,'rgba(20,0,35,.25)');
+   offAc.fillStyle=bgT;offAc.fillRect(0,0,W,H);
+   offAc.restore();
+
+   ctx.drawImage(offA,0,0);
+
+   // Person: thermal hot  sepia + hue rotate to orange-yellow
+   ctx.filter='sepia(1) hue-rotate(-5deg) saturate(5) brightness(.88) contrast(1.35)';
+   ctx.drawImage(offB,0,0);
+   ctx.filter='none';
+
+   // Heat bloom: person emits orange-red glow at edges
+   ctx.save();
+   ctx.globalCompositeOperation='screen';
+   ctx.filter='blur(7px) sepia(1) hue-rotate(-20deg) saturate(6) brightness(1.5)';
+   ctx.globalAlpha=.28;
+   ctx.drawImage(offB,0,0);
+   ctx.filter='none';ctx.globalAlpha=1;
+   ctx.restore();
+
+  }else{
+   ctx.filter='sepia(1) hue-rotate(-5deg) saturate(4.5) brightness(.80) contrast(1.3)';
+   drawVid(ctx,W,H);
+   ctx.filter='none';
+  }
+
+  // Isothermal scan sweep  horizontal bar moving down
+  const sweepY=((frame*0.8)%H);
+  ctx.save();
+  ctx.globalAlpha=.04;
+  ctx.fillStyle='rgba(255,140,0,1)';
+  ctx.fillRect(0,sweepY,W,3);
+  ctx.globalAlpha=.02;
+  ctx.fillRect(0,(sweepY+H*.33)%H,W,2);
+  ctx.restore();
+
+  // Warm orange global tint
+  ctx.save();
+  ctx.globalCompositeOperation='screen';
+  ctx.fillStyle='rgba(90,22,0,.12)';
+  ctx.fillRect(0,0,W,H);
+  ctx.restore();
+ }
+
+ ctx.globalAlpha=1;ctx.restore();
+}
+
+// ============================================================
+// FACE MASKS  landmark-conforming
+// ============================================================
+function drawFaceMask(ctx,W,H,pts){
+ const sp=getSpreadPts(pts);
+ switch(FACE_MASK){
+  case'ghost': maskGhost(ctx,sp,W,H);break;
+  case'skull': maskSkull(ctx,sp,W,H);break;
+  case'blur':  maskBlur(ctx,sp,pts,W,H);break;
+  case'pixel': maskPixel(ctx,sp,pts,W,H);break;
+  case'void':  maskVoid(ctx,sp,W,H);break;
+ }
+}
+
+// ---- GHOST MASK ----
+function maskGhost(ctx,pts,W,H){
+ ctx.save();
+
+ // 1. Pale semi-opaque face fill  follows face oval landmarks
+ const grad=ctx.createRadialGradient(
+  (1-pts[168].x)*W, pts[168].y*H, 0,
+  (1-pts[168].x)*W, pts[168].y*H, (pts[454].x-pts[234].x)*W*0.6
+ );
+ grad.addColorStop(0,'rgba(220,248,238,.97)');
+ grad.addColorStop(.7,'rgba(195,238,222,.93)');
+ grad.addColorStop(1,'rgba(148,210,198,0)');
+ ctx.fillStyle=grad;
+ lmPath(ctx,pts,LM.faceOval,W,H);
+ ctx.fill();
+
+ // 2. Dark eye sockets (punch destination-atop so they cut into the fill)
+ ctx.globalCompositeOperation='source-atop';
+ ctx.fillStyle='rgba(0,0,0,.92)';
+ lmPath(ctx,pts,LM.leftEye,W,H); ctx.fill();
+ lmPath(ctx,pts,LM.rightEye,W,H); ctx.fill();
+ ctx.globalCompositeOperation='source-over';
+
+ // 3. Teal glow pupils  centered in each eye
+ function eyeCenter(indices){
+  let sx=0,sy=0;indices.forEach(i=>{sx+=pts[i].x;sy+=pts[i].y;});
+  return{x:(1-sx/indices.length)*W,y:(sy/indices.length)*H};
+ }
+ const le=eyeCenter(LM.leftEye), re=eyeCenter(LM.rightEye);
+ const eyeW=Math.abs(pts[LM.leftEye[0]].x-pts[LM.leftEye[8]].x)*W*.6;
+ ctx.globalAlpha=.88;
+ ctx.fillStyle='rgba(77,255,196,.95)';
+ ctx.beginPath();ctx.ellipse(le.x,le.y,eyeW*.55,eyeW*.55,0,0,Math.PI*2);ctx.fill();
+ ctx.beginPath();ctx.ellipse(re.x,re.y,eyeW*.55,eyeW*.55,0,0,Math.PI*2);ctx.fill();
+ ctx.globalAlpha=1;
+
+ // 4. Animated lips  outer lip path, open based on lipOpenSmooth
+ ctx.globalAlpha=.9;
+ const lipO=lipOpenSmooth;
+ const lc=lm(pts,LM.lipLeft,W,H),rc=lm(pts,LM.lipRight,W,H);
+ const lt=lm(pts,LM.lipTopOut,W,H),lb=lm(pts,LM.lipBotOut,W,H);
+ const lipCY=(lt.y+lb.y)/2;
+ const openDist=(lb.y-lt.y)*lipO*3;
+
+ // Upper lip
+ ctx.fillStyle='rgba(0,0,0,.75)';
+ ctx.beginPath();
+ ctx.moveTo(lc.x,lipCY);
+ ctx.quadraticCurveTo(lt.x,lt.y-openDist*.6,rc.x,lipCY);
+ ctx.quadraticCurveTo(lt.x,lipCY,lc.x,lipCY);
+ ctx.fill();
+ // Lower lip
+ ctx.beginPath();
+ ctx.moveTo(lc.x,lipCY);
+ ctx.quadraticCurveTo(lb.x,lb.y+openDist*.6,rc.x,lipCY);
+ ctx.quadraticCurveTo(lb.x,lipCY,lc.x,lipCY);
+ ctx.fill();
+
+ // 5. If mouth open enough, dark throat inside
+ if(lipOpenSmooth>0.12){
+  const mouthD=Math.min(openDist*1.2,30);
+  const mouthGrad=ctx.createRadialGradient(lt.x,lipCY+mouthD*.2,0,lt.x,lipCY,mouthD*1.5);
+  mouthGrad.addColorStop(0,'rgba(0,0,0,.95)');
+  mouthGrad.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=mouthGrad;
+  ctx.beginPath();
+  ctx.ellipse(lt.x,lipCY,Math.abs(rc.x-lc.x)*.42,mouthD*.65,0,0,Math.PI*2);
+  ctx.fill();
+ }
+
+ ctx.restore();
+}
+
+// ---- SKULL MASK ----
+function maskSkull(ctx,pts,W,H){
+ ctx.save();ctx.globalAlpha=.95;
+
+ // 1. Draw skull fill using face oval
+ ctx.fillStyle='rgba(228,224,214,.98)';
+ lmPath(ctx,pts,LM.faceOval,W,H);
+ ctx.fill();
+
+ // 2. Punch holes: eyes + nasal cavity
+ ctx.globalCompositeOperation='destination-out';
+ lmPath(ctx,pts,LM.leftEye,W,H); ctx.fill();
+ lmPath(ctx,pts,LM.rightEye,W,H); ctx.fill();
+ // Nose cavity  oval between nose landmarks
+ const nt=lm(pts,LM.noseTip,W,H),nl=lm(pts,LM.noseL,W,H),nr=lm(pts,LM.noseR,W,H);
+ const nW=Math.abs(nr.x-nl.x)*.55, nH=nW*1.1;
+ ctx.beginPath();ctx.ellipse(nt.x,nt.y,nW,nH,0,0,Math.PI*2);ctx.fill();
+ ctx.globalCompositeOperation='source-over';
+
+ // 3. Animated jaw / teeth
+ const lc=lm(pts,LM.lipLeft,W,H),rc=lm(pts,LM.lipRight,W,H);
+ const lt=lm(pts,LM.lipTopOut,W,H),lb=lm(pts,LM.lipBotOut,W,H);
+ const lipCY=(lt.y+lb.y)/2;
+ const jawOpen=lipOpenSmooth*Math.abs(lb.y-lt.y)*2.5;
+
+ // Jaw gap  punch out
+ ctx.globalCompositeOperation='destination-out';
+ ctx.fillStyle='rgba(0,0,0,1)';
+ const mouthCX=(lc.x+rc.x)/2;
+ ctx.beginPath();
+ ctx.ellipse(mouthCX,lipCY+jawOpen*.15,Math.abs(rc.x-lc.x)*.45,jawOpen*.5+2,0,0,Math.PI*2);
+ ctx.fill();
+ ctx.globalCompositeOperation='source-over';
+
+ // Upper teeth row
+ const tCount=7, tW=Math.abs(rc.x-lc.x)*0.88/tCount;
+ const tStartX=Math.min(lc.x,rc.x)+Math.abs(rc.x-lc.x)*.06;
+ const tH=Math.min(Math.abs(lb.y-lt.y)*.65+4,16);
+ for(let ti=0;ti<tCount;ti++){
+  const shade=ti%2===0?'rgba(245,241,230,.97)':'rgba(208,203,192,.93)';
+  ctx.fillStyle=shade;
+  ctx.fillRect(tStartX+ti*tW+.5,lipCY-tH*.7,tW-2,tH);
+ }
+
+ // Lower teeth (only visible when mouth open)
+ if(lipOpenSmooth>0.1){
+  const ltH=Math.min(jawOpen*.5+2,10);
+  for(let ti=0;ti<tCount-1;ti++){
+   ctx.fillStyle='rgba(195,188,175,.9)';
+   ctx.fillRect(tStartX+ti*tW+tW*.25,lipCY+jawOpen*.3,tW*.7-2,ltH);
+  }
+ }
+
+ // Skull glow
+ ctx.globalAlpha=.15;ctx.shadowColor='rgba(232,228,215,.9)';ctx.shadowBlur=14;
+ ctx.fillStyle='rgba(232,228,215,.08)';
+ lmPath(ctx,pts,LM.faceOval,W,H);ctx.fill();
+ ctx.shadowBlur=0;ctx.restore();
+}
+
+// ---- BLUR MASK  clip path uses spread pts, image source uses raw pts region ----
+function maskBlur(ctx,sp,pts,W,H){
+ // Bounding box from spread pts -- must use flipped x to match canvas orientation
+ let minX=W,minY=H,maxX=0,maxY=0;
+ LM.faceOval.forEach(i=>{
+  const p=sp[i];
+  const fx=(1-p.x)*W, fy=p.y*H;
+  minX=Math.min(minX,fx);minY=Math.min(minY,fy);
+  maxX=Math.max(maxX,fx);maxY=Math.max(maxY,fy);
+ });
+ const pad=18,rx=Math.max(0,Math.floor(minX-pad)),ry=Math.max(0,Math.floor(minY-pad));
+ const rw=Math.min(W-rx,Math.ceil(maxX-minX+pad*2)),rh=Math.min(H-ry,Math.ceil(maxY-minY+pad*2));
+ if(rw<=0||rh<=0)return;
+ sc.width=rw; sc.height=rh;
+ scc.clearRect(0,0,rw,rh);
+ scc.drawImage(ctx.canvas,rx,ry,rw,rh,0,0,rw,rh);
+ ctx.save();
+ lmPath(ctx,sp,LM.faceOval,W,H);ctx.clip();
+ ctx.filter='blur(22px)';
+ ctx.drawImage(sc,0,0,rw,rh,rx,ry,rw,rh);
+ ctx.filter='none';ctx.restore();
+}
+
+// ---- PIXEL MASK  clip path uses spread pts ----
+function maskPixel(ctx,sp,pts,W,H){
+ let minX=W,minY=H,maxX=0,maxY=0;
+ LM.faceOval.forEach(i=>{
+  const p=sp[i];
+  const fx=(1-p.x)*W, fy=p.y*H;
+  minX=Math.min(minX,fx);minY=Math.min(minY,fy);
+  maxX=Math.max(maxX,fx);maxY=Math.max(maxY,fy);
+ });
+ const rx=Math.max(0,Math.floor(minX)),ry=Math.max(0,Math.floor(minY));
+ const rw=Math.min(W-rx,Math.ceil(maxX-minX)),rh=Math.min(H-ry,Math.ceil(maxY-minY));
+ if(rw<=0||rh<=0)return;
+ const bs=Math.max(8,Math.round(16*(1+MASK_SPREAD)));
+ const sw=Math.max(1,Math.floor(rw/bs)),sh=Math.max(1,Math.floor(rh/bs));
+ sc.width=sw; sc.height=sh;
+ scc.clearRect(0,0,sw,sh);
+ scc.imageSmoothingEnabled=true;
+ scc.drawImage(ctx.canvas,rx,ry,rw,rh,0,0,sw,sh);
+ ctx.save();
+ lmPath(ctx,sp,LM.faceOval,W,H);ctx.clip();
+ ctx.imageSmoothingEnabled=false;
+ ctx.drawImage(sc,0,0,sw,sh,rx,ry,rw,rh);
+ ctx.imageSmoothingEnabled=true;ctx.restore();
+}
+
+// ---- VOID MASK  solid black fill across full face oval ----
+function maskVoid(ctx,sp,W,H){
+ ctx.save();
+
+ // Clip to face oval, then fill solid black
+ lmPath(ctx,sp,LM.faceOval,W,H);
+ ctx.clip();
+ ctx.fillStyle='#000';
+ ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);
+ ctx.restore();
+
+ // Glow edge stroke on top
+ ctx.save();
+ ctx.globalAlpha=.60;
+ ctx.strokeStyle='rgba(77,255,196,.70)';ctx.lineWidth=2;
+ ctx.shadowColor='rgba(77,255,196,.9)';ctx.shadowBlur=14;
+ lmPath(ctx,sp,LM.faceOval,W,H);ctx.stroke();
+ ctx.shadowBlur=0;
+
+ // Lip glow  teal crack when mouth opens
+ if(lipOpenSmooth>0.04){
+  const lc=lm(sp,LM.lipLeft,W,H),rc=lm(sp,LM.lipRight,W,H);
+  const lipMidX=(lc.x+rc.x)/2,lipMidY=(lc.y+rc.y)/2;
+  const openH=lipOpenSmooth*Math.abs(sp[LM.lipBotOut].y-sp[LM.lipTopOut].y)*H*3.5;
+  ctx.globalAlpha=Math.min(1,lipOpenSmooth*4);
+  ctx.fillStyle=`rgba(77,255,196,${Math.min(.7,lipOpenSmooth*2.5)})`;
+  ctx.shadowColor='rgba(77,255,196,1)';ctx.shadowBlur=22;
+  ctx.beginPath();
+  ctx.ellipse(lipMidX,lipMidY,Math.abs(rc.x-lc.x)*.4,openH*.55,0,0,Math.PI*2);
+  ctx.fill();
+  ctx.shadowBlur=0;
+ }
+ ctx.restore();
+}
+
+// ---- POST FX ----
+function postFX(ctx,W,H){
+ ctx.save();ctx.globalAlpha=.03;
+ ctx.fillStyle='rgba(0,255,160,1)';
+ ctx.fillRect(0,(frame*1.8)%H,W,2);
+ ctx.globalAlpha=.012;
+ ctx.fillRect(0,(frame*1.8+H/3)%H,W,1);
+ ctx.restore();
+ ctx.save();
+ const vg=ctx.createRadialGradient(W/2,H/2,H*.26,W/2,H/2,H*.78);
+ vg.addColorStop(0,'transparent');vg.addColorStop(1,'rgba(0,0,0,.52)');
+ ctx.fillStyle=vg;ctx.fillRect(0,0,W,H);ctx.restore();
+}
+
+// ============================================================
+// RECORDING
+// ============================================================
+async function toggleRecord(){if(!recording)await startRec();else stopRec();}
+
+async function startRec(){
+ if(!camStream)return;
+ // iOS: AudioContext must be resumed inside a user-gesture chain
+ if(audioCtx?.state==='suspended') await audioCtx.resume().catch(()=>{});
+
+ const c=document.getElementById('canvas-preview');
+ // captureStream is not available on all mobile browsers (notably iOS Safari < 16)
+ if(!c.captureStream){
+  document.getElementById('rec-status').textContent='recording not supported';
+  document.getElementById('rec-status').className='status err';
+  return;
+ }
+ const vt=c.captureStream(30).getVideoTracks()[0];
+ const tracks=[vt];
+ if(fxOut){const at=fxOut.stream.getAudioTracks()[0];if(at)tracks.push(at);}
+
+ // Safari needs video/mp4 without codec params. Test each type.
+ // Note: Safari does not support Opus, only AAC in mp4.
+ // For Safari: audio from fxOut (WebAudio) may not mux into mp4 cleanly --
+ // fall back to video-only if mp4 is the only option.
+ const mimes=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4'];
+ const mime=mimes.find(t=>{try{return MediaRecorder.isTypeSupported(t);}catch(e){return false;}})||'';
+ const isSafariMp4=mime==='video/mp4';
+
+ // Lower bitrate on mobile (detect via pointer: coarse)
+ const isMobile=window.matchMedia('(pointer:coarse)').matches;
+ const videoBps=isMobile?800000:1400000;
+
+ try{
+  const recTracks=isSafariMp4?[vt]:tracks; // Safari mp4: skip processed audio, avoids mux errors
+  const opts={videoBitsPerSecond:videoBps};
+  if(mime) opts.mimeType=mime;
+  recorder=new MediaRecorder(new MediaStream(recTracks),opts);
+ }catch(e){
+  // Last resort: no options
+  recorder=new MediaRecorder(new MediaStream([vt]));
+ }
+ chunks=[];
+ recorder.ondataavailable=e=>{if(e.data.size>0)chunks.push(e.data);};
+ recorder.onstop=finishRec;
+ recorder.start(100);recording=true;recSecs=0;
+ document.getElementById('rec-dot').classList.add('on');
+ document.getElementById('rec-timer').classList.add('on');
+ document.getElementById('btn-rec').textContent='■ stop recording';
+ document.getElementById('btn-rec').classList.replace('primary','danger');
+ document.getElementById('rec-status').textContent='recording...';document.getElementById('rec-status').className='status err';
+ recInterval=setInterval(()=>{
+  recSecs++;
+  const m=String(Math.floor(recSecs/60)).padStart(2,'0'),s=String(recSecs%60).padStart(2,'0');
+  document.getElementById('rec-timer').textContent=`${m}:${s}`;
+  if(recSecs>=30)stopRec();
+ },1000);
+}
+
+function stopRec(){
+ if(!recorder||!recording)return;
+ clearInterval(recInterval);recording=false;recorder.stop();
+ document.getElementById('rec-dot').classList.remove('on');
+ document.getElementById('rec-timer').classList.remove('on');
+ document.getElementById('btn-rec').textContent='● start recording';
+ document.getElementById('btn-rec').classList.replace('danger','primary');
+ document.getElementById('rec-status').textContent='processing...';
+}
+
+function finishRec(){
+ recBlob=new Blob(chunks,{type:recorder?.mimeType||'video/webm'});
+ document.getElementById('preview-video').src=URL.createObjectURL(recBlob);
+ stopCam();show('preview');
+}
+function reRecord(){document.getElementById('preview-video').src='';recBlob=null;startRecord();}
+
+// ============================================================
+// LINK  CLASP address space: /ghost-drop/<id>/*
+// ============================================================
+async function generateLink(){
+ if(!recBlob)return;
+ const id='g'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+ ghostId=id;
+
+ // TTL in seconds (0 = never). All ghost params share the same absolute TTL.
+ const ttlSecs = GHOST_TTL > 0 ? GHOST_TTL * 3600 : 0;
+ const ttlOpts = ttlSecs > 0 ? {ttl: ttlSecs, ttlMode:'absolute'} : {ttl:0};
+
+ // Blob on CLASP address -- local: IDB, relay: bytes param
+ await CLASP.setBlob(`/ghost-drop/${id}/blob`, recBlob, ttlOpts);
+
+ CLASP.set(`/ghost-drop/${id}/meta`,   {replays:GHOST_REPLAYS, ttl:GHOST_TTL}, ttlOpts);
+ CLASP.set(`/ghost-drop/${id}/views`,  0,     ttlOpts);
+ CLASP.set(`/ghost-drop/${id}/viewed`, false, ttlOpts);
+ if(ghostText.trim())
+  CLASP.set(`/ghost-drop/${id}/text`, ghostText.trim(), ttlOpts);
+
+ document.getElementById('ghost-link').textContent=`${location.origin}${location.pathname}#ghost/${id}`;
+ const msgEl=document.getElementById('link-msg-display');
+ if(msgEl){msgEl.textContent=ghostText.trim();msgEl.style.display=ghostText.trim()?'block':'none';}
+ const metaSummary=document.getElementById('link-meta-summary');
+ if(metaSummary){
+  const replayStr=GHOST_REPLAYS===0?'unlimited views':GHOST_REPLAYS===1?'single view':`${GHOST_REPLAYS} views`;
+  const ttlStr=GHOST_TTL===0?'no expiry':`expires in ${GHOST_TTL}h`;
+  metaSummary.textContent=`${replayStr} · ${ttlStr}`;
+ }
+ // Relay status note
+ const relayNote = document.getElementById('link-relay-note');
+ if(relayNote){
+  if(CLASP.connected){
+   relayNote.innerHTML = `relay live  video + metadata delivery across devices`;
+  } else if(CLASP_RELAY_URL){
+   relayNote.innerHTML = `relay at ${CLASP_RELAY_URL}<br><span style="opacity:.4;">connecting...</span>`;
+  } else {
+   relayNote.innerHTML = `stored locally  open in same browser to demo<br><span style="opacity:.4;">connect CLASP relay for cross-device delivery</span>`;
+  }
+ }
+ show('link');
+}
+
+function setReplays(v,el){GHOST_REPLAYS=parseInt(v);document.querySelectorAll('#replay-pills .pill,#replay-pills 
+.pill-none').forEach(p=>p.classList.remove('on'));el.classList.add('on');}
+function setTTL(v,el){GHOST_TTL=parseInt(v);document.querySelectorAll('#ttl-pills .pill,#ttl-pills 
+.pill-none').forEach(p=>p.classList.remove('on'));el.classList.add('on');}
+
+function copyLink(){
+ const txt=document.getElementById('ghost-link').textContent;
+ navigator.clipboard.writeText(txt).then(()=>{
+  const t=document.getElementById('toast');t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2200);
+ }).catch(()=>{});
+}
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener('DOMContentLoaded',()=>{route();requestAnimationFrame(()=>initVoiceEQ());});
+
+// iOS Safari suspends AudioContext on page hide / tab switch.
+// Resume it on next user interaction.
+document.addEventListener('visibilitychange',()=>{
+ if(document.visibilityState==='visible'&&audioCtx?.state==='suspended'){
+  audioCtx.resume().catch(()=>{});
+ }
+});
+document.addEventListener('touchstart',()=>{
+ if(audioCtx?.state==='suspended') audioCtx.resume().catch(()=>{});
+},{passive:true});
+window.addEventListener('hashchange',()=>{const h=location.hash;if(h.startsWith('#ghost/'))openGhost(h.slice(7));});
+</script>
+</body>
+</html>

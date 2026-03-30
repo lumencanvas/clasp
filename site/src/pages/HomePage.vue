@@ -14,6 +14,7 @@ import ExplainerEncryption from '../components/explainer/ExplainerEncryption.vue
 import ExplainerDefra from '../components/explainer/ExplainerDefra.vue'
 import ExplainerCrossLang from '../components/explainer/ExplainerCrossLang.vue'
 import ExplainerUseCases from '../components/explainer/ExplainerUseCases.vue'
+import DemosSection from '../components/DemosSection.vue'
 import EcosystemSection from '../components/EcosystemSection.vue'
 import DownloadsSection from '../components/DownloadsSection.vue'
 import ExplainerCta from '../components/explainer/ExplainerCta.vue'
@@ -37,6 +38,7 @@ import FooterSection from '../components/FooterSection.vue'
   <ExplainerDefra />
   <ExplainerCrossLang />
   <ExplainerUseCases />
+  <DemosSection />
   <EcosystemSection />
   <DownloadsSection />
   <ExplainerCta />
