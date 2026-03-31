@@ -8,7 +8,7 @@ import CreateRoomModal from '../components/spaces/CreateRoomModal.vue'
 import ParticipantTile from '../components/spaces/ParticipantTile.vue'
 import ChatPanel from '../components/spaces/ChatPanel.vue'
 import ControlsBar from '../components/spaces/ControlsBar.vue'
-import ToastContainer from '../components/social/ToastContainer.vue'
+import ToastContainer from '../components/ToastContainer.vue'
 
 const { client, userName, authToken, connect, loginAsGuest } = useRelay()
 const { toast } = useToast()
@@ -43,6 +43,7 @@ const showCreate = ref(false)
 const showEnded = ref(false)
 
 const unsubs = []
+let dirUnsub = null
 let presenceInterval = null
 
 // --- Audio mesh ---
@@ -250,7 +251,7 @@ onMounted(async () => {
     const c = client.value
     if (!c) return
 
-    c.on(`${DIR}/**`, (val, addr) => {
+    dirUnsub = c.on(`${DIR}/**`, (val, addr) => {
       const id = addr.split('/').pop()
       if (!val || val.__ended) {
         if (currentRoom.value?.id === id && myRole.value !== 'host') showRoomEnded()
@@ -270,6 +271,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (currentRoom.value) leaveRoom()
+  if (typeof dirUnsub === 'function') dirUnsub()
   audio.cleanup()
 })
 </script>

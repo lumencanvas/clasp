@@ -183,15 +183,6 @@
 .npskip{display:block;text-align:center;font-family:var(--mono);font-size:10px;color:var(--dim);cursor:pointer;margin-top:10px;background:none;border:none;width:100%;transition:color .15s}
 .npskip:hover{color:var(--txt)}
 
-/* TOASTS */
-.toasts{position:fixed;bottom:20px;right:20px;z-index:600;display:flex;flex-direction:column;gap:6px;pointer-events:none}
-.toast{background:var(--card);border:1px dashed var(--bdr2);border-radius:5px;padding:9px 13px;font-family:var(--mono);font-size:11px;color:var(--br);max-width:280px;min-width:160px;animation:tin .25s ease;pointer-events:auto}
-.toast.wrn{border-color:rgba(212,168,64,.3);color:var(--ylw)}
-.toast.err{border-color:rgba(212,68,68,.3);color:var(--red)}
-@keyframes tin{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
-.toast.out{animation:tout .25s ease forwards}
-@keyframes tout{to{opacity:0;transform:translateX(12px)}}
-
 @media(max-width:480px){
   .conn-lbl{display:none}.topbar{padding:0 12px}.app{padding:10px 12px 80px}
   .tl-word{font-size:16px;letter-spacing:4px}

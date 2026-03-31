@@ -10,7 +10,7 @@ import StreamModal from '../components/social/StreamModal.vue'
 import LiveStrip from '../components/social/LiveStrip.vue'
 import PostCard from '../components/social/PostCard.vue'
 import Composer from '../components/social/Composer.vue'
-import ToastContainer from '../components/social/ToastContainer.vue'
+import ToastContainer from '../components/ToastContainer.vue'
 
 // Auto-auths as guest - no auth gate needed
 const { client, userName, authToken, connect, loginAsGuest } = useRelay()

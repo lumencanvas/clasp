@@ -1,4 +1,6 @@
 <script setup>
+import { computed } from 'vue'
+
 const props = defineProps({
   role: String, // 'host' | 'speaker' | 'listener'
   isMuted: Boolean,
@@ -9,8 +11,6 @@ const props = defineProps({
 const emit = defineEmits(['toggle-chat', 'toggle-hand', 'toggle-mic', 'end-room', 'leave'])
 
 const canSpeak = computed(() => props.role === 'host' || props.role === 'speaker')
-
-import { computed } from 'vue'
 </script>
 
 <template>

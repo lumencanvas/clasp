@@ -79,7 +79,7 @@ const demos = [
     <footer class="hub-footer container">
       <p>
         Built on <a href="https://clasp.to" target="_blank">CLASP</a>
-        &mdash; the real-time protocol for connected devices.
+        -- the real-time protocol for connected devices.
       </p>
       <p class="footer-links">
         <a href="https://docs.clasp.to" target="_blank">Docs</a>

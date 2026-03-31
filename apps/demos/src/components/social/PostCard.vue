@@ -1,6 +1,9 @@
 <script setup>
+import { ref } from 'vue'
+
 const props = defineProps({ post: Object, isOwn: Boolean, ageTick: Number })
 const emit = defineEmits(['react', 'delete'])
+const imgBroken = ref(false)
 
 function fmtAge(ts) {
   const s = Math.floor((Date.now() - ts) / 1000)
@@ -32,7 +35,7 @@ function expiryPct(p) {
       </div>
     </div>
     <div v-if="post.text" class="pb">{{ post.text }}</div>
-    <div v-if="post.image" class="pimg"><img :src="post.image" loading="lazy" @error="$event.target.parentElement.style.display='none'" /></div>
+    <div v-if="post.image && !imgBroken" class="pimg"><img :src="post.image" loading="lazy" @error="imgBroken = true" /></div>
     <div class="pf">
       <button v-for="rk in ['zap', 'rep', 'heart']" :key="rk" class="ab rb" :class="{ act: post.myReactions?.[rk] }" @click="emit('react', post.id, rk)">
         <svg v-if="rk === 'zap'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
