@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AudioSpace on CLASP</title>
+<!--
+  Serve from HTTP, not file://.
+    python3 -m http.server 8080
+    npx serve .
+  Then open http://localhost:8080/audiospace.html
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0a0a0a; --surface: #141414; --surface2: #1c1c1c; --border: #252525;
+  --text: #e0e0e0; --text2: #888; --text3: #444;
+  --accent: #00e5c8; --accent-dim: rgba(0,229,200,0.12);
+  --danger: #ff6b6b; --warn: #f59e0b; --purple: #a78bfa;
+  --mono: 'JetBrains Mono', 'SF Mono', monospace;
+  --sans: 'Inter', -apple-system, sans-serif;
+}
+body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; display: flex; justify-content: center; }
+#app { width: 100%; max-width: 480px; min-height: 100vh; display: flex; flex-direction: column; position: relative; }
+.hidden { display: none !important; }
+
+/* ── Status Bar ─────── */
+.status-bar { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg); 
+position: sticky; top: 0; z-index: 20; }
+.logo-area { display: flex; align-items: center; gap: 8px; }
+.logo-text { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+.logo-sub { font-size: 9px; color: var(--text3); font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.1em; }
+.conn-status { display: flex; align-items: center; gap: 6px; font-size: 10px; font-family: var(--mono); color: var(--text3); }
+.conn-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--danger); transition: all 0.3s; }
+.conn-dot.on { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
+/* ── Shared ─────────── */
+.section-label { font-size: 10px; font-weight: 700; color: var(--text3); letter-spacing: 0.1em; font-family: var(--mono); padding: 8px 0 4px; }
+.btn { border: none; border-radius: 8px; padding: 10px 16px; font-family: var(--sans); font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.btn-primary { background: var(--accent); color: var(--bg); }
+.btn-primary:hover { box-shadow: 0 0 16px rgba(0,229,200,0.3); }
+.btn-ghost { background: var(--surface); color: var(--text2); border: 1px solid var(--border); }
+.btn-ghost:hover { border-color: var(--text2); }
+.btn-danger { background: rgba(255,107,107,0.1); color: var(--danger); border: 1px solid rgba(255,107,107,0.3); }
+.btn-danger:hover { background: rgba(255,107,107,0.2); }
+
+.input { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 14px; font-family: var(--sans); 
+outline: none; width: 100%; }
+.input:focus { border-color: var(--accent); }
+.input::placeholder { color: var(--text3); }
+
+/* ── Lobby ──────────── */
+.lobby { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+.user-card { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--surface); border-radius: 12px; border: 1px solid var(--border); }
+.user-info { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.user-name { font-size: 15px; font-weight: 600; cursor: pointer; }
+.user-name:hover .edit-hint { opacity: 1; }
+.edit-hint { font-size: 10px; color: var(--text3); font-family: var(--mono); opacity: 0.4; transition: opacity 0.2s; }
+.user-id { font-size: 10px; color: var(--text3); font-family: var(--mono); }
+
+.search-row { position: relative; }
+.search-row svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.search-input { padding-left: 36px; }
+
+.room-card { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; background: var(--surface); border-radius: 12px; border: 1px solid var(--border); cursor: 
+pointer; transition: all 0.2s; }
+.room-card:hover { border-color: var(--accent); box-shadow: 0 0 20px rgba(0,229,200,0.06); }
+.room-top { display: flex; align-items: center; gap: 8px; }
+.room-icon { color: var(--accent); width: 24px; text-align: center; font-size: 16px; }
+.room-name { font-size: 15px; font-weight: 600; flex: 1; }
+.room-meta { display: flex; align-items: center; gap: 12px; font-size: 11px; color: var(--text3); font-family: var(--mono); }
+.room-desc { font-size: 13px; color: var(--text2); padding-left: 32px; }
+.room-host { font-size: 11px; color: var(--text3); font-family: var(--mono); padding-left: 32px; }
+.room-empty { text-align: center; padding: 32px 16px; color: var(--text3); font-family: var(--mono); font-size: 13px; line-height: 1.8; }
+
+.lobby-footer { margin-top: auto; padding: 20px 0 8px; text-align: center; font-size: 10px; color: var(--text3); font-family: var(--mono); line-height: 1.6; }
+.lobby-footer a { color: rgba(0,229,200,0.25); text-decoration: none; }
+
+/* ── Create Room Modal ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 50; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: 
+blur(4px); }
+.modal-overlay.center { align-items: center; }
+.modal { width: 100%; max-width: 480px; background: var(--surface); border-radius: 16px 16px 0 0; padding: 20px 16px 24px; display: flex; flex-direction: column; gap: 14px; 
+border-top: 1px solid var(--border); animation: slideUp 0.2s ease; }
+.modal.centered { border-radius: 16px; }
+.modal-title { font-size: 16px; font-weight: 700; display: flex; align-items: center; justify-content: space-between; }
+.modal-close { background: none; border: none; color: var(--text2); cursor: pointer; font-size: 20px; padding: 4px; }
+.modal label { font-size: 11px; font-weight: 600; color: var(--text2); font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em; }
+.modal .field { display: flex; flex-direction: column; gap: 6px; }
+.icon-picker { display: flex; gap: 8px; flex-wrap: wrap; }
+.icon-opt { width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text2); font-size: 18px; cursor: pointer; 
+display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.icon-opt.sel { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.modal-actions { display: flex; gap: 8px; padding-top: 4px; }
+.modal-actions .btn { flex: 1; text-align: center; }
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+/* ── Room View ─────── */
+.room-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.room-header { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--bg); }
+.back-btn { background: none; border: none; cursor: pointer; padding: 4px; color: var(--text2); display: flex; }
+.room-header-info { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.room-header-icon { font-size: 14px; color: var(--accent); }
+.room-header-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.host-badge { font-size: 9px; font-family: var(--mono); color: var(--purple); background: rgba(167,139,250,0.12); padding: 2px 6px; border-radius: 4px; letter-spacing: 
+0.06em; flex-shrink: 0; }
+.live-tag { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; color: var(--danger); font-family: var(--mono); letter-spacing: 0.08em; 
+flex-shrink: 0; }
+.live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 8px var(--danger); animation: pulse 1.5s ease infinite; }
+
+/* ── Stage ──────────── */
+.stage { padding: 16px; border-bottom: 1px solid var(--border); min-height: 140px; }
+.speakers-grid { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
+.empty-stage { font-size: 12px; color: var(--text3); text-align: center; padding: 24px 0; font-family: var(--mono); }
+.speaker-tile { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 80px; position: relative; }
+.speaker-name { font-size: 10px; color: var(--text2); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
+.speaker-host-tag { font-size: 8px; color: var(--purple); font-family: var(--mono); }
+.speaking-bars { display: flex; gap: 2px; align-items: flex-end; height: 10px; }
+.speaking-bars span { width: 3px; border-radius: 1px; background: var(--accent); animation: barBounce 0.5s ease infinite alternate; }
+.speaking-bars span:nth-child(1) { height: 4px; animation-delay: 0s; }
+.speaking-bars span:nth-child(2) { height: 10px; animation-delay: 0.15s; }
+.speaking-bars span:nth-child(3) { height: 6px; animation-delay: 0.3s; }
+.speaker-tile .host-action { display: flex; align-items: center; justify-content: center; gap: 2px; padding: 3px 8px; border-radius: 6px; background: 
+rgba(255,107,107,0.15); color: var(--danger); font-size: 9px; font-family: var(--mono); font-weight: 600; border: 1px solid rgba(255,107,107,0.3); cursor: pointer; z-index: 
+3; margin-top: 2px; transition: all 0.15s; letter-spacing: 0.02em; }
+.speaker-tile .host-action:hover { background: rgba(255,107,107,0.25); }
+
+/* ── Avatar ─────────── */
+.avatar-wrap { position: relative; flex-shrink: 0; }
+.avatar-ring { position: absolute; top: 50%; left: 50%; border-radius: 50%; border: 2px solid var(--accent); transform: translate(-50%, -50%); transition: all 0.1s; 
+pointer-events: none; }
+.avatar { border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-family: var(--mono); position: relative; z-index: 1; }
+
+/* ── Listeners ──────── */
+.listeners-section { flex: 1; padding: 12px 16px; overflow-y: auto; }
+.listeners-label { font-size: 10px; font-weight: 700; color: var(--text3); letter-spacing: 0.1em; font-family: var(--mono); margin-bottom: 10px; }
+.hands-count { color: var(--warn); }
+.listeners-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+.listener-tile { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 68px; position: relative; }
+.hand-icon { position: absolute; top: -4px; right: 2px; font-size: 12px; animation: wave 1s ease infinite alternate; z-index: 2; }
+.listener-name { font-size: 9px; color: var(--text2); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
+.listener-tile .promote-btn { display: flex; align-items: center; justify-content: center; gap: 2px; padding: 3px 8px; border-radius: 6px; background: var(--accent-dim); 
+color: var(--accent); font-size: 9px; font-family: var(--mono); font-weight: 600; border: 1px solid rgba(0,229,200,0.3); cursor: pointer; z-index: 3; margin-top: 2px; 
+transition: all 0.15s; letter-spacing: 0.02em; }
+.listener-tile .promote-btn:hover { background: rgba(0,229,200,0.2); }
+
+/* ── Chat ───────────── */
+.chat-panel { border-top: 1px solid var(--border); background: var(--bg); max-height: 190px; display: flex; flex-direction: column; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 8px 16px; display: flex; flex-direction: column; gap: 3px; }
+.chat-msg { font-size: 12px; line-height: 1.4; }
+.chat-msg .author { font-weight: 600; margin-right: 6px; }
+.chat-msg .text { color: var(--text2); }
+.chat-msg .sys { color: var(--text3); font-style: italic; }
+.chat-input-row { padding: 8px 16px; border-top: 1px solid var(--border); }
+
+/* ── Controls ──────── */
+.controls { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--border); background: var(--bg); }
+.ctrl-btn { width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--text2); display: flex; align-items: 
+center; justify-content: center; cursor: pointer; transition: all 0.2s; }
+.ctrl-btn:hover { border-color: var(--text2); }
+.ctrl-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.ctrl-btn.leave { border-color: rgba(255,107,107,0.25); color: var(--danger); }
+.ctrl-btn.leave:hover { background: rgba(255,107,107,0.08); }
+.ctrl-btn.end-room { border-color: rgba(255,107,107,0.4); color: var(--danger); background: rgba(255,107,107,0.08); }
+.mic-btn { width: 56px; height: 56px; border-radius: 50%; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.15s; 
+background: var(--surface2); }
+.mic-btn.on { background: var(--accent); }
+.mic-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ── Toast ──────────── */
+.toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: var(--surface2); color: var(--text); font-size: 13px; padding: 10px 20px; 
+border-radius: 10px; border: 1px solid var(--border); z-index: 60; animation: fadeToast 2.5s ease forwards; pointer-events: none; }
+@keyframes fadeToast { 0% { opacity: 0; transform: translateX(-50%) translateY(10px); } 10% { opacity: 1; transform: translateX(-50%) translateY(0); } 80% { opacity: 1; } 
+100% { opacity: 0; } }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+@keyframes barBounce { 0% { transform: scaleY(0.4); } 100% { transform: scaleY(1); } }
+@keyframes wave { 0% { transform: rotate(-12deg); } 100% { transform: rotate(12deg); } }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <div class="logo-area">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="#00e5c8" stroke-width="1.5" fill="none"/><circle cx="10" cy="10" 
+r="3" fill="#00e5c8"/><line x1="10" y1="2" x2="10" y2="6" stroke="#00e5c8" stroke-width="1.5"/><line x1="10" y1="14" x2="10" y2="18" stroke="#00e5c8" 
+stroke-width="1.5"/><line x1="2" y1="10" x2="6" y2="10" stroke="#00e5c8" stroke-width="1.5"/><line x1="14" y1="10" x2="18" y2="10" stroke="#00e5c8" 
+stroke-width="1.5"/></svg>
+      <span class="logo-text">AudioSpace</span>
+      <span class="logo-sub">on CLASP</span>
+    </div>
+    <div class="conn-status"><div class="conn-dot" id="connDot"></div><span id="connLabel">connecting...</span></div>
+  </div>
+
+  <!-- LOBBY -->
+  <div class="lobby" id="lobbyView">
+    <div class="user-card">
+      <div class="avatar-wrap" style="width:44px;height:44px"><div class="avatar" id="myAvatar" style="width:44px;height:44px;font-size:16px"></div></div>
+      <div class="user-info">
+        <div class="user-name" id="userNameDisplay"><span id="nameText"></span><span class="edit-hint"> [edit]</span></div>
+        <input class="input hidden" id="nameInput" maxlength="24" style="padding:4px 8px;font-size:15px;font-weight:600">
+        <div class="user-id" id="userIdDisplay"></div>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="createRoomBtn" style="width:100%">+ New Room</button>
+    <div class="search-row">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="#444" stroke-width="1.5"/><line x1="11" y1="11" x2="14" y2="14" 
+stroke="#444" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <input class="input search-input" id="searchInput" placeholder="search rooms...">
+    </div>
+    <div class="section-label">LIVE ROOMS</div>
+    <div id="roomList"></div>
+    <div class="lobby-footer">powered by CLASP -- Creative Low-Latency Application Streaming Protocol<br><a href="https://github.com/lumencanvas/clasp" 
+target="_blank">github.com/lumencanvas/clasp</a></div>
+  </div>
+
+  <!-- CREATE ROOM MODAL -->
+  <div class="modal-overlay hidden" id="createModal">
+    <div class="modal">
+      <div class="modal-title">Create a Room <button class="modal-close" id="createModalClose">&times;</button></div>
+      <div class="field"><label>Room Name</label><input class="input" id="newRoomName" placeholder="e.g. Firmware Friday" maxlength="48"></div>
+      <div class="field"><label>Description</label><input class="input" id="newRoomDesc" placeholder="what's this about?" maxlength="120"></div>
+      <div class="field"><label>Icon</label><div class="icon-picker" id="iconPicker"></div></div>
+      <div class="modal-actions"><button class="btn btn-ghost" id="createCancel">Cancel</button><button class="btn btn-primary" id="createConfirm">Go Live</button></div>
+    </div>
+  </div>
+
+  <!-- ROOM VIEW -->
+  <div class="room-view hidden" id="roomView">
+    <div class="room-header">
+      <button class="back-btn" id="backBtn"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12 4L6 10L12 16" stroke="currentColor" stroke-width="2" 
+stroke-linecap="round"/></svg></button>
+      <div class="room-header-info">
+        <span class="room-header-icon" id="roomIcon"></span>
+        <span class="room-header-name" id="roomName"></span>
+        <span class="host-badge hidden" id="hostBadge">HOST</span>
+      </div>
+      <div class="live-tag"><div class="live-dot"></div>LIVE</div>
+    </div>
+    <div class="stage"><div class="section-label">ON STAGE</div><div class="speakers-grid" id="speakersGrid"></div></div>
+    <div class="listeners-section"><div class="listeners-label" id="listenersLabel">LISTENERS (0)</div><div class="listeners-grid" id="listenersGrid"></div></div>
+    <div class="chat-panel hidden" id="chatPanel"><div class="chat-messages" id="chatMessages"></div><div class="chat-input-row"><input class="input" id="chatInput" 
+placeholder="say something..." maxlength="200" style="font-size:13px;padding:8px 12px"></div></div>
+    <div class="controls" id="controlsBar"></div>
+  </div>
+
+  <!-- ENDED OVERLAY -->
+  <div class="modal-overlay center hidden" id="endedOverlay">
+    <div class="modal centered" style="text-align:center;padding:32px 16px">
+      <div style="font-size:40px;margin-bottom:8px;opacity:0.4">&times;</div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:6px">Room Ended</div>
+      <div style="color:var(--text2);font-size:14px;margin-bottom:20px">The host closed this room.</div>
+      <button class="btn btn-primary" id="endedBackBtn" style="width:100%">Back to Lobby</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { ClaspBuilder } from 'https://esm.sh/@clasp-to/core@4.3.0';
+
+// ═══════════════════════════════════════════════════════════════
+const RELAY = 'wss://relay.clasp.to';
+const PREFIX = '/audiospace';
+const DIR = `${PREFIX}/directory`;
+const SPEAKING_THRESHOLD = 0.02;
+const RTC_CFG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
+
+const NAMES = ['Signal Ghost','Neon Drift','Pulse Echo','Wire Fox','Flux Moth','Byte Raven','Arc Shade','Phase Wolf','Glitch Owl','Node Lynx','Void Crane','Bit Hawk','Sync 
+Hare','Loop Finch','Ping Mink'];
+const COLORS = ['#00E5C8','#FF6B6B','#A78BFA','#F59E0B','#3B82F6','#EC4899','#10B981','#F97316','#06B6D4','#8B5CF6'];
+const ICONS = ['\u25C9','\u2699','\u25C8','\u2318','\u2605','\u266B','\u2736','\u25CE','\u2622','\u269B','\u2764','\u2660'];
+
+function rnd(a) { return a[Math.floor(Math.random() * a.length)]; }
+function aCol(id) { let h=0; for(let i=0;i<id.length;i++) h=(h<<5)-h+id.charCodeAt(i); return COLORS[Math.abs(h)%COLORS.length]; }
+function ini(id) { return id.slice(2,4).toUpperCase(); }
+function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+function rid() { return 'r_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function toast(m) { const t=document.createElement('div'); t.className='toast'; t.textContent=m; document.body.appendChild(t); setTimeout(()=>t.remove(),2600); }
+const $=id=>document.getElementById(id);
+
+function avHTML(id,sz,col,spk,vol) {
+  const c=col||aCol(id), rs=spk?sz+8+(vol||0)*14:0;
+  let ring='';
+  if(spk) ring=`<div class="avatar-ring" style="width:${rs}px;height:${rs}px;opacity:${0.4+(vol||0)};box-shadow:0 0 ${10+(vol||0)*20}px ${c}44"></div>`;
+  return `<div class="avatar-wrap" style="width:${sz}px;height:${sz}px">${ring}<div class="avatar" 
+style="width:${sz}px;height:${sz}px;font-size:${sz*0.35}px;background:linear-gradient(135deg,${c}33,${c}11);border:2px solid ${c}88;color:${c}">${ini(id)}</div></div>`;
+}
+
+const MIC_ON=`<path d="M14 3a3 3 0 00-3 3v7a3 3 0 006 0V6a3 3 0 00-3-3z" stroke="#0a0a0a" stroke-width="1.5"/><path d="M8 12v1a6 6 0 0012 0v-1" stroke="#0a0a0a" 
+stroke-width="1.5" stroke-linecap="round"/><line x1="14" y1="19" x2="14" y2="24" stroke="#0a0a0a" stroke-width="1.5"/>`;
+const MIC_OFF=`<path d="M14 3a3 3 0 00-3 3v7a3 3 0 006 0V6a3 3 0 00-3-3z" stroke="#888" stroke-width="1.5"/><path d="M8 12v1a6 6 0 0012 0v-1" stroke="#888" 
+stroke-width="1.5" stroke-linecap="round"/><line x1="14" y1="19" x2="14" y2="24" stroke="#888" stroke-width="1.5"/><line x1="4" y1="4" x2="24" y2="24" stroke="#ff6b6b" 
+stroke-width="2" stroke-linecap="round"/>`;
+
+// ═══════════════════════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════════════════════
+let clasp=null;
+const myId='u_'+Math.random().toString(36).slice(2,10);
+let myName=rnd(NAMES);
+const myColor=aCol(myId);
+let currentRoom=null, myRole='listener', isMuted=true, handUp=false, chatOpen=false;
+let localStream=null, audioContext=null, analyser=null, volumeRAF=null, myVolume=0;
+const peers={};
+let participants={}, speakingState={}, handState={}, roomDirectory={};
+let unsubs=[], presenceInterval=null, searchQuery='';
+
+// ═══════════════════════════════════════════════════════════════
+// CLASP
+// ═══════════════════════════════════════════════════════════════
+async function initClasp() {
+  try {
+    clasp = await new ClaspBuilder(RELAY).withName('audiospace-'+myId).withReconnect(true,3000).connect();
+    $('connDot').classList.add('on');
+    $('connLabel').textContent='relay.clasp.to';
+    console.log('[CLASP] Connected:',clasp.session);
+  } catch(e) {
+    console.warn('[CLASP] Connect failed:',e.message||e);
+    $('connLabel').textContent='reconnecting...';
+    setTimeout(initClasp,3000);
+    return;
+  }
+  clasp.onConnect(()=>{ $('connDot').classList.add('on'); $('connLabel').textContent='relay.clasp.to'; if(currentRoom) announcePresence(); });
+  clasp.onDisconnect(()=>{ $('connDot').classList.remove('on'); $('connLabel').textContent='reconnecting...'; });
+
+  // Subscribe to room directory
+  clasp.on(`${DIR}/**`,(val,addr)=>{
+    const id=addr.split('/').pop();
+    if(!val||val.__ended) {
+      if(currentRoom&&currentRoom.id===id&&myRole!=='host') showRoomEnded();
+      delete roomDirectory[id];
+    } else {
+      roomDirectory[id]=val;
+    }
+    renderRoomList();
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Lobby
+// ═══════════════════════════════════════════════════════════════
+function renderLobby() {
+  $('nameText').textContent=myName;
+  $('userIdDisplay').textContent=myId;
+  const a=$('myAvatar');
+  a.style.background=`linear-gradient(135deg,${myColor}33,${myColor}11)`;
+  a.style.border=`2px solid ${myColor}88`;
+  a.style.color=myColor;
+  a.textContent=ini(myId);
+}
+
+function renderRoomList() {
+  const list=$('roomList');
+  let rooms=Object.values(roomDirectory).filter(r=>r&&!r.__ended);
+  rooms.sort((a,b)=>(b.count||0)-(a.count||0)||(b.createdAt||0)-(a.createdAt||0));
+  if(searchQuery) {
+    const q=searchQuery.toLowerCase();
+    rooms=rooms.filter(r=>(r.name||'').toLowerCase().includes(q)||(r.desc||'').toLowerCase().includes(q)||(r.hostName||'').toLowerCase().includes(q));
+  }
+  if(!rooms.length) { list.innerHTML=`<div class="room-empty">${searchQuery?'no rooms match that search':'no rooms live right now<br>start one!'}</div>`; return; }
+  list.innerHTML=rooms.map(r=>`
+    <div class="room-card" data-rid="${r.id}">
+      <div class="room-top"><span class="room-icon">${r.icon||'\u25C9'}</span><span class="room-name">${esc(r.name||'Untitled')}</span><div 
+class="room-meta"><span>${r.count||0} in room</span></div></div>
+      ${r.desc?`<div class="room-desc">${esc(r.desc)}</div>`:''}
+      <div class="room-host">hosted by ${esc(r.hostName||'unknown')}</div>
+    </div>`).join('');
+  list.querySelectorAll('.room-card').forEach(c=>c.addEventListener('click',()=>joinRoom(c.dataset.rid)));
+}
+
+$('searchInput').addEventListener('input',e=>{ searchQuery=e.target.value.trim(); renderRoomList(); });
+
+$('userNameDisplay').addEventListener('click',()=>{
+  const inp=$('nameInput'), disp=$('userNameDisplay');
+  inp.value=myName; inp.classList.remove('hidden'); disp.classList.add('hidden'); inp.focus();
+  function fin(){ const v=inp.value.trim(); if(v) myName=v; inp.classList.add('hidden'); disp.classList.remove('hidden'); $('nameText').textContent=myName; 
+inp.removeEventListener('blur',fin); inp.removeEventListener('keydown',kd); }
+  function kd(e){ if(e.key==='Enter') fin(); }
+  inp.addEventListener('blur',fin); inp.addEventListener('keydown',kd);
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Create Room Modal
+// ═══════════════════════════════════════════════════════════════
+let selIcon=ICONS[0];
+
+function renderIconPicker() {
+  $('iconPicker').innerHTML=ICONS.map(i=>`<button class="icon-opt ${i===selIcon?'sel':''}" data-i="${i}">${i}</button>`).join('');
+  $('iconPicker').querySelectorAll('.icon-opt').forEach(b=>b.addEventListener('click',()=>{ selIcon=b.dataset.i; renderIconPicker(); }));
+}
+
+$('createRoomBtn').addEventListener('click',()=>{ $('createModal').classList.remove('hidden'); $('newRoomName').value=''; $('newRoomDesc').value=''; selIcon=ICONS[0]; 
+renderIconPicker(); $('newRoomName').focus(); });
+$('createModalClose').addEventListener('click',()=>$('createModal').classList.add('hidden'));
+$('createCancel').addEventListener('click',()=>$('createModal').classList.add('hidden'));
+
+$('createConfirm').addEventListener('click',()=>{
+  const name=$('newRoomName').value.trim();
+  if(!name){ $('newRoomName').focus(); return; }
+  const desc=$('newRoomDesc').value.trim();
+  const id=rid();
+  const meta={ id, name, desc, icon:selIcon, hostId:myId, hostName:myName, createdAt:Date.now(), count:1 };
+  if(clasp?.connected) clasp.set(`${DIR}/${id}`,meta);
+  $('createModal').classList.add('hidden');
+  joinRoom(id,meta);
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Join Room
+// ═══════════════════════════════════════════════════════════════
+function joinRoom(roomId,metaOverride) {
+  if(!clasp?.connected){ toast('Not connected to relay'); return; }
+  const meta=metaOverride||roomDirectory[roomId];
+  if(!meta){ toast('Room not found'); return; }
+
+  currentRoom=meta;
+  myRole=(meta.hostId===myId)?'host':'listener';
+  isMuted=true; handUp=false; chatOpen=false;
+  participants={}; speakingState={}; handState={};
+  cleanupRoom();
+
+  $('lobbyView').classList.add('hidden');
+  $('roomView').classList.remove('hidden');
+  $('endedOverlay').classList.add('hidden');
+  $('roomIcon').textContent=meta.icon||'\u25C9';
+  $('roomName').textContent=meta.name;
+  $('hostBadge').classList.toggle('hidden',myRole!=='host');
+  $('chatPanel').classList.add('hidden');
+  $('chatMessages').innerHTML='';
+  renderControls();
+
+  const base=`${PREFIX}/rooms/${roomId}`;
+
+  unsubs.push(clasp.on(`${base}/participants/**`,(v,a)=>{
+    const uid=a.split('/').pop();
+    if(!v||v.__left){ delete participants[uid]; destroyPeer(uid); }
+    else { const isNew=!participants[uid]; participants[uid]=v; if(isNew&&uid!==myId&&uid>myId) createPC(uid,true); }
+    updateDirCount(); renderRoom();
+  }));
+
+  unsubs.push(clasp.on(`${base}/speaking/**`,(v,a)=>{ const uid=a.split('/').pop(); if(v) speakingState[uid]=v; renderRoom(); }));
+  unsubs.push(clasp.on(`${base}/hands/**`,(v,a)=>{ handState[a.split('/').pop()]=v; renderRoom(); }));
+  unsubs.push(clasp.on(`${base}/chat/**`,(v)=>{ if(v?.text) appendChat(v); }));
+
+  unsubs.push(clasp.on(`${base}/signal/${myId}/**`,(v,a)=>{ if(v) handleSig(a.split('/').pop(),v); }));
+
+  // Role changes from host
+  unsubs.push(clasp.on(`${base}/roles/${myId}`,(v)=>{
+    if(!v||myRole==='host') return;
+    if(v.role==='speaker'&&myRole!=='speaker'){ myRole='speaker'; toast('You were invited to speak!'); renderControls(); announcePresence(); }
+    else if(v.role==='listener'&&myRole==='speaker'){ myRole='listener'; if(!isMuted){ stopMic(); isMuted=true; } toast('Moved to listeners'); renderControls(); 
+announcePresence(); }
+  }));
+
+  // Room ended
+  unsubs.push(clasp.on(`${base}/ended`,(v)=>{ if(v?.ended&&myRole!=='host') showRoomEnded(); }));
+
+  announcePresence();
+  presenceInterval=setInterval(announcePresence,6000);
+}
+
+function announcePresence() {
+  if(!clasp?.connected||!currentRoom) return;
+  clasp.set(`${PREFIX}/rooms/${currentRoom.id}/participants/${myId}`,{
+    id:myId, name:myName, role:myRole==='host'?'speaker':myRole, color:myColor, isHost:myRole==='host', ts:Date.now()
+  });
+}
+
+function updateDirCount() {
+  if(!clasp||!currentRoom) return;
+  const count=Object.values(participants).filter(p=>!p.__left).length;
+  clasp.set(`${DIR}/${currentRoom.id}`,{...roomDirectory[currentRoom.id],...currentRoom,count});
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Leave / End Room
+// ═══════════════════════════════════════════════════════════════
+function leaveRoom() {
+  if(!currentRoom) return;
+  if(clasp?.connected) {
+    clasp.set(`${PREFIX}/rooms/${currentRoom.id}/participants/${myId}`,{__left:true,ts:Date.now()});
+    clasp.set(`${PREFIX}/rooms/${currentRoom.id}/speaking/${myId}`,null);
+    clasp.set(`${PREFIX}/rooms/${currentRoom.id}/hands/${myId}`,null);
+  }
+  cleanupRoom(); stopMic();
+  currentRoom=null; myRole='listener'; isMuted=true; handUp=false; chatOpen=false;
+  $('roomView').classList.add('hidden'); $('lobbyView').classList.remove('hidden'); renderRoomList();
+}
+
+function endRoom() {
+  if(!currentRoom||myRole!=='host') return;
+  if(!confirm('End this room for everyone?')) return;
+  if(clasp?.connected) {
+    clasp.set(`${PREFIX}/rooms/${currentRoom.id}/ended`,{ended:true,ts:Date.now()});
+    clasp.set(`${DIR}/${currentRoom.id}`,{__ended:true,ts:Date.now()});
+  }
+  leaveRoom(); toast('Room ended');
+}
+
+function showRoomEnded() { cleanupRoom(); stopMic(); $('endedOverlay').classList.remove('hidden'); }
+
+$('endedBackBtn').addEventListener('click',()=>{
+  currentRoom=null; myRole='listener'; isMuted=true;
+  $('roomView').classList.add('hidden'); $('endedOverlay').classList.add('hidden'); $('lobbyView').classList.remove('hidden'); renderRoomList();
+});
+$('backBtn').addEventListener('click',leaveRoom);
+
+function cleanupRoom() { unsubs.forEach(u=>{try{u()}catch(e){}}); unsubs=[]; if(presenceInterval){clearInterval(presenceInterval);presenceInterval=null;} 
+Object.keys(peers).forEach(destroyPeer); }
+
+// ═══════════════════════════════════════════════════════════════
+// Host Controls
+// ═══════════════════════════════════════════════════════════════
+function promote(uid) {
+  if(myRole!=='host'||!clasp||!currentRoom) return;
+  clasp.set(`${PREFIX}/rooms/${currentRoom.id}/roles/${uid}`,{role:'speaker',ts:Date.now()});
+  clasp.set(`${PREFIX}/rooms/${currentRoom.id}/hands/${uid}`,null);
+  toast(`Invited ${participants[uid]?.name||uid} to speak`);
+}
+
+function demote(uid) {
+  if(myRole!=='host'||!clasp||!currentRoom||uid===myId) return;
+  clasp.set(`${PREFIX}/rooms/${currentRoom.id}/roles/${uid}`,{role:'listener',ts:Date.now()});
+  toast(`Moved ${participants[uid]?.name||uid} to listeners`);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Controls Bar
+// ═══════════════════════════════════════════════════════════════
+function renderControls() {
+  const bar=$('controlsBar');
+  const canSpeak=myRole==='host'||myRole==='speaker';
+  let h='';
+
+  h+=`<button class="ctrl-btn ${chatOpen?'active':''}" id="chatBtn" title="Chat"><svg width="18" height="18" viewBox="0 0 22 22" fill="none"><path d="M4 4h14a2 2 0 012 
+2v8a2 2 0 01-2 2H8l-4 4V6a2 2 0 012-2z" stroke="currentColor" stroke-width="1.5"/></svg></button>`;
+
+  if(myRole==='listener') h+=`<button class="ctrl-btn ${handUp?'active':''}" id="handBtn" title="Request to speak"><svg width="18" height="18" viewBox="0 0 22 22" 
+fill="none"><path d="M11 2v8M8 5v5M14 5v5M5 9v4a6 6 0 0012 0V9M17 9v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>`;
+
+  if(canSpeak) h+=`<button class="mic-btn ${isMuted?'':'on'}" id="micBtn"><svg width="26" height="26" viewBox="0 0 28 28" fill="none" 
+id="micIcon">${isMuted?MIC_OFF:MIC_ON}</svg></button>`;
+  else h+=`<button class="mic-btn" disabled><svg width="26" height="26" viewBox="0 0 28 28" fill="none">${MIC_OFF}</svg></button>`;
+
+  if(myRole==='host') h+=`<button class="ctrl-btn end-room" id="endRoomBtn" title="End room"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="4" y="4" 
+width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="1.5" 
+stroke-linecap="round"/><line x1="12" y1="8" x2="8" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>`;
+
+  h+=`<button class="ctrl-btn leave" id="leaveBtn" title="Leave"><svg width="18" height="18" viewBox="0 0 22 22" fill="none"><path d="M9 4H5a2 2 0 00-2 2v10a2 2 0 002 
+2h4M15 7l4 4-4 4M8 11h11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`;
+
+  bar.innerHTML=h;
+  $('chatBtn')?.addEventListener('click',toggleChat);
+  $('handBtn')?.addEventListener('click',toggleHand);
+  $('micBtn')?.addEventListener('click',toggleMic);
+  $('endRoomBtn')?.addEventListener('click',endRoom);
+  $('leaveBtn')?.addEventListener('click',leaveRoom);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// WebRTC
+// ═══════════════════════════════════════════════════════════════
+async function createPC(pid,init) {
+  if(peers[pid]) return;
+  const pc=new RTCPeerConnection(RTC_CFG);
+  const el=document.createElement('audio'); el.autoplay=true; el.playsInline=true; document.body.appendChild(el);
+  peers[pid]={pc,audioEl:el,stream:null};
+  if(localStream) localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
+  pc.ontrack=ev=>{ el.srcObject=ev.streams[0]; peers[pid].stream=ev.streams[0]; analyzeRemote(pid,ev.streams[0]); };
+  pc.onicecandidate=ev=>{ if(ev.candidate&&clasp?.connected&&currentRoom) 
+clasp.set(`${PREFIX}/rooms/${currentRoom.id}/signal/${pid}/${myId}`,{type:'ice',candidate:ev.candidate.toJSON(),ts:Date.now()}); };
+  if(init) {
+    if(!localStream) pc.addTransceiver('audio',{direction:'recvonly'});
+    const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
+    clasp.set(`${PREFIX}/rooms/${currentRoom.id}/signal/${pid}/${myId}`,{type:'offer',sdp:offer.sdp,ts:Date.now()});
+  }
+}
+
+async function handleSig(from,d) {
+  if(d.type==='offer') {
+    if(!peers[from]) await createPC(from,false);
+    const pc=peers[from].pc;
+    await pc.setRemoteDescription(new RTCSessionDescription({type:'offer',sdp:d.sdp}));
+    if(localStream&&!pc.getSenders().length) localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
+    const ans=await pc.createAnswer(); await pc.setLocalDescription(ans);
+    clasp.set(`${PREFIX}/rooms/${currentRoom.id}/signal/${from}/${myId}`,{type:'answer',sdp:ans.sdp,ts:Date.now()});
+  } else if(d.type==='answer') {
+    if(peers[from]?.pc.signalingState==='have-local-offer') await peers[from].pc.setRemoteDescription(new RTCSessionDescription({type:'answer',sdp:d.sdp}));
+  } else if(d.type==='ice'&&peers[from]&&d.candidate) {
+    try{ await peers[from].pc.addIceCandidate(new RTCIceCandidate(d.candidate)); }catch(e){}
+  }
+}
+
+function destroyPeer(id){ if(!peers[id])return; try{peers[id].pc.close()}catch(e){} try{peers[id].audioEl.remove()}catch(e){} delete peers[id]; }
+
+function analyzeRemote(pid,stream) {
+  try {
+    if(!audioContext) audioContext=new(window.AudioContext||window.webkitAudioContext)();
+    const s=audioContext.createMediaStreamSource(stream),a=audioContext.createAnalyser();
+    a.fftSize=256; a.smoothingTimeConstant=0.7; s.connect(a);
+    const b=new Uint8Array(a.frequencyBinCount);
+    (function t(){ if(!peers[pid])return; a.getByteFrequencyData(b); const v=b.reduce((x,y)=>x+y,0)/b.length/255; 
+speakingState[pid]={speaking:v>SPEAKING_THRESHOLD,volume:v}; requestAnimationFrame(t); })();
+  } catch(e){}
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Microphone
+// ═══════════════════════════════════════════════════════════════
+async function startMic() {
+  try {
+    localStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+    if(!audioContext) audioContext=new(window.AudioContext||window.webkitAudioContext)();
+    const s=audioContext.createMediaStreamSource(localStream);
+    analyser=audioContext.createAnalyser(); analyser.fftSize=256; analyser.smoothingTimeConstant=0.8; s.connect(analyser);
+    const buf=new Uint8Array(analyser.frequencyBinCount);
+    (function t(){ if(!analyser)return; analyser.getByteFrequencyData(buf); myVolume=buf.reduce((a,b)=>a+b,0)/buf.length/255;
+      if(clasp?.connected&&currentRoom) clasp.stream(`${PREFIX}/rooms/${currentRoom.id}/speaking/${myId}`,{speaking:myVolume>SPEAKING_THRESHOLD,volume:myVolume});
+      speakingState[myId]={speaking:myVolume>SPEAKING_THRESHOLD,volume:myVolume}; renderRoom(); volumeRAF=requestAnimationFrame(t); })();
+    for(const[pid,peer] of Object.entries(peers)) {
+      const sn=peer.pc.getSenders();
+      localStream.getTracks().forEach(t=>{ const x=sn.find(s=>s.track?.kind===t.kind); if(x) x.replaceTrack(t); else peer.pc.addTrack(t,localStream); });
+      try{ const o=await peer.pc.createOffer(); await peer.pc.setLocalDescription(o); 
+clasp.set(`${PREFIX}/rooms/${currentRoom.id}/signal/${pid}/${myId}`,{type:'offer',sdp:o.sdp,ts:Date.now()}); }catch(e){}
+    }
+    return true;
+  } catch(e){ console.warn('Mic denied:',e); return false; }
+}
+
+function stopMic() {
+  if(volumeRAF){cancelAnimationFrame(volumeRAF);volumeRAF=null;}
+  if(localStream){localStream.getTracks().forEach(t=>t.stop());localStream=null;}
+  analyser=null; myVolume=0;
+  if(clasp?.connected&&currentRoom) clasp.stream(`${PREFIX}/rooms/${currentRoom.id}/speaking/${myId}`,{speaking:false,volume:0});
+  speakingState[myId]={speaking:false,volume:0};
+}
+
+async function toggleMic() {
+  if(myRole==='listener') return;
+  if(isMuted){ if(!(await startMic())) return; isMuted=false; } else { stopMic(); isMuted=true; }
+  updateMicBtn(); announcePresence(); renderRoom();
+}
+
+function updateMicBtn() {
+  const b=$('micBtn'),i=$('micIcon'); if(!b||!i) return;
+  if(isMuted){b.classList.remove('on');b.style.boxShadow='none';i.innerHTML=MIC_OFF;}
+  else{b.classList.add('on');i.innerHTML=MIC_ON;}
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Room Rendering
+// ═══════════════════════════════════════════════════════════════
+function renderRoom() {
+  if(!currentRoom) return;
+  const all=Object.values(participants).filter(p=>!p.__left);
+  const spk=all.filter(p=>p.role==='speaker'), lis=all.filter(p=>p.role!=='speaker');
+  const isHost=myRole==='host';
+
+  const sg=$('speakersGrid');
+  if(!spk.length) sg.innerHTML='<div class="empty-stage">no speakers yet</div>';
+  else {
+    sg.innerHTML=spk.map(p=>{
+      const ss=speakingState[p.id]||{}, vol=p.id===myId?myVolume:(ss.volume||0), me=p.id===myId;
+      const dem=(isHost&&!me&&!p.isHost)?`<button class="host-action" data-dem="${p.id}">\u2193 move down</button>`:'';
+      return `<div class="speaker-tile">${avHTML(p.id,60,p.color,ss.speaking,vol)}<span class="speaker-name">${esc(p.name)}${me?' (you)':''}</span>${p.isHost?'<span 
+class="speaker-host-tag">HOST</span>':''}${ss.speaking?'<div class="speaking-bars"><span></span><span></span><span></span></div>':''}${dem}</div>`;
+    }).join('');
+    sg.querySelectorAll('[data-dem]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();demote(b.dataset.dem);}));
+  }
+
+  const raised=Object.entries(handState).filter(([,v])=>v?.raised);
+  $('listenersLabel').innerHTML=`LISTENERS (${lis.length})${raised.length?` <span class="hands-count">${raised.length} hand${raised.length>1?'s':''} raised</span>`:''}`;
+
+  const sorted=[...lis].sort((a,b)=>(handState[b.id]?.raised?1:0)-(handState[a.id]?.raised?1:0));
+  const lg=$('listenersGrid');
+  lg.innerHTML=sorted.map(p=>{
+    const me=p.id===myId, hh=handState[p.id]?.raised;
+    const pro=(isHost&&!me)?`<button class="promote-btn" data-pro="${p.id}">\u2191 speak</button>`:'';
+    return `<div class="listener-tile">${hh?'<span class="hand-icon">\u270B</span>':''}${avHTML(p.id,42,p.color,false,0)}<span class="listener-name">${esc(p.name)}${me?' 
+(you)':''}</span>${pro}</div>`;
+  }).join('');
+  lg.querySelectorAll('[data-pro]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();promote(b.dataset.pro);}));
+
+  if(!isMuted){ const g=20+myVolume*60,o=0.3+myVolume*0.7; const mb=$('micBtn'); if(mb) mb.style.boxShadow=`0 0 ${g}px rgba(0,229,200,${o})`; }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Chat
+// ═══════════════════════════════════════════════════════════════
+function toggleChat() {
+  chatOpen=!chatOpen;
+  $('chatPanel').classList.toggle('hidden',!chatOpen);
+  $('chatBtn')?.classList.toggle('active',chatOpen);
+  if(chatOpen){$('chatInput').focus();scrl();}
+}
+
+function appendChat(m) {
+  const c=$('chatMessages'),d=document.createElement('div'); d.className='chat-msg';
+  d.innerHTML=`<span class="author" style="color:${m.color||'#888'}">${esc(m.userName)}</span><span class="text">${esc(m.text)}</span>`;
+  c.appendChild(d); while(c.children.length>80) c.removeChild(c.firstChild); scrl();
+}
+function scrl(){ const c=$('chatMessages'); c.scrollTop=c.scrollHeight; }
+
+$('chatInput').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){ const t=e.target.value.trim(); if(!t||!clasp||!currentRoom)return;
+    const mid=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+    clasp.emit(`${PREFIX}/rooms/${currentRoom.id}/chat/${mid}`,{id:mid,userId:myId,userName:myName,text:t,color:myColor,ts:Date.now()});
+    e.target.value='';
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Hand Raise
+// ═══════════════════════════════════════════════════════════════
+function toggleHand() {
+  if(!clasp||!currentRoom||myRole!=='listener') return;
+  handUp=!handUp;
+  clasp.set(`${PREFIX}/rooms/${currentRoom.id}/hands/${myId}`,{raised:handUp,ts:Date.now()});
+  $('handBtn')?.classList.toggle('active',handUp);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Boot
+// ═══════════════════════════════════════════════════════════════
+if(location.protocol==='file:'){
+  const b=document.createElement('div');
+  b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:999;background:#1a1000;color:#f59e0b;font-family:var(--mono);font-size:12px;padding:10px 
+16px;border-bottom:1px solid #f59e0b44;text-align:center;line-height:1.5';
+  b.innerHTML='file:// blocks WebSockets. Serve with <code style="background:#0a0a0a;padding:2px 6px;border-radius:3px">python3 -m http.server 8080</code>';
+  document.body.prepend(b);
+}
+renderLobby(); renderRoomList(); initClasp();
+</script>
+</body>
+</html>

@@ -571,7 +571,17 @@ var CLASP = (() => {
     console.warn('[ghost] @clasp-to/core not loaded — relay disabled');
     return;
    }
-   _relay = new _ClaspCore.Clasp(url);
+   // Get guest token from auth API
+   const authUrl = url.replace('wss://', 'https://').replace('ws://', 'http://');
+   let token;
+   try {
+    const res = await fetch(authUrl + '/auth/guest', {
+     method: 'POST', headers: {'Content-Type': 'application/json'},
+     body: JSON.stringify({name: 'ghost-' + SESSION})
+    });
+    if (res.ok) { const d = await res.json(); token = d.token; }
+   } catch(_) { console.warn('[ghost] auth failed, trying without token'); }
+   _relay = new _ClaspCore.Clasp(url, token ? {token} : {});
    await _relay.connect();
    _relayReady = true;
    console.info('[ghost] CLASP relay connected:', url);

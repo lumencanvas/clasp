@@ -207,7 +207,7 @@
       </svg>
       <div>
         <h1>CLASP FPS</h1>
-        <span>multiplayer via demo-relay.clasp.to</span>
+        <span>multiplayer via relay.clasp.to</span>
       </div>
     </div>
     <div class="field-group">
@@ -308,11 +308,10 @@
 <script>
 // =============================================================
 // CLASP FPS - multiplayer first person shooter
-// Three.js r128 + CLASP via demo-relay.clasp.to
+// Three.js r128 + CLASP 4.2.1 via relay.clasp.to
 // =============================================================
 
-const RELAY       = 'wss://demo-relay.clasp.to';
-const AUTH_URL    = 'https://demo-relay.clasp.to';
+const RELAY       = 'wss://relay.clasp.to';
 const TICK_MS     = 50;   // 20 hz position broadcast
 const MAX_HEALTH  = 100;
 const BULLET_DMG  = 25;
@@ -518,18 +517,6 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
-});
-
-window.addEventListener('beforeunload', () => {
-  if (claspClient && roomId) {
-    claspClient.set(`/fps/${roomId}/player/${myId}/leave`, { t: Date.now() });
-    claspClient.set(`/fps/${roomId}/player/${myId}/pos`, null);
-  }
-  if (broadcastInterval) clearInterval(broadcastInterval);
-});
-
-window.addEventListener('blur', () => {
-  Object.keys(keys).forEach(k => { keys[k] = false; });
 });
 
 // Lighting
@@ -801,7 +788,7 @@ document.addEventListener('pointerlockchange', () => {
 // =============================================================
 // GAME STATE
 // =============================================================
-let myId = '', myName = '', roomId = '', claspClient = null, broadcastInterval = null;
+let myId = '', myName = '', roomId = '', claspClient = null;
 let health = MAX_HEALTH, ammo = MAX_AMMO, reserve = RESERVE;
 let reloading = false, dead = false;
 let remotePlayers = new Map();
@@ -984,16 +971,7 @@ function getOrCreate(id, name, color) {
 
 function removePlayer(id) {
   const rp = remotePlayers.get(id);
-  if (rp?.mesh) {
-    rp.mesh.traverse(child => {
-      if (child.geometry) child.geometry.dispose();
-      if (child.material) {
-        if (child.material.map) child.material.map.dispose();
-        child.material.dispose();
-      }
-    });
-    scene.remove(rp.mesh);
-  }
+  if (rp?.mesh) scene.remove(rp.mesh);
   remotePlayers.delete(id);
   updatePlayerCountHUD();
 }
@@ -1025,21 +1003,10 @@ function tickRemotes(dt) {
 // =============================================================
 // CLASP NETWORKING
 // =============================================================
-async function getGuestToken(name) {
-  const res = await fetch(AUTH_URL + '/auth/guest', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  });
-  if (!res.ok) throw new Error('Auth failed: ' + res.status);
-  return res.json();
-}
-
 async function connectClasp() {
   setConnState('', 'connecting...');
   try {
-    const auth = await getGuestToken(myName);
-    claspClient = new CLASP.Clasp(RELAY, { name: myName, token: auth.token, reconnect: true });
+    claspClient = new CLASP.Clasp(RELAY, { name: myName, reconnect: true });
     await claspClient.connect();
     setConnState('connected', 'live');
     console.log('[CLASP] connected, session:', claspClient.session);
@@ -1089,19 +1056,10 @@ async function connectClasp() {
     broadcastPos();
 
     // Then on a timer - use set() not stream() so relay persists the value
-    broadcastInterval = setInterval(() => {
+    setInterval(() => {
       if (!claspClient) return;
       broadcastPos();
     }, TICK_MS);
-
-    // Connection lifecycle
-    claspClient.onDisconnect(() => {
-      setConnState('error', 'disconnected');
-    });
-    claspClient.onReconnect(() => {
-      setConnState('connected', 'live');
-      broadcastPos();
-    });
 
   } catch (err) {
     setConnState('error', 'failed: ' + err.message);
