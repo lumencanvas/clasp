@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRelay } from '../composables/useRelay.js'
 import { useToast } from '../composables/useToast.js'
 import { useAudioMesh } from '../composables/useAudioMesh.js'
@@ -23,6 +23,14 @@ const myId = ref(localStorage.getItem('clasp_spaces_id') || ('u_' + Date.now().t
 const myName = ref('')
 const myColor = computed(() => aCol(myId.value))
 localStorage.setItem('clasp_spaces_id', myId.value)
+
+// Sync identity when user signs in via AuthModal
+watch(userName, (n) => {
+  if (n && n !== myName.value) {
+    myName.value = n
+    if (currentRoom.value) announcePresence()
+  }
+})
 
 const PREFIX = '/audiospace'
 const DIR = `${PREFIX}/directory`
@@ -247,6 +255,7 @@ function sendChat(text) {
 
 // --- Lifecycle ---
 onMounted(async () => {
+  // Use auth name if available, otherwise pick a random one
   myName.value = userName.value || rnd(NAMES)
 
   try {

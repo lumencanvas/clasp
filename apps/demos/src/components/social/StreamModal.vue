@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, onMounted } from 'vue'
 
 const props = defineProps({
   show: Boolean,
@@ -11,19 +11,16 @@ const emit = defineEmits(['close', 'end', 'video-ready'])
 
 const videoEl = ref(null)
 
-watch(() => props.show, (v) => {
-  if (v) {
-    setTimeout(() => {
-      if (videoEl.value) emit('video-ready', videoEl.value)
-    }, 50)
-  }
+// Emit video-ready once on mount -- the element always exists (v-show, not v-if)
+onMounted(() => {
+  if (videoEl.value) emit('video-ready', videoEl.value)
 })
 
 defineExpose({ videoEl })
 </script>
 
 <template>
-  <div v-if="show" class="modal">
+  <div v-show="show" class="modal">
     <div class="mbk" @click="emit('close')"></div>
     <div class="mbox">
       <div class="mhd">

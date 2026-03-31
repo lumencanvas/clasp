@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRelay } from '../composables/useRelay.js'
 import { useToast } from '../composables/useToast.js'
 import { useFloodControl } from '../composables/useFloodControl.js'
@@ -30,6 +30,17 @@ function saveMe() { localStorage.setItem('rly_me', JSON.stringify(me)) }
 
 const showNamePicker = ref(me.name.startsWith('anon_'))
 const showSettings = ref(false)
+
+// Sync identity when user signs in via AuthModal
+watch(userName, (n) => {
+  if (n && n !== me.name) {
+    me.name = n
+    me.handle = '@' + n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20)
+    saveMe()
+    showNamePicker.value = false
+    sendPresence()
+  }
+})
 
 // --- Channel & namespace ---
 const channel = ref((location.hash.match(/[#&]ch=([^&]+)/) || [])[1] || 'main')
@@ -201,11 +212,15 @@ function setupSubscriptions() {
 let ageTimer = null, expiryTimer = null
 
 onMounted(async () => {
-  me.name = userName.value || me.name
+  // Sync name from auth if available, otherwise keep local identity
+  if (userName.value) {
+    me.name = userName.value
+    me.handle = '@' + userName.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20)
+  }
   saveMe()
 
   try {
-    // Auto-auth as guest if no token
+    // Only auto-auth as guest if no existing auth token
     if (!authToken.value) {
       await loginAsGuest(me.name)
     }

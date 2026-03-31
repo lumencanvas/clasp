@@ -20,6 +20,7 @@ export function useLiveStream(getClient, getNS, getMe) {
   let viewerPC = null
   let watchId = null
   const pendSIce = []
+  let liveTimer = null
 
   // --- subscriptions (called once after CLASP connected) ---
   function subscribe(toast) {
@@ -113,7 +114,7 @@ export function useLiveStream(getClient, getNS, getMe) {
     const pc = new RTCPeerConnection({ iceServers: ICE })
     viewerPC = pc
     pc.ontrack = (ev) => {
-      if (videoEl) videoEl.srcObject = ev.streams[0]
+      if (videoEl) { videoEl.srcObject = ev.streams[0]; videoEl.muted = false; videoEl.play().catch(() => {}) }
       streamStatus.value = 'live'
     }
     const c = getClient(); const ns = getNS(); const me = getMe()
@@ -157,6 +158,9 @@ export function useLiveStream(getClient, getNS, getMe) {
       isLive.value = true
       const c = getClient(); const ns = getNS(); const me = getMe()
       if (c) c.set(`${ns}/live/${me.id}`, JSON.stringify({ userId: me.id, name: me.name, handle: me.handle }), { ttl: 35 })
+      // Republish live entry every 25s (TTL is 35s)
+      clearInterval(liveTimer)
+      liveTimer = setInterval(republishLive, 25000)
       openSelf()
       return true // caller should add "started live stream" post
     } catch (e) {
@@ -168,6 +172,7 @@ export function useLiveStream(getClient, getNS, getMe) {
 
   function stopLive(toast) {
     if (!isLive.value) return
+    clearInterval(liveTimer); liveTimer = null
     if (myStream) { myStream.getTracks().forEach(t => t.stop()); myStream = null }
     viewerPCs.forEach(p => p.close()); viewerPCs.clear(); pendVIce.clear()
     isLive.value = false
@@ -182,8 +187,9 @@ export function useLiveStream(getClient, getNS, getMe) {
     const me = getMe()
     modalMeta.name = me.name; modalMeta.sub = 'your broadcast'; modalMeta.isSelf = true
     streamStatus.value = 'broadcasting'
+    // Video element always exists (v-show), set srcObject directly
+    if (videoEl) { videoEl.srcObject = myStream; videoEl.muted = true; videoEl.play().catch(() => {}) }
     showModal.value = true
-    setTimeout(() => { if (videoEl) { videoEl.srcObject = myStream; videoEl.muted = true } }, 50)
   }
 
   function openViewer(entry) {
@@ -191,16 +197,19 @@ export function useLiveStream(getClient, getNS, getMe) {
     watchId = entry.userId
     modalMeta.name = entry.name; modalMeta.sub = 'live stream'; modalMeta.isSelf = false
     streamStatus.value = 'connecting'
+    if (videoEl) { videoEl.srcObject = null; videoEl.muted = false }
     showModal.value = true
-    setTimeout(() => { if (videoEl) { videoEl.srcObject = null; videoEl.muted = false } }, 50)
     const c = getClient(); const ns = getNS(); const me = getMe()
     if (c) c.emit(`${ns}/watch/${entry.userId}`, JSON.stringify({ viewerId: me.id }))
   }
 
   function closeModal() {
     showModal.value = false
-    if (!isLive.value && viewerPC) { viewerPC.close(); viewerPC = null; watchId = null }
-    if (videoEl) videoEl.srcObject = null
+    // Only clean up video/viewer when NOT broadcasting (matches HTML behavior)
+    if (!isLive.value) {
+      if (viewerPC) { viewerPC.close(); viewerPC = null; watchId = null }
+      if (videoEl) videoEl.srcObject = null
+    }
   }
 
   function republishLive() {
@@ -213,6 +222,7 @@ export function useLiveStream(getClient, getNS, getMe) {
   }
 
   function cleanup() {
+    clearInterval(liveTimer); liveTimer = null
     if (isLive.value) {
       if (myStream) { myStream.getTracks().forEach(t => t.stop()); myStream = null }
       viewerPCs.forEach(p => p.close()); viewerPCs.clear()

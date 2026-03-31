@@ -18,6 +18,13 @@ export function useAudioMesh(getClient, getPrefix, getMyId, getCurrentRoom) {
   let analyser = null
   let volumeRAF = null
   const peers = {}
+  let lastStreamSend = 0
+  const STREAM_INTERVAL = 125 // ~8 sends/second, well under 30/s relay limit
+
+  function getAudioContext() {
+    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)()
+    return audioContext
+  }
 
   // --- Microphone ---
   async function startMic() {
@@ -25,42 +32,64 @@ export function useAudioMesh(getClient, getPrefix, getMyId, getCurrentRoom) {
       localStream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       })
-      audioContext = new (window.AudioContext || window.webkitAudioContext)()
-      const source = audioContext.createMediaStreamSource(localStream)
-      analyser = audioContext.createAnalyser()
+      const ctx = getAudioContext()
+      const source = ctx.createMediaStreamSource(localStream)
+      analyser = ctx.createAnalyser()
       analyser.fftSize = 256
       analyser.smoothingTimeConstant = 0.8
       source.connect(analyser)
 
       const data = new Uint8Array(analyser.frequencyBinCount)
+      let lastLocalUpdate = 0
       function tick() {
         analyser.getByteFrequencyData(data)
         const avg = data.reduce((a, b) => a + b, 0) / data.length / 255
-        myVolume.value = avg
+        myVolume.value = avg // full rate for smooth mic glow
         const speaking = avg > SPEAKING_THRESHOLD
-        const room = getCurrentRoom()
-        const c = getClient()
-        if (c && room) {
-          c.stream(`${getPrefix()}/rooms/${room.id}/speaking/${getMyId()}`, { speaking, volume: avg })
+        const now = performance.now()
+        // Throttle relay messages to ~8/s to stay under 30 msg/s limit
+        if (now - lastStreamSend >= STREAM_INTERVAL) {
+          lastStreamSend = now
+          const room = getCurrentRoom()
+          const c = getClient()
+          if (c && room) {
+            c.stream(`${getPrefix()}/rooms/${room.id}/speaking/${getMyId()}`, { speaking, volume: avg })
+          }
         }
-        speakingState.value = {
-          ...speakingState.value,
-          [getMyId()]: { speaking, volume: avg },
+        // Throttle local speaking state updates (~16/s for smooth ring animation)
+        if (now - lastLocalUpdate >= 60) {
+          lastLocalUpdate = now
+          speakingState.value = {
+            ...speakingState.value,
+            [getMyId()]: { speaking, volume: avg },
+          }
         }
         volumeRAF = requestAnimationFrame(tick)
       }
       volumeRAF = requestAnimationFrame(tick)
 
-      // Add tracks to existing peers
-      Object.values(peers).forEach(p => {
-        if (!p.pc) return
+      // Add tracks to existing peers and re-negotiate (must send new offer
+      // so remote side knows about our audio -- matches HTML reference)
+      const c = getClient(); const room = getCurrentRoom()
+      for (const [pid, p] of Object.entries(peers)) {
+        if (!p.pc) continue
         const senders = p.pc.getSenders()
         localStream.getTracks().forEach(track => {
           const existing = senders.find(s => s.track?.kind === track.kind)
           if (existing) existing.replaceTrack(track)
           else p.pc.addTrack(track, localStream)
         })
-      })
+        // Re-negotiate so remote peer receives our audio
+        try {
+          const offer = await p.pc.createOffer()
+          await p.pc.setLocalDescription(offer)
+          if (c && room) {
+            c.set(`${getPrefix()}/rooms/${room.id}/signal/${pid}/${getMyId()}`, {
+              type: 'offer', sdp: offer.sdp, ts: Date.now(),
+            })
+          }
+        } catch (e) { console.warn('[renegotiate]', e) }
+      }
 
       isMuted.value = false
       return true
@@ -80,8 +109,8 @@ export function useAudioMesh(getClient, getPrefix, getMyId, getCurrentRoom) {
     speakingState.value = { ...speakingState.value, [getMyId()]: { speaking: false, volume: 0 } }
     myVolume.value = 0
     isMuted.value = true
-    if (audioContext) { audioContext.close().catch(() => {}); audioContext = null }
     analyser = null
+    // Don't close audioContext here -- shared with analyzeRemote
   }
 
   // --- Peer connections ---
@@ -124,20 +153,27 @@ export function useAudioMesh(getClient, getPrefix, getMyId, getCurrentRoom) {
   }
 
   function analyzeRemote(pid, stream) {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    // Share a single AudioContext (browsers limit to ~6 concurrent)
+    const ctx = getAudioContext()
     const src = ctx.createMediaStreamSource(stream)
     const an = ctx.createAnalyser()
     an.fftSize = 256; an.smoothingTimeConstant = 0.7
     src.connect(an)
     const data = new Uint8Array(an.frequencyBinCount)
+    let lastUpdate = 0
 
     function tick() {
-      if (!peers[pid]) { ctx.close().catch(() => {}); return }
-      an.getByteFrequencyData(data)
-      const avg = data.reduce((a, b) => a + b, 0) / data.length / 255
-      speakingState.value = {
-        ...speakingState.value,
-        [pid]: { speaking: avg > SPEAKING_THRESHOLD, volume: avg },
+      if (!peers[pid]) return
+      const now = performance.now()
+      // ~16/s for smooth speaking ring animation
+      if (now - lastUpdate >= 60) {
+        lastUpdate = now
+        an.getByteFrequencyData(data)
+        const avg = data.reduce((a, b) => a + b, 0) / data.length / 255
+        speakingState.value = {
+          ...speakingState.value,
+          [pid]: { speaking: avg > SPEAKING_THRESHOLD, volume: avg },
+        }
       }
       requestAnimationFrame(tick)
     }
@@ -186,6 +222,7 @@ export function useAudioMesh(getClient, getPrefix, getMyId, getCurrentRoom) {
   function cleanup() {
     stopMic()
     destroyAll()
+    if (audioContext) { audioContext.close().catch(() => {}); audioContext = null }
   }
 
   return {
