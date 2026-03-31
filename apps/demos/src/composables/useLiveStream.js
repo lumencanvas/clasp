@@ -1,4 +1,4 @@
-import { ref, reactive } from 'vue'
+import { ref, shallowRef } from 'vue'
 
 const ICE = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -6,7 +6,7 @@ const ICE = [
 ]
 
 export function useLiveStream(getClient, getNS, getMe) {
-  const streams = reactive(new Map())
+  const streams = ref(new Map())
   const isLive = ref(false)
   const viewerCount = ref(0)
   const showModal = ref(false)
@@ -33,12 +33,12 @@ export function useLiveStream(getClient, getNS, getMe) {
       const uid = addr.slice(`${ns}/live/`.length)
       if (uid === me.id) return
       if (!v) {
-        streams.delete(uid)
+        streams.value.delete(uid); streams.value = new Map(streams.value)
         if (viewerPC && watchId === uid) { viewerPC.close(); viewerPC = null; watchId = null; showModal.value = false }
       } else {
         try {
           const e = JSON.parse(v)
-          if (!streams.has(e.userId)) { streams.set(e.userId, e); toast(e.name + ' went live') }
+          if (!streams.value.has(e.userId)) { streams.value.set(e.userId, e); streams.value = new Map(streams.value); toast(e.name + ' went live') }
         } catch {}
       }
     })

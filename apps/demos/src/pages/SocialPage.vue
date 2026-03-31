@@ -12,8 +12,8 @@ import PostCard from '../components/social/PostCard.vue'
 import Composer from '../components/social/Composer.vue'
 import ToastContainer from '../components/social/ToastContainer.vue'
 
-const emit = defineEmits(['auth-required'])
-const { client, userName, authToken, connect } = useRelay()
+// Auto-auths as guest - no auth gate needed
+const { client, userName, authToken, connect, loginAsGuest } = useRelay()
 const { toast } = useToast()
 const flood = useFloodControl()
 const composerRef = ref(null)
@@ -201,11 +201,14 @@ function setupSubscriptions() {
 let ageTimer = null, expiryTimer = null
 
 onMounted(async () => {
-  if (!authToken.value) { emit('auth-required'); return }
   me.name = userName.value || me.name
   saveMe()
 
   try {
+    // Auto-auth as guest if no token
+    if (!authToken.value) {
+      await loginAsGuest(me.name)
+    }
     await connect()
     connState.value = 'on'
     setupSubscriptions()
