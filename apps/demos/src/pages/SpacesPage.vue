@@ -142,7 +142,7 @@ function joinRoom(roomId, metaOverride) {
   }))
 
   announcePresence()
-  presenceInterval = setInterval(announcePresence, 6000)
+  presenceInterval = setInterval(announcePresence, 15000)
 }
 
 function announcePresence() {
@@ -155,11 +155,16 @@ function announcePresence() {
   })
 }
 
+let dirCountTimer = null
 function updateDirCount() {
-  const c = client.value
-  if (!c || !currentRoom.value) return
-  const count = Object.values(participants.value).filter(p => !p.__left).length
-  c.set(`${DIR}/${currentRoom.value.id}`, { ...roomDirectory[currentRoom.value.id], ...currentRoom.value, count })
+  if (dirCountTimer) return
+  dirCountTimer = setTimeout(() => {
+    dirCountTimer = null
+    const c = client.value
+    if (!c || !currentRoom.value) return
+    const count = Object.values(participants.value).filter(p => !p.__left).length
+    c.set(`${DIR}/${currentRoom.value.id}`, { ...roomDirectory[currentRoom.value.id], ...currentRoom.value, count })
+  }, 2000)
 }
 
 function leaveRoom() {
@@ -193,6 +198,7 @@ function backFromEnded() {
 function cleanupRoom() {
   unsubs.forEach(u => { try { u() } catch {} }); unsubs.length = 0
   if (presenceInterval) { clearInterval(presenceInterval); presenceInterval = null }
+  if (dirCountTimer) { clearTimeout(dirCountTimer); dirCountTimer = null }
 }
 
 // --- Host controls ---
@@ -410,4 +416,4 @@ onUnmounted(() => {
   </div>
 </template>
 
-<style src="./spaces-styles.css" scoped></style>
+<style src="./spaces-styles.css"></style>

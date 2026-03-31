@@ -1,12 +1,25 @@
 <script setup>
+import { ref, watch } from 'vue'
+
 const props = defineProps({
   show: Boolean,
   meta: Object,
   status: String,
   viewerCount: Number,
-  videoRef: Object,
 })
-const emit = defineEmits(['close', 'end'])
+const emit = defineEmits(['close', 'end', 'video-ready'])
+
+const videoEl = ref(null)
+
+watch(() => props.show, (v) => {
+  if (v) {
+    setTimeout(() => {
+      if (videoEl.value) emit('video-ready', videoEl.value)
+    }, 50)
+  }
+})
+
+defineExpose({ videoEl })
 </script>
 
 <template>
@@ -22,7 +35,7 @@ const emit = defineEmits(['close', 'end'])
         <button class="mclose" @click="emit('close')">&times;</button>
       </div>
       <div class="mvw">
-        <video ref="videoRef" autoplay playsinline></video>
+        <video ref="videoEl" autoplay playsinline></video>
         <div class="shud">
           <div class="slive"><div class="sbdot"></div>LIVE</div>
           <div class="spill">{{ status }}</div>

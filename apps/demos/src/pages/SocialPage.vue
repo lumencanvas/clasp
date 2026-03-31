@@ -276,7 +276,7 @@ onUnmounted(() => {
 
     <main class="app">
       <LiveStrip
-        :streams="live.streams"
+        :streams="live.streams.value"
         :is-live="live.isLive.value"
         :my-name="me.name"
         @open-self="live.openSelf()"
@@ -333,7 +333,7 @@ onUnmounted(() => {
       :meta="live.modalMeta"
       :status="live.streamStatus.value"
       :viewer-count="live.viewerCount.value"
-      :video-ref="live.videoRef"
+      @video-ready="(el) => live.setVideoEl(el)"
       @close="live.closeModal()"
       @end="live.stopLive(toast)"
     />
@@ -350,4 +350,4 @@ onUnmounted(() => {
   </div>
 </template>
 
-<style src="./social-styles.css" scoped></style>
+<style src="./social-styles.css"></style>

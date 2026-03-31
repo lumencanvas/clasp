@@ -12,7 +12,7 @@ export function useLiveStream(getClient, getNS, getMe) {
   const showModal = ref(false)
   const modalMeta = reactive({ name: '', sub: '', isSelf: false })
   const streamStatus = ref('connecting')
-  const videoRef = ref(null)
+  let videoEl = null
 
   let myStream = null
   const viewerPCs = new Map()
@@ -113,7 +113,7 @@ export function useLiveStream(getClient, getNS, getMe) {
     const pc = new RTCPeerConnection({ iceServers: ICE })
     viewerPC = pc
     pc.ontrack = (ev) => {
-      if (videoRef.value) videoRef.value.srcObject = ev.streams[0]
+      if (videoEl) videoEl.srcObject = ev.streams[0]
       streamStatus.value = 'live'
     }
     const c = getClient(); const ns = getNS(); const me = getMe()
@@ -183,7 +183,7 @@ export function useLiveStream(getClient, getNS, getMe) {
     modalMeta.name = me.name; modalMeta.sub = 'your broadcast'; modalMeta.isSelf = true
     streamStatus.value = 'broadcasting'
     showModal.value = true
-    setTimeout(() => { if (videoRef.value) { videoRef.value.srcObject = myStream; videoRef.value.muted = true } }, 50)
+    setTimeout(() => { if (videoEl) { videoEl.srcObject = myStream; videoEl.muted = true } }, 50)
   }
 
   function openViewer(entry) {
@@ -192,7 +192,7 @@ export function useLiveStream(getClient, getNS, getMe) {
     modalMeta.name = entry.name; modalMeta.sub = 'live stream'; modalMeta.isSelf = false
     streamStatus.value = 'connecting'
     showModal.value = true
-    setTimeout(() => { if (videoRef.value) { videoRef.value.srcObject = null; videoRef.value.muted = false } }, 50)
+    setTimeout(() => { if (videoEl) { videoEl.srcObject = null; videoEl.muted = false } }, 50)
     const c = getClient(); const ns = getNS(); const me = getMe()
     if (c) c.emit(`${ns}/watch/${entry.userId}`, JSON.stringify({ viewerId: me.id }))
   }
@@ -200,12 +200,16 @@ export function useLiveStream(getClient, getNS, getMe) {
   function closeModal() {
     showModal.value = false
     if (!isLive.value && viewerPC) { viewerPC.close(); viewerPC = null; watchId = null }
-    if (videoRef.value) videoRef.value.srcObject = null
+    if (videoEl) videoEl.srcObject = null
   }
 
   function republishLive() {
     const c = getClient(); const ns = getNS(); const me = getMe()
     if (c && isLive.value) c.set(`${ns}/live/${me.id}`, JSON.stringify({ userId: me.id, name: me.name, handle: me.handle }), { ttl: 35 })
+  }
+
+  function setVideoEl(el) {
+    videoEl = el
   }
 
   function cleanup() {
@@ -218,7 +222,7 @@ export function useLiveStream(getClient, getNS, getMe) {
   }
 
   return {
-    streams, isLive, viewerCount, showModal, modalMeta, streamStatus, videoRef,
-    subscribe, goLive, stopLive, openSelf, openViewer, closeModal, republishLive, cleanup,
+    streams, isLive, viewerCount, showModal, modalMeta, streamStatus,
+    subscribe, goLive, stopLive, openSelf, openViewer, closeModal, republishLive, cleanup, setVideoEl,
   }
 }
