@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@clasp-to/core": "^4.2.0",
+    "@clasp-to/core": "^4.3.1",
     "vue": "^3.5.26",
     "vue-router": "^4.6.4"
   },
