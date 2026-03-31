@@ -24,7 +24,7 @@ function send() {
   <div v-if="show" class="chat-panel">
     <div ref="messagesEl" class="chat-messages">
       <div v-for="(m, i) in messages" :key="i" class="chat-msg">
-        <span class="author" :style="{ color: m.color || 'var(--accent)' }">{{ m.name }}</span>
+        <span class="author" :style="{ color: m.color || 'var(--accent)' }">{{ m.userName || m.name }}</span>
         <span class="text">{{ m.text }}</span>
       </div>
     </div>

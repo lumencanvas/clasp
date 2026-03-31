@@ -102,7 +102,7 @@ function sendToRelay(p) {
   const c = client.value
   if (c) {
     const payload = { ...p }; delete payload.myReactions
-    c.set(`${NS.value}/post/${p.id}`, JSON.stringify(payload), { ttl: p.ttl || undefined, absolute: true })
+    c.set(`${NS.value}/post/${p.id}`, JSON.stringify(payload), { ttl: p.ttl, absolute: true })
   }
 }
 

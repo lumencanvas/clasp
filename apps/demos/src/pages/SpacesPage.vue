@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRelay } from '../composables/useRelay.js'
 import { useToast } from '../composables/useToast.js'
 import { useAudioMesh } from '../composables/useAudioMesh.js'
@@ -49,6 +49,8 @@ const handState = ref({})
 const searchQuery = ref('')
 const showCreate = ref(false)
 const showEnded = ref(false)
+const editingName = ref(false)
+const nameInput = ref(null)
 
 const unsubs = []
 let dirUnsub = null
@@ -150,7 +152,7 @@ function joinRoom(roomId, metaOverride) {
   }))
 
   announcePresence()
-  presenceInterval = setInterval(announcePresence, 15000)
+  presenceInterval = setInterval(announcePresence, 6000)
 }
 
 function announcePresence() {
@@ -189,6 +191,7 @@ function leaveRoom() {
 
 function endRoom() {
   if (!currentRoom.value || myRole.value !== 'host') return
+  if (!confirm('End this room for everyone?')) return
   const c = client.value
   if (c) {
     c.set(`${PREFIX}/rooms/${currentRoom.value.id}/ended`, { ended: true, ts: Date.now() })
@@ -248,9 +251,23 @@ function sendChat(text) {
   const c = client.value
   if (!c || !currentRoom.value) return
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
-  const msg = { text, name: myName.value, id: myId.value, color: myColor.value, ts: Date.now() }
-  c.emit(`${PREFIX}/rooms/${currentRoom.value.id}/chat/${id}`, msg)
-  chatMessages.value = [...chatMessages.value, msg].slice(-80)
+  c.emit(`${PREFIX}/rooms/${currentRoom.value.id}/chat/${id}`, {
+    id, userId: myId.value, userName: myName.value, text, color: myColor.value, ts: Date.now(),
+  })
+}
+
+// --- Name editing ---
+function startEditName() {
+  editingName.value = true
+  nextTick(() => { if (nameInput.value) { nameInput.value.value = myName.value; nameInput.value.focus() } })
+}
+function finishEditName() {
+  if (nameInput.value) {
+    const v = nameInput.value.value.trim()
+    if (v) myName.value = v
+  }
+  editingName.value = false
+  if (currentRoom.value) announcePresence()
 }
 
 // --- Lifecycle ---
@@ -322,7 +339,8 @@ onUnmounted(() => {
           {{ myId.slice(2, 4).toUpperCase() }}
         </div>
         <div class="user-info">
-          <div class="user-name">{{ myName }}</div>
+          <div v-if="!editingName" class="user-name" @click="startEditName">{{ myName }} <span class="edit-hint">[edit]</span></div>
+          <input v-else ref="nameInput" class="input name-edit-input" maxlength="24" @blur="finishEditName" @keydown.enter="finishEditName" />
           <div class="user-id">{{ myId }}</div>
         </div>
       </div>
@@ -339,7 +357,13 @@ onUnmounted(() => {
       <RoomCard v-for="room in filteredRooms" :key="room.id" :room="room" @join="joinRoom" />
 
       <div v-if="!filteredRooms.length" class="empty-state">
-        No rooms yet.<br>Create one to get started.
+        <template v-if="searchQuery">no rooms match that search</template>
+        <template v-else>no rooms live right now<br>start one!</template>
+      </div>
+
+      <div class="lobby-footer">
+        powered by CLASP -- Creative Low-Latency Application Streaming Protocol<br>
+        <a href="https://github.com/lumencanvas/clasp" target="_blank">github.com/lumencanvas/clasp</a>
       </div>
     </div>
 
@@ -367,6 +391,7 @@ onUnmounted(() => {
             :size="60"
             :speaking="audio.speakingState.value[p.id]"
             :is-host="myRole === 'host'"
+            :is-me="p.id === myId"
             mode="speaker"
             @demote="demote"
           />
@@ -387,6 +412,7 @@ onUnmounted(() => {
             :size="42"
             :speaking="audio.speakingState.value[p.id]"
             :is-host="myRole === 'host'"
+            :is-me="p.id === myId"
             :hand-raised="!!handState[p.id]?.raised"
             mode="listener"
             @promote="promote"

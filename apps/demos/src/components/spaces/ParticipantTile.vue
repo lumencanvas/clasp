@@ -6,6 +6,7 @@ const props = defineProps({
   size: { type: Number, default: 50 },
   speaking: Object, // { speaking, volume }
   isHost: Boolean, // am I the host?
+  isMe: Boolean,
   handRaised: Boolean,
   mode: { type: String, default: 'speaker' }, // 'speaker' | 'listener'
 })
@@ -47,7 +48,7 @@ const ringSize = computed(() => {
         }"
       >{{ initials }}</div>
     </div>
-    <div class="name">{{ participant.name }}</div>
+    <div class="name">{{ participant.name }}{{ isMe ? ' (you)' : '' }}</div>
     <div v-if="participant.isHost" class="host-tag">host</div>
     <div v-if="isSpeaking && mode === 'speaker'" class="speaking-bars">
       <span class="bar"></span><span class="bar"></span><span class="bar"></span>
@@ -55,7 +56,7 @@ const ringSize = computed(() => {
     <span v-if="handRaised" class="hand-icon">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M11 2v8M8 5v5M14 5v5M5 9v4a6 6 0 0012 0V9M17 9v4" stroke-linecap="round"/></svg>
     </span>
-    <button v-if="isHost && mode === 'listener' && handRaised" class="promote-btn" @click.stop="emit('promote', participant.id)">&#8593; speak</button>
+    <button v-if="isHost && mode === 'listener' && !isMe" class="promote-btn" @click.stop="emit('promote', participant.id)">&#8593; speak</button>
     <button v-if="isHost && mode === 'speaker' && !participant.isHost" class="host-action" @click.stop="emit('demote', participant.id)">&#8595; move down</button>
   </div>
 </template>

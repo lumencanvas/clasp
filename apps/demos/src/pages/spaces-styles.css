@@ -62,7 +62,10 @@
   font-weight: 700; font-family: var(--mono); flex-shrink: 0;
 }
 .spaces .user-info { flex: 1; min-width: 0; }
-.spaces .user-name { font-size: 15px; font-weight: 600; color: var(--text); }
+.spaces .user-name { font-size: 15px; font-weight: 600; color: var(--text); cursor: pointer; }
+.spaces .user-name:hover .edit-hint { opacity: 1; }
+.spaces .edit-hint { font-size: 10px; color: var(--text3); font-family: var(--mono); opacity: 0.4; transition: opacity 0.2s; }
+.spaces .name-edit-input { padding: 4px 8px !important; font-size: 15px; font-weight: 600; }
 .spaces .user-id { font-family: var(--mono); font-size: 11px; color: var(--text3); }
 
 .spaces .btn {
@@ -95,6 +98,11 @@
   text-align: center; padding: 40px 16px;
   font-family: var(--mono); font-size: 13px; color: var(--text3); line-height: 1.8;
 }
+.spaces .lobby-footer {
+  margin-top: auto; padding: 20px 0 8px; text-align: center;
+  font-size: 10px; color: var(--text3); font-family: var(--mono); line-height: 1.6;
+}
+.spaces .lobby-footer a { color: rgba(0,229,200,0.25); text-decoration: none; }
 
 /* ROOM VIEW */
 .spaces .room-view {
