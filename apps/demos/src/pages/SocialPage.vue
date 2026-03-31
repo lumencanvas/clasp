@@ -317,6 +317,7 @@ onUnmounted(() => {
         :is-live="live.isLive.value"
         @transmit="handleTransmit"
         @go-live="handleGoLive"
+        @error="(msg) => toast(msg, 'err')"
       />
 
       <!-- Feed header -->

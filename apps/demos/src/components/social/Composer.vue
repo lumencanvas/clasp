@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 
 const props = defineProps({ handle: String, isLive: Boolean })
-const emit = defineEmits(['transmit', 'go-live'])
+const emit = defineEmits(['transmit', 'go-live', 'error'])
 
 const text = ref('')
 const selectedTtl = ref(1800)
@@ -57,7 +57,7 @@ function compressImage(file) {
 async function handleFile(e) {
   const f = e.target.files?.[0]
   if (!f) return
-  try { image.value = await compressImage(f) } catch { /* toast handled by parent if needed */ }
+  try { image.value = await compressImage(f) } catch { emit('error', 'could not load image') }
   if (imageInput.value) imageInput.value.value = ''
 }
 
