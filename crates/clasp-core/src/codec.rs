@@ -1843,6 +1843,99 @@ mod tests {
     }
 
     #[test]
+    fn test_set_ttl_never() {
+        // ttl=0 should roundtrip as Ttl::Never
+        let msg = Message::Set(SetMessage {
+            address: "/test/never".to_string(),
+            value: Value::String("persist".to_string()),
+            revision: None,
+            lock: false,
+            unlock: false,
+            ttl: Some(Ttl::Never),
+        });
+
+        let encoded = encode(&msg).unwrap();
+        let (decoded, _) = decode(&encoded).unwrap();
+
+        match decoded {
+            Message::Set(set) => {
+                assert_eq!(set.ttl, Some(Ttl::Never));
+            }
+            _ => panic!("Expected Set message"),
+        }
+    }
+
+    #[test]
+    fn test_set_ttl_absolute() {
+        let msg = Message::Set(SetMessage {
+            address: "/test/abs".to_string(),
+            value: Value::Int(42),
+            revision: None,
+            lock: false,
+            unlock: false,
+            ttl: Some(Ttl::Absolute(1800)),
+        });
+
+        let encoded = encode(&msg).unwrap();
+        let (decoded, _) = decode(&encoded).unwrap();
+
+        match decoded {
+            Message::Set(set) => {
+                assert_eq!(set.ttl, Some(Ttl::Absolute(1800)));
+            }
+            _ => panic!("Expected Set message"),
+        }
+    }
+
+    #[test]
+    fn test_set_ttl_sliding() {
+        let msg = Message::Set(SetMessage {
+            address: "/test/slide".to_string(),
+            value: Value::Float(0.5),
+            revision: None,
+            lock: false,
+            unlock: false,
+            ttl: Some(Ttl::Sliding(35)),
+        });
+
+        let encoded = encode(&msg).unwrap();
+        let (decoded, _) = decode(&encoded).unwrap();
+
+        match decoded {
+            Message::Set(set) => {
+                assert_eq!(set.ttl, Some(Ttl::Sliding(35)));
+            }
+            _ => panic!("Expected Set message"),
+        }
+    }
+
+    #[test]
+    fn test_set_ttl_absolute_zero_is_never() {
+        // Raw binary 0x80000000 should NOT be produced by encode for Absolute(0).
+        // If someone sends raw 0x80000000, it decodes as Absolute(0).
+        // But Ttl::Never must encode as raw 0 and decode back as Never.
+        let never = Message::Set(SetMessage {
+            address: "/t".to_string(),
+            value: Value::Null,
+            revision: None,
+            lock: false,
+            unlock: false,
+            ttl: Some(Ttl::Never),
+        });
+
+        let encoded = encode(&never).unwrap();
+        let (decoded, _) = decode(&encoded).unwrap();
+
+        match decoded {
+            Message::Set(set) => {
+                // Must decode as Never, not Absolute(0)
+                assert_eq!(set.ttl, Some(Ttl::Never));
+            }
+            _ => panic!("Expected Set message"),
+        }
+    }
+
+    #[test]
     fn test_ping_pong() {
         let ping = encode(&Message::Ping).unwrap();
         let (decoded, _) = decode(&ping).unwrap();

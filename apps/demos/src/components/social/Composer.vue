@@ -57,7 +57,7 @@ function compressImage(file) {
 async function handleFile(e) {
   const f = e.target.files?.[0]
   if (!f) return
-  try { image.value = await compressImage(f) } catch {}
+  try { image.value = await compressImage(f) } catch { /* toast handled by parent if needed */ }
   if (imageInput.value) imageInput.value.value = ''
 }
 

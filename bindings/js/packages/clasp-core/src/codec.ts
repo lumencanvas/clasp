@@ -453,8 +453,13 @@ function encodeSet(view: DataView, offset: number, msg: SetMessage): number {
 
   // TTL
   if (msg.ttl !== undefined) {
-    let raw = msg.ttl & 0x7fffffff;
-    if (msg.absolute) raw |= 0x80000000;
+    let raw;
+    if (msg.ttl === 0) {
+      raw = 0; // Ttl::Never -- do not set absolute bit
+    } else {
+      raw = msg.ttl & 0x7fffffff;
+      if (msg.absolute) raw |= 0x80000000;
+    }
     view.setUint32(offset, raw >>> 0, false);
     offset += 4;
   }

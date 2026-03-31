@@ -102,7 +102,8 @@ function sendToRelay(p) {
   const c = client.value
   if (c) {
     const payload = { ...p }; delete payload.myReactions
-    c.set(`${NS.value}/post/${p.id}`, JSON.stringify(payload), { ttl: p.ttl, absolute: true })
+    const ttlOpts = p.ttl === 0 ? { ttl: 0 } : { ttl: p.ttl, absolute: true }
+    c.set(`${NS.value}/post/${p.id}`, JSON.stringify(payload), ttlOpts)
   }
 }
 
@@ -252,8 +253,13 @@ onMounted(async () => {
 })
 
 function onVisibility() {
-  if (document.hidden) clearPresence()
-  else { sendPresence(); live.republishLive() }
+  if (document.hidden) {
+    clearPresence()
+    live.clearLive()
+  } else {
+    sendPresence()
+    live.republishLive()
+  }
 }
 
 onUnmounted(() => {

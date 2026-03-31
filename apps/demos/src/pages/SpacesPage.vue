@@ -244,7 +244,7 @@ function toggleHand() {
   const c = client.value
   if (!c || !currentRoom.value) return
   handUp.value = !handUp.value
-  c.set(`${PREFIX}/rooms/${currentRoom.value.id}/hands/${myId.value}`, handUp.value ? { raised: true, ts: Date.now() } : null)
+  c.set(`${PREFIX}/rooms/${currentRoom.value.id}/hands/${myId.value}`, { raised: handUp.value, ts: Date.now() })
 }
 
 function sendChat(text) {
@@ -395,7 +395,7 @@ onUnmounted(() => {
             mode="speaker"
             @demote="demote"
           />
-          <div v-if="!speakers.length" class="empty-stage">stage is empty</div>
+          <div v-if="!speakers.length" class="empty-stage">no speakers yet</div>
         </div>
       </div>
 
@@ -403,7 +403,7 @@ onUnmounted(() => {
       <div class="listeners-section">
         <div class="section-label">
           LISTENERS ({{ listeners.length }})
-          <span v-if="handsCount" class="hands-count">{{ handsCount }} hands</span>
+          <span v-if="handsCount" class="hands-count">{{ handsCount }} hand{{ handsCount > 1 ? 's' : '' }} raised</span>
         </div>
         <div class="listeners-grid">
           <ParticipantTile

@@ -212,6 +212,11 @@ export function useLiveStream(getClient, getNS, getMe) {
     }
   }
 
+  function clearLive() {
+    const c = getClient(); const ns = getNS(); const me = getMe()
+    if (c && isLive.value) c.set(`${ns}/live/${me.id}`, null)
+  }
+
   function republishLive() {
     const c = getClient(); const ns = getNS(); const me = getMe()
     if (c && isLive.value) c.set(`${ns}/live/${me.id}`, JSON.stringify({ userId: me.id, name: me.name, handle: me.handle }), { ttl: 35 })
@@ -233,6 +238,6 @@ export function useLiveStream(getClient, getNS, getMe) {
 
   return {
     streams, isLive, viewerCount, showModal, modalMeta, streamStatus,
-    subscribe, goLive, stopLive, openSelf, openViewer, closeModal, republishLive, cleanup, setVideoEl,
+    subscribe, goLive, stopLive, openSelf, openViewer, closeModal, clearLive, republishLive, cleanup, setVideoEl,
   }
 }

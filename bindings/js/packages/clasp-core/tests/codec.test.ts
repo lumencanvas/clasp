@@ -163,6 +163,25 @@ describe('SET with TTL', () => {
     expect(decoded.ttl).toBe(0);
   });
 
+  it('should encode ttl=0 with absolute as never-expire (not Absolute(0))', () => {
+    const msg: SetMessage = {
+      type: 'SET',
+      address: '/test/ttl-never-abs',
+      value: 'persist',
+      ttl: 0,
+      absolute: true,
+    };
+
+    const encoded = encode(msg);
+    const decoded = decode(encoded) as SetMessage;
+
+    expect(decoded.type).toBe('SET');
+    // ttl=0 must encode as raw 0 (Ttl::Never), NOT 0x80000000 (Ttl::Absolute(0))
+    expect(decoded.ttl).toBe(0);
+    // absolute flag is irrelevant for never-expire
+    expect(decoded.absolute).toBeUndefined();
+  });
+
   it('should roundtrip SET without TTL (backward compat)', () => {
     const msg: SetMessage = {
       type: 'SET',
@@ -192,5 +211,82 @@ describe('SET with TTL', () => {
 
     expect(decoded.revision).toBe(42);
     expect(decoded.ttl).toBe(3600);
+  });
+
+  it('should roundtrip SET with large TTL values', () => {
+    // 24 hours
+    const msg24h: SetMessage = { type: 'SET', address: '/ttl/24h', value: 1, ttl: 86400, absolute: true };
+    const dec24h = decode(encode(msg24h)) as SetMessage;
+    expect(dec24h.ttl).toBe(86400);
+    expect(dec24h.absolute).toBe(true);
+
+    // 7 days
+    const msg7d: SetMessage = { type: 'SET', address: '/ttl/7d', value: 1, ttl: 604800 };
+    const dec7d = decode(encode(msg7d)) as SetMessage;
+    expect(dec7d.ttl).toBe(604800);
+    expect(dec7d.absolute).toBeUndefined();
+  });
+
+  it('should preserve TTL=1 (minimum non-zero) correctly', () => {
+    const sliding: SetMessage = { type: 'SET', address: '/ttl/1s', value: 1, ttl: 1 };
+    const decSliding = decode(encode(sliding)) as SetMessage;
+    expect(decSliding.ttl).toBe(1);
+    expect(decSliding.absolute).toBeUndefined();
+
+    const absolute: SetMessage = { type: 'SET', address: '/ttl/1s-abs', value: 1, ttl: 1, absolute: true };
+    const decAbsolute = decode(encode(absolute)) as SetMessage;
+    expect(decAbsolute.ttl).toBe(1);
+    expect(decAbsolute.absolute).toBe(true);
+  });
+
+  it('should encode ttl=0 identically regardless of absolute flag', () => {
+    // Both should produce identical binary: ttl=0 always means Never
+    const withAbs: SetMessage = { type: 'SET', address: '/t', value: 0, ttl: 0, absolute: true };
+    const withoutAbs: SetMessage = { type: 'SET', address: '/t', value: 0, ttl: 0 };
+
+    const encWithAbs = encode(withAbs);
+    const encWithoutAbs = encode(withoutAbs);
+
+    // Binary output must be identical -- absolute flag is ignored for ttl=0
+    expect(encWithAbs).toEqual(encWithoutAbs);
+
+    // Both decode to ttl=0, no absolute
+    const decWithAbs = decode(encWithAbs) as SetMessage;
+    const decWithoutAbs = decode(encWithoutAbs) as SetMessage;
+    expect(decWithAbs.ttl).toBe(0);
+    expect(decWithoutAbs.ttl).toBe(0);
+    expect(decWithAbs.absolute).toBeUndefined();
+    expect(decWithoutAbs.absolute).toBeUndefined();
+  });
+
+  it('should roundtrip all TTL modes used by social demo', () => {
+    // Social demo TTL options: 5m, 30m, 1h, 24h, never
+    const cases = [
+      { ttl: 300, absolute: true, label: '5m' },
+      { ttl: 1800, absolute: true, label: '30m' },
+      { ttl: 3600, absolute: true, label: '1h' },
+      { ttl: 86400, absolute: true, label: '24h' },
+      { ttl: 0, absolute: true, label: 'never' },
+    ];
+
+    for (const c of cases) {
+      const msg: SetMessage = { type: 'SET', address: `/post/${c.label}`, value: 'test', ttl: c.ttl, absolute: c.absolute };
+      const decoded = decode(encode(msg)) as SetMessage;
+      if (c.ttl === 0) {
+        expect(decoded.ttl).toBe(0);
+        expect(decoded.absolute).toBeUndefined(); // never-expire has no absolute concept
+      } else {
+        expect(decoded.ttl).toBe(c.ttl);
+        expect(decoded.absolute).toBe(true);
+      }
+    }
+  });
+
+  it('should roundtrip presence/live TTL (sliding, 35s)', () => {
+    // Presence and live stream entries use sliding TTL
+    const msg: SetMessage = { type: 'SET', address: '/live/user123', value: '{"name":"test"}', ttl: 35 };
+    const decoded = decode(encode(msg)) as SetMessage;
+    expect(decoded.ttl).toBe(35);
+    expect(decoded.absolute).toBeUndefined(); // sliding
   });
 });
