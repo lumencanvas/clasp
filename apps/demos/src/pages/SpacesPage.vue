@@ -10,7 +10,7 @@ import ChatPanel from '../components/spaces/ChatPanel.vue'
 import ControlsBar from '../components/spaces/ControlsBar.vue'
 import ToastContainer from '../components/ToastContainer.vue'
 
-const { client, userName, authToken, connect, loginAsGuest } = useRelay()
+const { client, userName, authToken, connect, loginAsGuest, logout } = useRelay()
 const { toast } = useToast()
 
 // --- Identity ---
@@ -277,7 +277,14 @@ onMounted(async () => {
 
   try {
     if (!authToken.value) await loginAsGuest(myName.value)
-    await connect()
+    try {
+      await connect()
+    } catch {
+      // Token may be stale/expired -- clear and retry with fresh guest login
+      logout()
+      await loginAsGuest(myName.value)
+      await connect()
+    }
     connDot.value = true
 
     const c = client.value

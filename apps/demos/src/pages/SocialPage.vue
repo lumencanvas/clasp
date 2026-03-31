@@ -13,7 +13,7 @@ import Composer from '../components/social/Composer.vue'
 import ToastContainer from '../components/ToastContainer.vue'
 
 // Auto-auths as guest - no auth gate needed
-const { client, userName, authToken, connect, loginAsGuest } = useRelay()
+const { client, userName, authToken, connect, loginAsGuest, logout } = useRelay()
 const { toast } = useToast()
 const flood = useFloodControl()
 const composerRef = ref(null)
@@ -225,7 +225,14 @@ onMounted(async () => {
     if (!authToken.value) {
       await loginAsGuest(me.name)
     }
-    await connect()
+    try {
+      await connect()
+    } catch {
+      // Token may be stale/expired -- clear and retry with fresh guest login
+      logout()
+      await loginAsGuest(me.name)
+      await connect()
+    }
     connState.value = 'on'
     setupSubscriptions()
     sendPresence()
