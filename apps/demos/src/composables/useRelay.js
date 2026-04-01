@@ -11,9 +11,7 @@ const authToken = ref(localStorage.getItem('clasp_demo_token') || '')
 const authMode = ref(localStorage.getItem('clasp_demo_auth') || '') // 'guest' | 'user'
 const error = ref(null)
 
-// Track which token the current WebSocket was opened with
 let activeToken = null
-let reconnectTimer = null
 
 async function authRequest(endpoint, body) {
   const res = await fetch(`${AUTH_URL}/auth/${endpoint}`, {
@@ -71,7 +69,6 @@ function logout() {
 }
 
 function disconnect() {
-  clearTimeout(reconnectTimer)
   if (client.value) {
     try { client.value.close() } catch {}
     client.value = null
@@ -81,20 +78,31 @@ function disconnect() {
 }
 
 /**
- * Connect to the relay. Reuses the existing connection if the token hasn't
- * changed. If the token changed (user signed in/out), disconnects the old
- * session and opens a new one. If the stored token is stale (relay restarted),
- * falls back to a fresh guest login automatically.
+ * Ensure we have a valid auth token. Guest tokens are refreshed every time
+ * to avoid the 10-second timeout when a stale token hits the relay.
+ * Registered user tokens are reused (they can re-login if expired).
+ */
+async function ensureAuth(fallbackName) {
+  if (authMode.value === 'user' && authToken.value) {
+    return // registered users keep their token
+  }
+  // For guests (or no auth), always get a fresh token -- avoids stale token timeout
+  await loginAsGuest(userName.value || fallbackName || 'guest')
+}
+
+/**
+ * Connect to the relay. Reuses existing connection if the token hasn't changed.
+ * Call ensureAuth() before this to guarantee a valid token.
  */
 async function connect() {
   const token = authToken.value
 
-  // Reuse existing connection if it was opened with the same token
+  // Reuse existing live connection opened with same token
   if (client.value && activeToken === token) {
     return client.value
   }
 
-  // Token changed or no client -- close old connection if any
+  // Close stale connection
   if (client.value) {
     try { client.value.close() } catch {}
     client.value = null
@@ -102,47 +110,22 @@ async function connect() {
   }
 
   const { ClaspBuilder } = await import('@clasp-to/core')
+  const builder = new ClaspBuilder(RELAY_URL)
+    .withName(userName.value || 'demo-user')
+    .withReconnect(true)
+  if (token) builder.withToken(token)
 
-  async function tryConnect(t) {
-    const builder = new ClaspBuilder(RELAY_URL)
-      .withName(userName.value || 'demo-user')
-      .withReconnect(true)
-    if (t) builder.withToken(t)
-    return builder.connect()
-  }
-
-  let c
-  try {
-    c = await tryConnect(token)
-  } catch {
-    // Token may be stale (relay restarted, token expired). Get a fresh guest token.
-    if (token) {
-      const name = userName.value || 'guest'
-      await loginAsGuest(name)
-      c = await tryConnect(authToken.value)
-    } else {
-      throw new Error('Connection failed')
-    }
-  }
+  const c = await builder.connect()
 
   client.value = c
   connected.value = true
-  activeToken = authToken.value
+  activeToken = token
   sessionId.value = c.session || null
   error.value = null
 
-  c.onDisconnect(() => {
-    connected.value = false
-  })
-
-  c.onError((e) => {
-    error.value = e?.message || 'Connection error'
-  })
-
-  c.onReconnect(() => {
-    connected.value = true
-    error.value = null
-  })
+  c.onDisconnect(() => { connected.value = false })
+  c.onError((e) => { error.value = e?.message || 'Connection error' })
+  c.onReconnect(() => { connected.value = true; error.value = null })
 
   return c
 }
@@ -160,6 +143,7 @@ export function useRelay() {
     AUTH_URL,
     connect,
     disconnect,
+    ensureAuth,
     loginAsGuest,
     register,
     login,

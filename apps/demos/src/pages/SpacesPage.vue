@@ -10,7 +10,7 @@ import ChatPanel from '../components/spaces/ChatPanel.vue'
 import ControlsBar from '../components/spaces/ControlsBar.vue'
 import ToastContainer from '../components/ToastContainer.vue'
 
-const { client, userName, authToken, connect, loginAsGuest } = useRelay()
+const { client, userName, authToken, connect, ensureAuth } = useRelay()
 const { toast } = useToast()
 
 // --- Identity ---
@@ -276,7 +276,7 @@ onMounted(async () => {
   myName.value = userName.value || rnd(NAMES)
 
   try {
-    if (!authToken.value) await loginAsGuest(myName.value)
+    await ensureAuth(myName.value)
     await connect()
     connDot.value = true
 

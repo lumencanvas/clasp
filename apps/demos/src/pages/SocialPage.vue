@@ -4,7 +4,6 @@ import { useRelay } from '../composables/useRelay.js'
 import { useToast } from '../composables/useToast.js'
 import { useFloodControl } from '../composables/useFloodControl.js'
 import { useLiveStream } from '../composables/useLiveStream.js'
-import NamePicker from '../components/social/NamePicker.vue'
 import SettingsPanel from '../components/social/SettingsPanel.vue'
 import StreamModal from '../components/social/StreamModal.vue'
 import LiveStrip from '../components/social/LiveStrip.vue'
@@ -12,35 +11,32 @@ import PostCard from '../components/social/PostCard.vue'
 import Composer from '../components/social/Composer.vue'
 import ToastContainer from '../components/ToastContainer.vue'
 
-// Auto-auths as guest - no auth gate needed
-const { client, userName, authToken, connect, loginAsGuest } = useRelay()
+const { client, userName, authToken, connect, ensureAuth } = useRelay()
 const { toast } = useToast()
 const flood = useFloodControl()
 const composerRef = ref(null)
 
-// --- Identity ---
+// --- Identity (uses global auth, persists extras in rly_me) ---
 function loadMe() {
   const saved = localStorage.getItem('rly_me')
   if (saved) try { return JSON.parse(saved) } catch {}
   const id = 'u' + Date.now() + Math.random().toString(36).slice(2, 8)
-  return { id, name: 'anon_' + id.slice(2, 8), handle: '@' + id.slice(2, 10) }
+  return { id, name: '', handle: '' }
 }
 const me = reactive(loadMe())
 function saveMe() { localStorage.setItem('rly_me', JSON.stringify(me)) }
 
-const showNamePicker = ref(me.name.startsWith('anon_'))
 const showSettings = ref(false)
 
-// Sync identity when user signs in via AuthModal
+// Sync identity from global auth
 watch(userName, (n) => {
   if (n && n !== me.name) {
     me.name = n
     me.handle = '@' + n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20)
     saveMe()
-    showNamePicker.value = false
     sendPresence()
   }
-})
+}, { immediate: true })
 
 // --- Channel & namespace ---
 const channel = ref((location.hash.match(/[#&]ch=([^&]+)/) || [])[1] || 'main')
@@ -80,7 +76,7 @@ let presenceTimer = null
 
 function sendPresence() {
   const c = client.value
-  if (!c) return
+  if (!c || !me.name) return
   try { c.set(`${NS.value}/pres/${me.id}`, JSON.stringify({ id: me.id, name: me.name, handle: me.handle, ts: Date.now() }), { ttl: 35 }) } catch {}
 }
 function clearPresence() {
@@ -160,16 +156,6 @@ function handleSaveSettings({ name, handle }) {
   toast('identity saved')
 }
 
-function handleNameCommit(name) {
-  if (name) {
-    me.name = name
-    me.handle = '@' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20)
-    saveMe()
-  }
-  showNamePicker.value = false
-  setTimeout(sendPresence, 400)
-}
-
 // --- CLASP subscriptions ---
 const unsubs = []
 
@@ -213,15 +199,20 @@ function setupSubscriptions() {
 let ageTimer = null, expiryTimer = null
 
 onMounted(async () => {
-  // Sync name from auth if available, otherwise keep local identity
-  if (userName.value) {
-    me.name = userName.value
-    me.handle = '@' + userName.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20)
-  }
-  saveMe()
-
   try {
-    if (!authToken.value) await loginAsGuest(me.name)
+    await ensureAuth(me.name || 'anon')
+    // Sync name from auth into local identity
+    if (userName.value && !me.name) {
+      me.name = userName.value
+      me.handle = '@' + userName.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20)
+    }
+    // If still no name, derive from id
+    if (!me.name) {
+      me.name = 'anon_' + me.id.slice(2, 8)
+      me.handle = '@' + me.id.slice(2, 10)
+    }
+    saveMe()
+
     await connect()
     connState.value = 'on'
     setupSubscriptions()
@@ -272,8 +263,6 @@ onUnmounted(() => {
 
 <template>
   <div class="social">
-    <NamePicker v-if="showNamePicker" @commit="handleNameCommit" @skip="showNamePicker = false" />
-
     <!-- TOPBAR -->
     <header class="topbar">
       <div class="tl">
