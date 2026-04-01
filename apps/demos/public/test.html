@@ -1,70 +1,76 @@
 <!DOCTYPE html>
 <html>
-<head><title>CLASP Subscribe Test</title></head>
-<body style="background:#111;color:#eee;font-family:monospace;padding:20px">
-<h2>CLASP Subscribe Test</h2>
-<pre id="log"></pre>
+<head><title>CLASP Relay Compare</title></head>
+<body style="background:#111;color:#eee;font-family:monospace;padding:20px;white-space:pre-wrap">
+<h2>CLASP Relay Compare Test</h2>
+<div id="log"></div>
 <script src="https://cdn.jsdelivr.net/npm/@clasp-to/core@4.3.1"></script>
 <script>
-const log = (msg) => { document.getElementById('log').textContent += msg + '\n'; console.log(msg); };
+const L = (msg) => { document.getElementById('log').textContent += msg + '\n'; console.log(msg); };
 
-(async () => {
+async function testRelay(name, url, authUrl) {
+  L('');
+  L('=== ' + name + ' ===');
   try {
-    log('1. Getting guest token...');
-    const r = await fetch('https://demo-relay.clasp.to/auth/guest', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'browser-test-' + Date.now().toString(36).slice(-4) }),
-    });
-    const auth = await r.json();
-    log('   Token: ' + auth.token.slice(0, 20) + '...');
-
-    log('2. Connecting...');
-    const c = await new CLASP.ClaspBuilder('wss://demo-relay.clasp.to')
-      .withName('browser-test')
-      .withToken(auth.token)
-      .connect();
-    log('   Session: ' + c.session);
-    log('   Subscriptions: ' + c.subscriptions.size);
-
-    log('3. Subscribing to /social/v1/main/post/**');
-    let postCount = 0;
-    c.on('/social/v1/main/post/**', (v, addr) => {
-      if (!v) return;
-      postCount++;
-      if (postCount <= 5) log('   POST: ' + addr.split('/').pop().slice(-20));
-    });
-    log('   Subscriptions after: ' + c.subscriptions.size);
-
-    log('4. Subscribing to /audiospace/directory/**');
-    let roomCount = 0;
-    c.on('/audiospace/directory/**', (v) => {
-      if (v && !v.__ended) roomCount++;
-    });
-
-    log('5. Waiting 3 seconds for snapshots...');
-    await new Promise(r => setTimeout(r, 3000));
-    log('   Posts received: ' + postCount);
-    log('   Rooms received: ' + roomCount);
-
-    if (postCount === 0 && roomCount === 0) {
-      log('');
-      log('NO DATA RECEIVED. Checking raw message flow...');
-      // Try a direct GET
-      log('6. Trying c.get() for a known post path...');
-      try {
-        const val = await c.get('/social/v1/main/post/**');
-        log('   GET result: ' + JSON.stringify(val)?.slice(0, 100));
-      } catch(e) {
-        log('   GET error: ' + e.message);
-      }
+    let token = null;
+    if (authUrl) {
+      L('  Getting guest token from ' + authUrl);
+      const r = await fetch(authUrl + '/auth/guest', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'test-' + Date.now().toString(36).slice(-4) }),
+      });
+      if (!r.ok) { L('  AUTH FAILED: ' + r.status + ' ' + await r.text()); return; }
+      const auth = await r.json();
+      token = auth.token;
+      L('  Token: ' + token.slice(0, 15) + '...');
+    } else {
+      L('  No auth (open relay)');
     }
 
-    log('');
-    log('DONE. postCount=' + postCount + ' roomCount=' + roomCount);
-  } catch(e) {
-    log('ERROR: ' + e.message);
-    console.error(e);
+    L('  Connecting to ' + url);
+    const builder = new CLASP.ClaspBuilder(url).withName('test').withReconnect(false);
+    if (token) builder.withToken(token);
+    const c = await builder.connect();
+    L('  Connected! Session: ' + c.session);
+
+    let posts = 0, rooms = 0, total = 0;
+    c.on('/social/v1/main/post/**', (v) => { if (v) posts++; });
+    c.on('/audiospace/directory/**', (v) => { if (v && !v.__ended) rooms++; });
+
+    // Also try the HTML reference namespace
+    c.on('/rly/v1/main/post/**', (v) => { if (v) { posts++; total++; } });
+
+    // Count ALL incoming params
+    const origHM = c.handleMessage.bind(c);
+    let snapParams = 0, snapCount = 0;
+    c.handleMessage = function(msg) {
+      if (msg.type === 'SNAPSHOT') {
+        snapCount++;
+        snapParams += (msg.params || []).length;
+        L('  SNAPSHOT #' + snapCount + ': ' + (msg.params || []).length + ' params');
+      }
+      origHM(msg);
+    };
+
+    await new Promise(r => setTimeout(r, 3000));
+    L('  ---');
+    L('  Snapshots: ' + snapCount + ', total params: ' + snapParams);
+    L('  Posts: ' + posts + ', Rooms: ' + rooms);
+    c.close();
+  } catch (e) {
+    L('  ERROR: ' + e.message);
   }
+}
+
+(async () => {
+  // Test public relay (no auth, what the HTML reference uses)
+  await testRelay('PUBLIC relay.clasp.to', 'wss://relay.clasp.to', null);
+
+  // Test demo relay (with auth)
+  await testRelay('DEMO demo-relay.clasp.to', 'wss://demo-relay.clasp.to', 'https://demo-relay.clasp.to');
+
+  L('');
+  L('DONE');
 })();
 </script>
 </body>
