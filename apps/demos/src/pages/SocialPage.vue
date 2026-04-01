@@ -227,25 +227,33 @@ onMounted(async () => {
     await connect()
     const c0 = client.value
     console.log('[social] connected, session:', c0?.session)
+    console.log('[social] subscriptions map size before setup:', c0?.subscriptions?.size ?? 'N/A')
 
-    // RAW WebSocket message spy -- see every message from relay
-    if (c0?.inner?.ws || c0?.ws) {
-      const ws = c0.inner?.ws || c0.ws
-      const origHandler = ws.onmessage
-      ws.onmessage = (ev) => {
-        const bytes = new Uint8Array(ev.data)
-        // Message type is after frame header. Frame: [magic][flags][len_hi][len_lo][...payload]
-        // Payload starts at offset 4+ depending on frame format. Just log raw size + first bytes.
-        const msgTypes = { 0x01: 'HELLO', 0x02: 'WELCOME', 0x03: 'ANNOUNCE', 0x10: 'SUBSCRIBE', 0x21: 'SET', 0x23: 'SNAPSHOT', 0x20: 'PUBLISH', 0x30: 'BUNDLE', 0x50: 'ACK', 0x51: 'ERROR' }
-        // Try to find message type byte (skip frame header)
-        let typeByte = bytes.length > 4 ? bytes[4] : bytes[0]
-        if (bytes[0] === 0xC1) typeByte = bytes[4] // frame magic
-        console.log('[ws-raw]', msgTypes[typeByte] || ('0x' + typeByte.toString(16)), bytes.length + 'B')
-        if (origHandler) origHandler.call(ws, ev)
+    // Monkey-patch handleMessage to log SNAPSHOT processing
+    if (c0) {
+      const origHandle = c0.handleMessage?.bind(c0) || c0.__proto__?.handleMessage?.bind(c0)
+      if (origHandle) {
+        c0.handleMessage = function(msg) {
+          if (msg.type === 'SNAPSHOT') {
+            console.log('[social] SNAPSHOT received:', msg.params?.length, 'params')
+            if (msg.params?.length > 0) {
+              const postParams = msg.params.filter(p => p.address?.includes('/post/'))
+              console.log('[social] post params in snapshot:', postParams.length)
+              if (postParams.length > 0) console.log('[social] first post addr:', postParams[0].address)
+            }
+          }
+          if (msg.type === 'SET') {
+            console.log('[social] SET received:', msg.address?.slice(-30))
+          }
+          origHandle(msg)
+          if (msg.type === 'SNAPSHOT') {
+            console.log('[social] subscriptions size after snapshot:', this.subscriptions?.size)
+          }
+        }
+        console.log('[social] handleMessage patched')
+      } else {
+        console.warn('[social] could not patch handleMessage')
       }
-      console.log('[social] ws spy installed')
-    } else {
-      console.warn('[social] could not install ws spy - client structure:', Object.keys(c0 || {}))
     }
 
     connState.value = 'on'
