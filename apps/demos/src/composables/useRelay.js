@@ -83,13 +83,14 @@ function disconnect() {
  * Registered user tokens are reused (they can re-login if expired).
  */
 async function ensureAuth(fallbackName) {
-  // Always get a fresh guest token. Even registered users get demoted to
-  // guest after a relay restart (CPSK tokens are in-memory only). The user
-  // can re-login via AuthModal if they want their registered identity back.
+  // Always get a fresh guest token to avoid stale token issues.
   const name = userName.value || fallbackName || 'guest'
-  console.log('[relay] getting fresh guest token for', name)
-  await loginAsGuest(name)
-  console.log('[relay] got token:', authToken.value?.slice(0, 15))
+  try {
+    await loginAsGuest(name)
+  } catch {
+    // Name might conflict with a registered user -- retry with a generic name
+    await loginAsGuest('guest-' + Date.now().toString(36).slice(-6))
+  }
 }
 
 /**
