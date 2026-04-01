@@ -84,10 +84,12 @@ function disconnect() {
  */
 async function ensureAuth(fallbackName) {
   if (authMode.value === 'user' && authToken.value) {
-    return // registered users keep their token
+    console.log('[relay] reusing registered user token')
+    return
   }
-  // For guests (or no auth), always get a fresh token -- avoids stale token timeout
+  console.log('[relay] getting fresh guest token...')
   await loginAsGuest(userName.value || fallbackName || 'guest')
+  console.log('[relay] got token:', authToken.value?.slice(0, 15))
 }
 
 /**
@@ -115,7 +117,9 @@ async function connect() {
     .withReconnect(true)
   if (token) builder.withToken(token)
 
+  console.log('[relay] connecting to', RELAY_URL, 'with token:', token?.slice(0, 15))
   const c = await builder.connect()
+  console.log('[relay] connected! session:', c.session)
 
   client.value = c
   connected.value = true

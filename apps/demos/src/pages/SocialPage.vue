@@ -161,13 +161,21 @@ const unsubs = []
 
 function setupSubscriptions() {
   const c = client.value
-  if (!c) return
+  if (!c) { console.warn('[social] setupSubscriptions: no client'); return }
+  console.log('[social] subscribing to', `${NS.value}/post/**`)
 
   const u1 = c.on(`${NS.value}/post/**`, (v, addr) => {
     if (!v) { removePost(addr.split('/').pop()); return }
-    try { const p = JSON.parse(v); if (p.author) addPost(p) } catch {}
+    try {
+      const p = JSON.parse(v)
+      if (p.author) {
+        addPost(p)
+        if (posts.size <= 3) console.log('[social] post received:', p.id?.slice(-20), 'total:', posts.size)
+      }
+    } catch (e) { console.warn('[social] parse error:', e) }
   })
   if (typeof u1 === 'function') unsubs.push(u1)
+  else console.warn('[social] subscription returned non-function:', typeof u1)
 
   const u2 = c.on(`${NS.value}/pres/**`, (v, addr) => {
     const uid = addr.slice(`${NS.value}/pres/`.length)
@@ -200,7 +208,9 @@ let ageTimer = null, expiryTimer = null
 
 onMounted(async () => {
   try {
+    console.log('[social] ensureAuth...')
     await ensureAuth(me.name || 'anon')
+    console.log('[social] auth ok, token:', authToken.value?.slice(0, 15))
     // Sync name from auth into local identity
     if (userName.value && !me.name) {
       me.name = userName.value
@@ -213,10 +223,13 @@ onMounted(async () => {
     }
     saveMe()
 
+    console.log('[social] connecting...')
     await connect()
+    console.log('[social] connected, session:', client.value?.session)
     connState.value = 'on'
     setupSubscriptions()
     sendPresence()
+    setTimeout(() => console.log('[social] posts after 3s:', posts.size), 3000)
     presenceTimer = setInterval(sendPresence, 28000)
 
     const c = client.value
