@@ -113,7 +113,9 @@ async function connect() {
     connected.value = false
   }
 
-  const { ClaspBuilder } = await import('@clasp-to/core')
+  // Use CDN global build (loaded via script tag in index.html) instead of
+  // Vite-bundled ESM -- the Vite bundle has a snapshot processing bug
+  const { ClaspBuilder } = window.CLASP || await import('@clasp-to/core')
   const builder = new ClaspBuilder(RELAY_URL)
     .withName(userName.value || 'demo-user')
     .withReconnect(true)
