@@ -28,7 +28,6 @@ function saveMe() { localStorage.setItem('rly_me', JSON.stringify(me)) }
 
 const showSettings = ref(false)
 
-// Sync identity from global auth
 watch(userName, (n) => {
   if (n && n !== me.name) {
     me.name = n
@@ -57,8 +56,13 @@ const sortedPosts = computed(() => [...posts.values()].sort((a, b) => b.created 
 const ageTick = ref(0)
 let postSeq = 0
 
+function isExpired(p) {
+  return p.ttl && (Date.now() - p.created) / 1000 > p.ttl
+}
+
 function addPost(p) {
   if (posts.has(p.id)) return
+  if (isExpired(p)) return // skip expired posts from snapshot
   p.reactions = p.reactions || { zap: 0, rep: 0, heart: 0 }
   p.myReactions = p.myReactions || {}
   posts.set(p.id, p)
@@ -156,36 +160,38 @@ function handleSaveSettings({ name, handle }) {
   toast('identity saved')
 }
 
+// --- Live chat ---
+function sendLiveChat(text) {
+  const c = client.value
+  if (!c) return
+  const streamerId = live.isLive.value ? me.id : live.watchId
+  if (!streamerId) return
+  const msgId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+  const msg = { id: msgId, userId: me.id, name: me.name, text, created: Date.now() }
+  live.addChatMsg(streamerId, msg)
+  c.set(`${NS.value}/livechat/${streamerId}/${msgId}`, JSON.stringify(msg))
+}
+
 // --- CLASP subscriptions ---
 const unsubs = []
 
 function setupSubscriptions() {
   const c = client.value
-  if (!c) { console.warn('[social] setupSubscriptions: no client'); return }
-  console.log('[social] subscribing to', `${NS.value}/post/**`)
+  if (!c) return
 
-  const u1 = c.on(`${NS.value}/post/**`, (v, addr) => {
+  unsubs.push(c.on(`${NS.value}/post/**`, (v, addr) => {
     if (!v) { removePost(addr.split('/').pop()); return }
-    try {
-      const p = JSON.parse(v)
-      if (p.author) {
-        addPost(p)
-        if (posts.size <= 3) console.log('[social] post received:', p.id?.slice(-20), 'total:', posts.size)
-      }
-    } catch (e) { console.warn('[social] parse error:', e) }
-  })
-  if (typeof u1 === 'function') unsubs.push(u1)
-  else console.warn('[social] subscription returned non-function:', typeof u1)
+    try { const p = JSON.parse(v); if (p.author) addPost(p) } catch {}
+  }))
 
-  const u2 = c.on(`${NS.value}/pres/**`, (v, addr) => {
+  unsubs.push(c.on(`${NS.value}/pres/**`, (v, addr) => {
     const uid = addr.slice(`${NS.value}/pres/`.length)
     if (uid === me.id) return
     if (!v) presence.delete(uid)
     else { try { presence.set(uid, JSON.parse(v)) } catch {} }
-  })
-  if (typeof u2 === 'function') unsubs.push(u2)
+  }))
 
-  const u3 = c.on(`${NS.value}/react/**`, (v) => {
+  unsubs.push(c.on(`${NS.value}/react/**`, (v) => {
     if (!v) return
     try {
       const d = JSON.parse(v)
@@ -195,10 +201,9 @@ function setupSubscriptions() {
         p.reactions[d.reaction] = (p.reactions[d.reaction] || 0) + 1
       }
     } catch {}
-  })
-  if (typeof u3 === 'function') unsubs.push(u3)
+  }))
 
-  // Live stream subscriptions
+  // Live stream + live chat subscriptions
   const liveUnsubs = live.subscribe(toast)
   unsubs.push(...liveUnsubs)
 }
@@ -208,58 +213,21 @@ let ageTimer = null, expiryTimer = null
 
 onMounted(async () => {
   try {
-    console.log('[social] ensureAuth...')
     await ensureAuth(me.name || 'anon')
-    console.log('[social] auth ok, token:', authToken.value?.slice(0, 15))
-    // Sync name from auth into local identity
     if (userName.value && !me.name) {
       me.name = userName.value
       me.handle = '@' + userName.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20)
     }
-    // If still no name, derive from id
     if (!me.name) {
       me.name = 'anon_' + me.id.slice(2, 8)
       me.handle = '@' + me.id.slice(2, 10)
     }
     saveMe()
 
-    console.log('[social] connecting...')
     await connect()
-    const c0 = client.value
-    console.log('[social] connected, session:', c0?.session)
-    console.log('[social] subscriptions map size before setup:', c0?.subscriptions?.size ?? 'N/A')
-
-    // Monkey-patch handleMessage to log SNAPSHOT processing
-    if (c0) {
-      const origHandle = c0.handleMessage?.bind(c0) || c0.__proto__?.handleMessage?.bind(c0)
-      if (origHandle) {
-        c0.handleMessage = function(msg) {
-          if (msg.type === 'SNAPSHOT') {
-            console.log('[social] SNAPSHOT received:', msg.params?.length, 'params')
-            if (msg.params?.length > 0) {
-              const postParams = msg.params.filter(p => p.address?.includes('/post/'))
-              console.log('[social] post params in snapshot:', postParams.length)
-              if (postParams.length > 0) console.log('[social] first post addr:', postParams[0].address)
-            }
-          }
-          if (msg.type === 'SET') {
-            console.log('[social] SET received:', msg.address?.slice(-30))
-          }
-          origHandle(msg)
-          if (msg.type === 'SNAPSHOT') {
-            console.log('[social] subscriptions size after snapshot:', this.subscriptions?.size)
-          }
-        }
-        console.log('[social] handleMessage patched')
-      } else {
-        console.warn('[social] could not patch handleMessage')
-      }
-    }
-
     connState.value = 'on'
     setupSubscriptions()
     sendPresence()
-    setTimeout(() => console.log('[social] posts after 3s:', posts.size), 3000)
     presenceTimer = setInterval(sendPresence, 28000)
 
     const c = client.value
@@ -314,7 +282,7 @@ onUnmounted(() => {
       </div>
       <div class="tc">
         <div class="cdot" :class="connState"></div>
-        <span class="conn-lbl">{{ connLabel }}</span>
+        <span class="conn-lbl" id="conn-lbl">{{ connLabel }}</span>
       </div>
       <div class="tr">
         <span class="online-ct">{{ onlineCount }} online</span>
@@ -384,9 +352,11 @@ onUnmounted(() => {
       :meta="live.modalMeta"
       :status="live.streamStatus.value"
       :viewer-count="live.viewerCount.value"
+      :chat-messages="live.chatMessages.value"
       @video-ready="(el) => live.setVideoEl(el)"
       @close="live.closeModal()"
       @end="live.stopLive(toast)"
+      @send-chat="sendLiveChat"
     />
 
     <SettingsPanel

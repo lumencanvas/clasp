@@ -12,6 +12,7 @@ export function useLiveStream(getClient, getNS, getMe) {
   const showModal = ref(false)
   const modalMeta = reactive({ name: '', sub: '', isSelf: false })
   const streamStatus = ref('connecting')
+  const chatMessages = ref([])
   let videoEl = null
 
   let myStream = null
@@ -68,6 +69,27 @@ export function useLiveStream(getClient, getNS, getMe) {
       try { const d = JSON.parse(v); handleIce(d.fromId, d.candidate) } catch {}
     })
     if (typeof u5 === 'function') unsubs.push(u5)
+
+    // Live chat: SET-based messages per stream
+    const u6 = c.on(`${ns}/livechat/**`, (v, addr) => {
+      const prefix = `${ns}/livechat/`
+      const rest = addr.slice(prefix.length)
+      const sep = rest.indexOf('/')
+      if (sep < 1) return
+      const streamerId = rest.slice(0, sep)
+      if (!v) return // deletion
+      try {
+        const m = JSON.parse(v)
+        // Only show if this chat belongs to the currently open stream
+        const activeStreamer = isLive.value ? me.id : watchId
+        if (streamerId === activeStreamer) {
+          if (!chatMessages.value.find(x => x.id === m.id)) {
+            chatMessages.value = [...chatMessages.value, m].slice(-80)
+          }
+        }
+      } catch {}
+    })
+    if (typeof u6 === 'function') unsubs.push(u6)
 
     return unsubs
   }
@@ -177,9 +199,20 @@ export function useLiveStream(getClient, getNS, getMe) {
     viewerPCs.forEach(p => p.close()); viewerPCs.clear(); pendVIce.clear()
     isLive.value = false
     const c = getClient(); const ns = getNS(); const me = getMe()
-    if (c) c.set(`${ns}/live/${me.id}`, null)
+    if (c) {
+      c.set(`${ns}/live/${me.id}`, null)
+      // Clear live chat from relay
+      chatMessages.value.forEach(m => { c.set(`${ns}/livechat/${me.id}/${m.id}`, null) })
+    }
+    chatMessages.value = []
     showModal.value = false
     toast('stream ended')
+  }
+
+  function addChatMsg(streamerId, msg) {
+    if (!chatMessages.value.find(x => x.id === msg.id)) {
+      chatMessages.value = [...chatMessages.value, msg].slice(-80)
+    }
   }
 
   function openSelf() {
@@ -187,7 +220,7 @@ export function useLiveStream(getClient, getNS, getMe) {
     const me = getMe()
     modalMeta.name = me.name; modalMeta.sub = 'your broadcast'; modalMeta.isSelf = true
     streamStatus.value = 'broadcasting'
-    // Video element always exists (v-show), set srcObject directly
+    chatMessages.value = []
     if (videoEl) { videoEl.srcObject = myStream; videoEl.muted = true; videoEl.play().catch(() => {}) }
     showModal.value = true
   }
@@ -197,6 +230,7 @@ export function useLiveStream(getClient, getNS, getMe) {
     watchId = entry.userId
     modalMeta.name = entry.name; modalMeta.sub = 'live stream'; modalMeta.isSelf = false
     streamStatus.value = 'connecting'
+    chatMessages.value = []
     if (videoEl) { videoEl.srcObject = null; videoEl.muted = false }
     showModal.value = true
     const c = getClient(); const ns = getNS(); const me = getMe()
@@ -237,7 +271,8 @@ export function useLiveStream(getClient, getNS, getMe) {
   }
 
   return {
-    streams, isLive, viewerCount, showModal, modalMeta, streamStatus,
-    subscribe, goLive, stopLive, openSelf, openViewer, closeModal, clearLive, republishLive, cleanup, setVideoEl,
+    streams, isLive, viewerCount, showModal, modalMeta, streamStatus, chatMessages,
+    get watchId() { return watchId },
+    subscribe, goLive, stopLive, openSelf, openViewer, closeModal, clearLive, republishLive, cleanup, setVideoEl, addChatMsg,
   }
 }

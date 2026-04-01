@@ -119,9 +119,7 @@ async function connect() {
     .withReconnect(true)
   if (token) builder.withToken(token)
 
-  console.log('[relay] connecting to', RELAY_URL, 'with token:', token?.slice(0, 15))
   const c = await builder.connect()
-  console.log('[relay] connected! session:', c.session)
 
   client.value = c
   connected.value = true
