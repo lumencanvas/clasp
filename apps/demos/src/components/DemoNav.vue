@@ -1,19 +1,7 @@
 <script setup>
 import { useRelay } from '../composables/useRelay.js'
-import { useRouter } from 'vue-router'
 
-const emit = defineEmits(['auth'])
-const router = useRouter()
-const { userName, authToken, connected, logout } = useRelay()
-
-function handleAuth() {
-  if (authToken.value) {
-    logout()
-    router.push('/')
-  } else {
-    emit('auth')
-  }
-}
+const { userName, connected } = useRelay()
 </script>
 
 <template>
@@ -33,9 +21,7 @@ function handleAuth() {
 
       <div class="nav-right">
         <span class="conn-dot" :class="{ on: connected }"></span>
-        <button class="nav-auth" @click="handleAuth">
-          {{ authToken ? 'Sign Out' : 'Sign In' }}
-        </button>
+        <span class="nav-user">{{ userName || 'guest' }}</span>
       </div>
     </div>
   </nav>
@@ -119,17 +105,11 @@ function handleAuth() {
 .conn-dot.on {
   background: var(--grn);
 }
-.nav-auth {
+.nav-user {
   font-size: 11px;
   letter-spacing: 0.06em;
-  color: var(--teal);
-  border: 1px solid var(--teal-m);
-  padding: 5px 12px;
-  border-radius: var(--r);
-  transition: background 0.15s;
-}
-.nav-auth:hover {
-  background: var(--teal-d);
+  color: var(--dim);
+  font-family: var(--head);
 }
 
 @media (max-width: 520px) {
