@@ -34,7 +34,7 @@ function handleAuth() {
       <div class="nav-right">
         <span class="conn-dot" :class="{ on: connected }"></span>
         <button class="nav-auth" @click="handleAuth">
-          {{ authToken ? userName || 'guest' : 'Sign In' }}
+          {{ authToken ? 'Sign Out' : 'Sign In' }}
         </button>
       </div>
     </div>
