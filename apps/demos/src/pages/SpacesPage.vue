@@ -151,6 +151,14 @@ function joinRoom(roomId, metaOverride) {
     if (v?.ended && myRole.value !== 'host') showRoomEnded()
   }))
 
+  // Add self to participants immediately (don't wait for relay echo)
+  const myPresence = {
+    id: myId.value, name: myName.value,
+    role: myRole.value === 'host' ? 'speaker' : myRole.value,
+    color: myColor.value, isHost: myRole.value === 'host', ts: Date.now(),
+  }
+  participants.value = { [myId.value]: myPresence }
+
   announcePresence()
   presenceInterval = setInterval(announcePresence, 6000)
 }

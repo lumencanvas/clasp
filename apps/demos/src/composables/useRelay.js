@@ -83,13 +83,14 @@ function disconnect() {
  * Registered user tokens are reused (they can re-login if expired).
  */
 async function ensureAuth(fallbackName) {
-  // Always get a fresh guest token to avoid stale token issues.
+  // Get a fresh guest token. Avoids stale CPSK tokens after relay restart.
+  // If the name conflicts with a registered user (409), use a generic name.
   const name = userName.value || fallbackName || 'guest'
   try {
     await loginAsGuest(name)
   } catch {
-    // Name might conflict with a registered user -- retry with a generic name
-    await loginAsGuest('guest-' + Date.now().toString(36).slice(-6))
+    const guestName = 'guest-' + Date.now().toString(36).slice(-6)
+    await loginAsGuest(guestName)
   }
 }
 
