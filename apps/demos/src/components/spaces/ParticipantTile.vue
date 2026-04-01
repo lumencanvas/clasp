@@ -33,7 +33,7 @@ const ringSize = computed(() => {
         class="avatar-ring"
         :style="{
           width: ringSize + 'px', height: ringSize + 'px',
-          borderColor: color, opacity: 0.4 + volume,
+          opacity: 0.4 + volume,
           boxShadow: `0 0 ${10 + volume * 20}px ${color}44`,
         }"
       ></div>
@@ -69,7 +69,7 @@ const ringSize = computed(() => {
 .avatar-ring {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%, -50%);
-  border: 2px solid; border-radius: 50%;
+  border: 2px solid var(--accent); border-radius: 50%;
   transition: all 0.1s;
   pointer-events: none;
 }
