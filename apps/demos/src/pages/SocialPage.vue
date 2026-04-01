@@ -225,7 +225,29 @@ onMounted(async () => {
 
     console.log('[social] connecting...')
     await connect()
-    console.log('[social] connected, session:', client.value?.session)
+    const c0 = client.value
+    console.log('[social] connected, session:', c0?.session)
+
+    // RAW WebSocket message spy -- see every message from relay
+    if (c0?.inner?.ws || c0?.ws) {
+      const ws = c0.inner?.ws || c0.ws
+      const origHandler = ws.onmessage
+      ws.onmessage = (ev) => {
+        const bytes = new Uint8Array(ev.data)
+        // Message type is after frame header. Frame: [magic][flags][len_hi][len_lo][...payload]
+        // Payload starts at offset 4+ depending on frame format. Just log raw size + first bytes.
+        const msgTypes = { 0x01: 'HELLO', 0x02: 'WELCOME', 0x03: 'ANNOUNCE', 0x10: 'SUBSCRIBE', 0x21: 'SET', 0x23: 'SNAPSHOT', 0x20: 'PUBLISH', 0x30: 'BUNDLE', 0x50: 'ACK', 0x51: 'ERROR' }
+        // Try to find message type byte (skip frame header)
+        let typeByte = bytes.length > 4 ? bytes[4] : bytes[0]
+        if (bytes[0] === 0xC1) typeByte = bytes[4] // frame magic
+        console.log('[ws-raw]', msgTypes[typeByte] || ('0x' + typeByte.toString(16)), bytes.length + 'B')
+        if (origHandler) origHandler.call(ws, ev)
+      }
+      console.log('[social] ws spy installed')
+    } else {
+      console.warn('[social] could not install ws spy - client structure:', Object.keys(c0 || {}))
+    }
+
     connState.value = 'on'
     setupSubscriptions()
     sendPresence()
