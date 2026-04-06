@@ -1832,10 +1832,7 @@ mod transform_tests {
         let t = PassthroughTransform;
         assert_eq!(t.transform("/anything", &Value::Float(1.0)), None);
         assert_eq!(t.transform("/sensors/temp", &Value::Int(42)), None);
-        assert_eq!(
-            t.transform("/a/b/c", &Value::String("hello".into())),
-            None
-        );
+        assert_eq!(t.transform("/a/b/c", &Value::String("hello".into())), None);
     }
 
     #[test]
@@ -1915,7 +1912,10 @@ mod transform_tests {
     #[test]
     fn chain_all_passthrough() {
         let chain = ChainTransform {
-            inner: vec![Arc::new(PassthroughTransform), Arc::new(PassthroughTransform)],
+            inner: vec![
+                Arc::new(PassthroughTransform),
+                Arc::new(PassthroughTransform),
+            ],
         };
         let result = chain.transform("/any", &Value::Float(42.0));
         assert_eq!(result, None);
@@ -1948,7 +1948,15 @@ mod transform_tests {
 
         router
             .state()
-            .set("/sensors/temp", Value::Float(22.5), &writer, None, false, false, None)
+            .set(
+                "/sensors/temp",
+                Value::Float(22.5),
+                &writer,
+                None,
+                false,
+                false,
+                None,
+            )
             .unwrap();
 
         // Value is 22.5, NOT 45.0 -- state.set() bypasses the transform pipeline

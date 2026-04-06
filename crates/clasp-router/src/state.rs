@@ -188,6 +188,7 @@ impl RouterState {
     }
 
     /// Set a parameter value
+    #[allow(clippy::too_many_arguments)]
     pub fn set(
         &self,
         address: &str,

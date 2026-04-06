@@ -101,6 +101,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn value_conversion_roundtrip_float() {
         let v = Value::Float(3.14);
         let json = clasp_value_to_json(&v);

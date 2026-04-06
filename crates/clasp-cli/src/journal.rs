@@ -242,15 +242,9 @@ fn percent_encode(input: &str) -> String {
     let mut out = String::with_capacity(input.len() * 2);
     for b in input.bytes() {
         match b {
-            b'A'..=b'Z'
-            | b'a'..=b'z'
-            | b'0'..=b'9'
-            | b'-'
-            | b'_'
-            | b'.'
-            | b'~'
-            | b'/'
-            | b'*' => out.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' | b'*' => {
+                out.push(b as char)
+            }
             _ => {
                 out.push('%');
                 out.push_str(&format!("{:02X}", b));

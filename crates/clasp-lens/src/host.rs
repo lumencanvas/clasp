@@ -138,7 +138,7 @@ impl LensHost {
                     Err(_) => return 0,
                 };
 
-                if let Err(_) = memory.write(&mut caller, ptr as usize, &data) {
+                if memory.write(&mut caller, ptr as usize, &data).is_err() {
                     return 0;
                 }
 

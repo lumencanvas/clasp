@@ -6,9 +6,7 @@
 
 #[cfg(feature = "websocket")]
 mod websocket_transform_tests {
-    use clasp_core::{
-        codec, GetMessage, HelloMessage, Message, SecurityMode, SetMessage, Value,
-    };
+    use clasp_core::{codec, GetMessage, HelloMessage, Message, SecurityMode, SetMessage, Value};
     use clasp_router::{Router, RouterConfig, SignalTransform};
     use std::sync::Arc;
     use std::time::Duration;
@@ -202,8 +200,7 @@ mod websocket_transform_tests {
 
     #[tokio::test]
     async fn transform_doubles_float_value_end_to_end() {
-        let (url, handle) =
-            start_router_with_transform(Arc::new(DoubleAllFloats)).await;
+        let (url, handle) = start_router_with_transform(Arc::new(DoubleAllFloats)).await;
 
         let (sender, mut receiver) = WebSocketTransport::connect(&url).await.unwrap();
         complete_handshake(&sender, &mut receiver, "test-client").await;
@@ -220,8 +217,7 @@ mod websocket_transform_tests {
 
     #[tokio::test]
     async fn transform_passes_through_non_float() {
-        let (url, handle) =
-            start_router_with_transform(Arc::new(DoubleAllFloats)).await;
+        let (url, handle) = start_router_with_transform(Arc::new(DoubleAllFloats)).await;
 
         let (sender, mut receiver) = WebSocketTransport::connect(&url).await.unwrap();
         complete_handshake(&sender, &mut receiver, "test-client").await;
@@ -237,31 +233,18 @@ mod websocket_transform_tests {
 
     #[tokio::test]
     async fn transform_pattern_matching_only_sensors() {
-        let (url, handle) =
-            start_router_with_transform(Arc::new(DoubleSensors)).await;
+        let (url, handle) = start_router_with_transform(Arc::new(DoubleSensors)).await;
 
         let (sender, mut receiver) = WebSocketTransport::connect(&url).await.unwrap();
         complete_handshake(&sender, &mut receiver, "test-client").await;
 
         // SET to /sensors/temp -- should be doubled
-        send_set_and_ack(
-            &sender,
-            &mut receiver,
-            "/sensors/temp",
-            Value::Float(10.0),
-        )
-        .await;
+        send_set_and_ack(&sender, &mut receiver, "/sensors/temp", Value::Float(10.0)).await;
         let sensor_val = get_value(&sender, &mut receiver, "/sensors/temp").await;
         assert_eq!(sensor_val, Some(Value::Float(20.0)));
 
         // SET to /lights/dim -- should NOT be doubled
-        send_set_and_ack(
-            &sender,
-            &mut receiver,
-            "/lights/dim",
-            Value::Float(10.0),
-        )
-        .await;
+        send_set_and_ack(&sender, &mut receiver, "/lights/dim", Value::Float(10.0)).await;
         let lights_val = get_value(&sender, &mut receiver, "/lights/dim").await;
         assert_eq!(lights_val, Some(Value::Float(10.0)));
 
@@ -270,8 +253,7 @@ mod websocket_transform_tests {
 
     #[tokio::test]
     async fn transform_clamps_out_of_range_value() {
-        let (url, handle) =
-            start_router_with_transform(Arc::new(ClampTransform)).await;
+        let (url, handle) = start_router_with_transform(Arc::new(ClampTransform)).await;
 
         let (sender, mut receiver) = WebSocketTransport::connect(&url).await.unwrap();
         complete_handshake(&sender, &mut receiver, "test-client").await;

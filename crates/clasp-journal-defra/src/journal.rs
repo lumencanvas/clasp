@@ -281,13 +281,9 @@ impl Journal for DefraJournal {
             filters.push(format!("timestamp: {{_gte: {from_ts}}}"));
         }
         if let Some(to_ts) = to_secs {
-            if from_secs.is_some() {
+            if let Some(from_ts) = from_secs {
                 let _ = filters.pop();
-                filters.push(format!(
-                    "timestamp: {{_gte: {}, _lte: {}}}",
-                    from_secs.unwrap(),
-                    to_ts
-                ));
+                filters.push(format!("timestamp: {{_gte: {from_ts}, _lte: {to_ts}}}",));
             } else {
                 filters.push(format!("timestamp: {{_lte: {to_ts}}}"));
             }

@@ -339,6 +339,7 @@ impl StateStore {
     }
 
     /// Set a param value, creating if necessary
+    #[allow(clippy::too_many_arguments)]
     pub fn set(
         &mut self,
         address: &str,

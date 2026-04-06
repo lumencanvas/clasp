@@ -887,7 +887,11 @@ async fn handle_entity_api_command(action: EntityApiAction) -> Result<()> {
         EntityApiAction::Get { id, relay } => {
             entity::handle_get(&relay, &id).await?;
         }
-        EntityApiAction::Create { name, r#type, relay } => {
+        EntityApiAction::Create {
+            name,
+            r#type,
+            relay,
+        } => {
             entity::handle_create(&relay, &name, &r#type).await?;
         }
     }

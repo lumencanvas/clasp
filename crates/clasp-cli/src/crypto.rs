@@ -24,11 +24,7 @@ pub fn handle_keygen(out: Option<&Path>) -> Result<()> {
         println!("{}", priv_hex);
     }
 
-    eprintln!(
-        "  {}: {}",
-        "Public key (SEC1 hex)".cyan(),
-        pub_hex,
-    );
+    eprintln!("  {}: {}", "Public key (SEC1 hex)".cyan(), pub_hex,);
     eprintln!(
         "  {}: {}",
         "Fingerprint".cyan(),

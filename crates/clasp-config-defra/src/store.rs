@@ -145,7 +145,7 @@ impl DefraConfigStore {
 
         let data = self.execute_query(&query).await?;
         let docs = extract_array(&data, "ClaspRouterConfig");
-        docs.iter().map(|d| convert::router_from_doc(d)).collect()
+        docs.iter().map(convert::router_from_doc).collect()
     }
 
     /// List router configs owned by the given owner.
@@ -162,7 +162,7 @@ impl DefraConfigStore {
 
         let data = self.execute_query(&query).await?;
         let docs = extract_array(&data, "ClaspRouterConfig");
-        docs.iter().map(|d| convert::router_from_doc(d)).collect()
+        docs.iter().map(convert::router_from_doc).collect()
     }
 
     /// Delete a router config by configId. Returns true if found and deleted.
@@ -223,9 +223,7 @@ impl DefraConfigStore {
 
         let data = self.execute_query(&query).await?;
         let docs = extract_array(&data, "ClaspConnectionConfig");
-        docs.iter()
-            .map(|d| convert::connection_from_doc(d))
-            .collect()
+        docs.iter().map(convert::connection_from_doc).collect()
     }
 
     /// Delete a connection config by configId.
@@ -286,7 +284,7 @@ impl DefraConfigStore {
 
         let data = self.execute_query(&query).await?;
         let docs = extract_array(&data, "ClaspBridgeConfig");
-        docs.iter().map(|d| convert::bridge_from_doc(d)).collect()
+        docs.iter().map(convert::bridge_from_doc).collect()
     }
 
     /// Delete a bridge config by configId.
@@ -347,7 +345,7 @@ impl DefraConfigStore {
 
         let data = self.execute_query(&query).await?;
         let docs = extract_array(&data, "ClaspRuleConfig");
-        docs.iter().map(|d| convert::rule_from_doc(d)).collect()
+        docs.iter().map(convert::rule_from_doc).collect()
     }
 
     /// Delete a rule config by configId.
@@ -398,7 +396,7 @@ impl DefraConfigStore {
 
         let data = self.execute_query(&query).await?;
         let docs = extract_array(&data, "ClaspConfigSnapshot");
-        docs.iter().map(|d| convert::snapshot_from_doc(d)).collect()
+        docs.iter().map(convert::snapshot_from_doc).collect()
     }
 
     /// Get the most recent snapshot.
@@ -739,12 +737,8 @@ mod tests {
             snapshot_id: snap_id.clone(),
             name: "Test Snapshot".into(),
             description: "Integration test".into(),
-            routers: vec![RouterConfig::new(&format!("sr-{}", uid()), "R1", "test")],
-            connections: vec![ConnectionConfig::new(
-                &format!("sc-{}", uid()),
-                "C1",
-                "test",
-            )],
+            routers: vec![RouterConfig::new(format!("sr-{}", uid()), "R1", "test")],
+            connections: vec![ConnectionConfig::new(format!("sc-{}", uid()), "C1", "test")],
             bridges: vec![],
             rules: vec![],
             owner: "test".into(),

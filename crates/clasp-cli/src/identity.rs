@@ -50,7 +50,11 @@ pub fn handle_generate(out: Option<&Path>) -> Result<()> {
         crate::write_secret_file(path, hex_key.as_bytes())
             .with_context(|| format!("Failed to write key file: {}", path.display()))?;
 
-        eprintln!("{} Identity saved to: {}", "OK".green().bold(), path.display());
+        eprintln!(
+            "{} Identity saved to: {}",
+            "OK".green().bold(),
+            path.display()
+        );
     } else {
         println!("{}", hex_key);
     }

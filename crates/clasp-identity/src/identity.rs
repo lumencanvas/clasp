@@ -91,9 +91,8 @@ impl Identity {
         }
         let mut sig_bytes = [0u8; 64];
         sig_bytes.copy_from_slice(signature);
-        match ed25519_dalek::Signature::from_bytes(&sig_bytes) {
-            sig => self.verifying_key.verify(data, &sig).is_ok(),
-        }
+        let sig = ed25519_dalek::Signature::from_bytes(&sig_bytes);
+        self.verifying_key.verify(data, &sig).is_ok()
     }
 
     /// Export the signing key bytes (32 bytes, secret).

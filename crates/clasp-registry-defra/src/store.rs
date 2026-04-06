@@ -202,7 +202,7 @@ impl EntityStore for DefraEntityStore {
                 .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
                 .unwrap_or_default();
 
-            if tags.iter().any(|t| *t == tag) {
+            if tags.contains(&tag) {
                 let entity = defra_to_entity(doc).map_err(RegistryError::from)?;
                 results.push(entity);
             }
@@ -248,7 +248,7 @@ impl EntityStore for DefraEntityStore {
                 .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
                 .unwrap_or_default();
 
-            if namespaces.iter().any(|ns| *ns == namespace) {
+            if namespaces.contains(&namespace) {
                 let entity = defra_to_entity(doc).map_err(RegistryError::from)?;
                 results.push(entity);
             }

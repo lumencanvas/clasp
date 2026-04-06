@@ -83,6 +83,9 @@ function disconnect() {
  * Registered user tokens are reused (they can re-login if expired).
  */
 async function ensureAuth(fallbackName) {
+  // Registered users keep their token -- only guests need a fresh one
+  if (authMode.value === 'user' && authToken.value) return
+
   // Get a fresh guest token. Avoids stale CPSK tokens after relay restart.
   // If the name conflicts with a registered user (409), use a generic name.
   const name = userName.value || fallbackName || 'guest'

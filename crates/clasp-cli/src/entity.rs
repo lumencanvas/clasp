@@ -30,7 +30,11 @@ pub async fn handle_list(relay_url: &str) -> Result<()> {
             println!("No entities registered.");
             return Ok(());
         }
-        println!("{} {} entity(ies):\n", "CLASP".cyan().bold(), entities.len());
+        println!(
+            "{} {} entity(ies):\n",
+            "CLASP".cyan().bold(),
+            entities.len()
+        );
         for entity in entities {
             print_entity(entity);
         }
@@ -41,7 +45,11 @@ pub async fn handle_list(relay_url: &str) -> Result<()> {
                 println!("No entities registered.");
                 return Ok(());
             }
-            println!("{} {} entity(ies):\n", "CLASP".cyan().bold(), entities.len());
+            println!(
+                "{} {} entity(ies):\n",
+                "CLASP".cyan().bold(),
+                entities.len()
+            );
             for entity in entities {
                 print_entity(entity);
             }

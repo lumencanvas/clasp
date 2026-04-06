@@ -58,6 +58,7 @@ pub struct CacheStats {
 }
 
 /// Internal write operation queued for the background worker.
+#[allow(clippy::large_enum_variant)]
 enum WriteOp {
     Set { address: String, state: ParamState },
     Delete { address: String },
@@ -351,6 +352,7 @@ impl DefraStateStore {
     /// Set a parameter value. Updates cache immediately and queues a DefraDB write.
     ///
     /// Returns Ok(new_revision) on success.
+    #[allow(clippy::too_many_arguments)]
     pub fn set(
         &self,
         address: &str,
